@@ -21,8 +21,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
 import { StandardApiResponse } from './dto/common-response.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @ApiTags('User Profile')
 @Controller('user')
@@ -66,7 +66,9 @@ export class UserController {
     status: HttpStatus.UNAUTHORIZED,
     description: 'Unauthorized access',
   })
-  async getProfile(@Request() req: AuthenticatedRequest): Promise<StandardApiResponse> {
+  async getProfile(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<StandardApiResponse> {
     try {
       this.logger.log(`Getting profile for user: ${req.user.id}`);
 
@@ -191,9 +193,7 @@ export class UserController {
       );
 
       if (!updatedUser) {
-        this.logger.error(
-          `Failed to update profile for user: ${req.user.id}`,
-        );
+        this.logger.error(`Failed to update profile for user: ${req.user.id}`);
         return {
           success: false,
           message: 'Failed to update profile',
@@ -205,9 +205,7 @@ export class UserController {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password: _, ...userProfile } = updatedUser;
 
-      this.logger.log(
-        `Profile updated successfully for user: ${req.user.id}`,
-      );
+      this.logger.log(`Profile updated successfully for user: ${req.user.id}`);
 
       return {
         success: true,
@@ -259,15 +257,11 @@ export class UserController {
       );
 
       if (!result) {
-        this.logger.warn(
-          `Invalid current password for user: ${req.user.id}`,
-        );
+        this.logger.warn(`Invalid current password for user: ${req.user.id}`);
         throw new BadRequestException('Current password is incorrect');
       }
 
-      this.logger.log(
-        `Password changed successfully for user: ${req.user.id}`,
-      );
+      this.logger.log(`Password changed successfully for user: ${req.user.id}`);
 
       return {
         success: true,

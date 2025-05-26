@@ -36,7 +36,9 @@ export class AuthService {
     private readonly tokenManagerService: TokenManagerService,
   ) {}
 
-  async signUp(createUserDto: CreateUserDto): Promise<StandardApiResponse<SessionResponseDto>> {
+  async signUp(
+    createUserDto: CreateUserDto,
+  ): Promise<StandardApiResponse<SessionResponseDto>> {
     const { email, password, name, firstName, lastName } = createUserDto;
 
     // Check if user already exists
@@ -88,7 +90,9 @@ export class AuthService {
     };
   }
 
-  async signIn(signInDto: SignInDto): Promise<StandardApiResponse<SessionResponseDto>> {
+  async signIn(
+    signInDto: SignInDto,
+  ): Promise<StandardApiResponse<SessionResponseDto>> {
     const { email, password, rememberMe = false } = signInDto;
 
     // Find user by email
@@ -151,16 +155,19 @@ export class AuthService {
     return await this.userService.findOne(id);
   }
 
-  async forgotPassword(forgotPasswordDto: ForgotPasswordDto): Promise<StandardApiResponse<any>> {
+  async forgotPassword(
+    forgotPasswordDto: ForgotPasswordDto,
+  ): Promise<StandardApiResponse<any>> {
     const { email } = forgotPasswordDto;
-    
+
     // Check if user exists
     const user = await this.userService.findByEmail(email);
     if (!user) {
       // Return success even if user doesn't exist for security
       return {
         success: true,
-        message: 'If an account with that email exists, a password reset link has been sent.',
+        message:
+          'If an account with that email exists, a password reset link has been sent.',
       };
     }
 
@@ -168,12 +175,20 @@ export class AuthService {
     // For now, just return success message
     return {
       success: true,
-      message: 'If an account with that email exists, a password reset link has been sent.',
+      message:
+        'If an account with that email exists, a password reset link has been sent.',
     };
   }
 
-  async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<StandardApiResponse<any>> {
-    const { token, password, confirmPassword } = resetPasswordDto;
+  async resetPassword(
+    resetPasswordDto: ResetPasswordDto,
+  ): Promise<StandardApiResponse<any>> {
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      token: _token,
+      password,
+      confirmPassword,
+    } = resetPasswordDto;
 
     if (password !== confirmPassword) {
       throw new BadRequestException('Passwords do not match');
@@ -181,21 +196,30 @@ export class AuthService {
 
     // TODO: Validate reset token and update password
     // For now, just return placeholder
-    throw new BadRequestException('Password reset functionality not yet implemented');
+    await Promise.resolve(); // Keep async for future implementation
+    throw new BadRequestException(
+      'Password reset functionality not yet implemented',
+    );
   }
 
-  async verifyEmail(verifyEmailDto: VerifyEmailDto): Promise<StandardApiResponse<any>> {
-    const { token } = verifyEmailDto;
+  async verifyEmail(
+    verifyEmailDto: VerifyEmailDto,
+  ): Promise<StandardApiResponse<any>> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { token: _token } = verifyEmailDto;
 
     // TODO: Validate email verification token
     // For now, just return placeholder
+    await Promise.resolve(); // Keep async for future implementation
     return {
       success: true,
       message: 'Email verification functionality not yet implemented',
     };
   }
 
-  async resendVerification(resendVerificationDto: ResendVerificationDto): Promise<StandardApiResponse<any>> {
+  async resendVerification(
+    resendVerificationDto: ResendVerificationDto,
+  ): Promise<StandardApiResponse<any>> {
     const { email } = resendVerificationDto;
 
     // Check if user exists
@@ -238,15 +262,18 @@ export class AuthService {
           biometricToken: biometricToken, // Return unhashed token to client for storage
         },
       };
-    } catch (error) {
-      throw new BadRequestException('Failed to enable biometric authentication');
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
+      throw new BadRequestException(
+        'Failed to enable biometric authentication',
+      );
     }
   }
 
   async signInWithBiometric(
     biometricSignInDto: BiometricSignInDto,
   ): Promise<StandardApiResponse<SessionResponseDto>> {
-    const { email, deviceId, biometricToken, rememberMe = false } = biometricSignInDto;
+    const { email, biometricToken, rememberMe = false } = biometricSignInDto;
 
     // Find user by email
     const user = await this.userService.findByEmail(email);
@@ -260,7 +287,10 @@ export class AuthService {
     }
 
     // Verify biometric token
-    const isTokenValid = await bcrypt.compare(biometricToken, user.biometricToken);
+    const isTokenValid = await bcrypt.compare(
+      biometricToken,
+      user.biometricToken,
+    );
     if (!isTokenValid) {
       throw new UnauthorizedException('Invalid biometric credentials');
     }
@@ -306,22 +336,26 @@ export class AuthService {
 
   async disableBiometric(
     userId: string,
-    disableBiometricDto: DisableBiometricDto,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _disableBiometricDto: DisableBiometricDto,
   ): Promise<StandardApiResponse<any>> {
     try {
       // Disable biometric authentication for the user
       await this.userService.updateBiometricSettings(userId, {
         biometricEnabled: false,
-        biometricToken: null,
-        lastBiometricAuth: null,
+        biometricToken: undefined,
+        lastBiometricAuth: undefined,
       });
 
       return {
         success: true,
         message: 'Biometric authentication disabled successfully',
       };
-    } catch (error) {
-      throw new BadRequestException('Failed to disable biometric authentication');
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
+      throw new BadRequestException(
+        'Failed to disable biometric authentication',
+      );
     }
   }
 
