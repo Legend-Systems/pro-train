@@ -20,6 +20,7 @@ export interface TokenPair {
 @Injectable()
 export class TokenManagerService {
   private readonly accessTokenExpiry = '1h';
+  private readonly rememberMeAccessTokenExpiry = '7d';
   private readonly refreshTokens = new Map<
     string,
     { userId: string; expiresAt: Date }
@@ -30,37 +31,49 @@ export class TokenManagerService {
     private readonly configService: ConfigService,
   ) {}
 
-  async generateTokenPair(user: {
-    id: string;
-    email: string;
-    name: string;
-  }): Promise<TokenPair> {
+  async generateTokenPair(
+    user: {
+      id: string;
+      email: string;
+      name: string;
+    },
+    rememberMe = false,
+  ): Promise<TokenPair> {
     const payload: TokenPayload = {
       sub: user.id,
       email: user.email,
       name: user.name,
     };
 
+    const expiresIn = rememberMe
+      ? this.rememberMeAccessTokenExpiry
+      : this.configService.get<string>('JWT_EXPIRES_IN') ||
+        this.accessTokenExpiry;
+
     const accessToken = await this.jwtService.signAsync(payload, {
-      expiresIn:
-        this.configService.get<string>('JWT_EXPIRES_IN') ||
-        this.accessTokenExpiry,
+      expiresIn,
       secret: this.configService.get<string>('JWT_SECRET'),
     });
 
-    const refreshToken = this.generateRefreshToken(user.id);
+    const refreshToken = this.generateRefreshToken(user.id, rememberMe);
+
+    // Calculate expiry in seconds
+    const expiresInSeconds = rememberMe ? 7 * 24 * 60 * 60 : 3600;
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: 3600,
+      expiresIn: expiresInSeconds,
     };
   }
 
-  private generateRefreshToken(userId: string): string {
+  private generateRefreshToken(userId: string, rememberMe = false): string {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    // If rememberMe is true, extend refresh token validity to 30 days
+    const daysToAdd = rememberMe ? 30 : 7;
+    expiresAt.setDate(expiresAt.getDate() + daysToAdd);
 
     this.refreshTokens.set(token, { userId, expiresAt });
     return token;

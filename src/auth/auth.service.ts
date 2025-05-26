@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { User } from '../user/entities/user.entity';
 import { UserService } from '../user/user.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -14,6 +15,11 @@ import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../user/dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
+import {
+  EnableBiometricDto,
+  BiometricSignInDto,
+  DisableBiometricDto,
+} from '../user/dto/biometric-auth.dto';
 import {
   SessionResponseDto,
   UserResponseDto,
@@ -75,6 +81,7 @@ export class AuthService {
       data: {
         accessToken: tokenPair.accessToken,
         refreshToken: tokenPair.refreshToken,
+        expiresIn: tokenPair.expiresIn,
         user: userResponse,
       },
       message: 'User registered successfully',
@@ -82,7 +89,7 @@ export class AuthService {
   }
 
   async signIn(signInDto: SignInDto): Promise<StandardApiResponse<SessionResponseDto>> {
-    const { email, password } = signInDto;
+    const { email, password, rememberMe = false } = signInDto;
 
     // Find user by email
     const user = await this.userService.findByEmail(email);
@@ -96,12 +103,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate JWT tokens
-    const tokenPair = await this.tokenManagerService.generateTokenPair({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    });
+    // Generate JWT tokens with extended expiry if rememberMe is true
+    const tokenPair = await this.tokenManagerService.generateTokenPair(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      rememberMe,
+    );
 
     // Return user without password
     const userResponse: UserResponseDto = {
@@ -120,6 +130,7 @@ export class AuthService {
       data: {
         accessToken: tokenPair.accessToken,
         refreshToken: tokenPair.refreshToken,
+        expiresIn: tokenPair.expiresIn,
         user: userResponse,
       },
       message: 'User signed in successfully',
@@ -198,6 +209,135 @@ export class AuthService {
     return {
       success: true,
       message: 'Verification email sent',
+    };
+  }
+
+  async enableBiometric(
+    userId: string,
+    enableBiometricDto: EnableBiometricDto,
+  ): Promise<StandardApiResponse<any>> {
+    const { deviceId, biometricType } = enableBiometricDto;
+
+    try {
+      // Generate a secure biometric token for this device
+      const biometricToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = await bcrypt.hash(biometricToken, this.saltRounds);
+
+      // Update user with biometric settings
+      await this.userService.updateBiometricSettings(userId, {
+        biometricEnabled: true,
+        biometricToken: hashedToken,
+        lastBiometricAuth: new Date(),
+      });
+
+      return {
+        success: true,
+        message: `${biometricType} authentication enabled successfully`,
+        data: {
+          deviceId,
+          biometricToken: biometricToken, // Return unhashed token to client for storage
+        },
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to enable biometric authentication');
+    }
+  }
+
+  async signInWithBiometric(
+    biometricSignInDto: BiometricSignInDto,
+  ): Promise<StandardApiResponse<SessionResponseDto>> {
+    const { email, deviceId, biometricToken, rememberMe = false } = biometricSignInDto;
+
+    // Find user by email
+    const user = await this.userService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if biometric authentication is enabled
+    if (!user.biometricEnabled || !user.biometricToken) {
+      throw new UnauthorizedException('Biometric authentication not enabled');
+    }
+
+    // Verify biometric token
+    const isTokenValid = await bcrypt.compare(biometricToken, user.biometricToken);
+    if (!isTokenValid) {
+      throw new UnauthorizedException('Invalid biometric credentials');
+    }
+
+    // Update last biometric authentication
+    await this.userService.updateBiometricSettings(user.id, {
+      lastBiometricAuth: new Date(),
+    });
+
+    // Generate JWT tokens with extended expiry if rememberMe is true
+    const tokenPair = await this.tokenManagerService.generateTokenPair(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      rememberMe,
+    );
+
+    // Return user without password
+    const userResponse: UserResponseDto = {
+      uid: user.id,
+      email: user.email,
+      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+
+    return {
+      success: true,
+      data: {
+        accessToken: tokenPair.accessToken,
+        refreshToken: tokenPair.refreshToken,
+        expiresIn: tokenPair.expiresIn,
+        user: userResponse,
+      },
+      message: 'User signed in successfully with biometrics',
+    };
+  }
+
+  async disableBiometric(
+    userId: string,
+    disableBiometricDto: DisableBiometricDto,
+  ): Promise<StandardApiResponse<any>> {
+    try {
+      // Disable biometric authentication for the user
+      await this.userService.updateBiometricSettings(userId, {
+        biometricEnabled: false,
+        biometricToken: null,
+        lastBiometricAuth: null,
+      });
+
+      return {
+        success: true,
+        message: 'Biometric authentication disabled successfully',
+      };
+    } catch (error) {
+      throw new BadRequestException('Failed to disable biometric authentication');
+    }
+  }
+
+  async getBiometricStatus(userId: string): Promise<StandardApiResponse<any>> {
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      success: true,
+      data: {
+        biometricEnabled: user.biometricEnabled,
+        lastBiometricAuth: user.lastBiometricAuth,
+      },
+      message: 'Biometric status retrieved successfully',
     };
   }
 }

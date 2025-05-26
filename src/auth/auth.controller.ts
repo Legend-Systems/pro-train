@@ -20,8 +20,14 @@ import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../user/dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
+import {
+  EnableBiometricDto,
+  BiometricSignInDto,
+  DisableBiometricDto,
+} from '../user/dto/biometric-auth.dto';
 import { SessionResponseDto, StandardApiResponse } from '../user/dto/session-response.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuthenticatedRequest } from './interfaces/authenticated-request.interface';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -115,5 +121,53 @@ export class AuthController {
   async resendVerification(@Body() resendVerificationDto: ResendVerificationDto): Promise<StandardApiResponse<any>> {
     this.logger.log(`Resend verification requested for email: ${resendVerificationDto.email}`);
     return this.authService.resendVerification(resendVerificationDto);
+  }
+
+  @Post('biometric/enable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Enable biometric authentication' })
+  @ApiResponse({ status: 200, description: 'Biometric authentication enabled successfully' })
+  @ApiResponse({ status: 400, description: 'Failed to enable biometric authentication' })
+  async enableBiometric(
+    @Request() req: AuthenticatedRequest,
+    @Body() enableBiometricDto: EnableBiometricDto,
+  ): Promise<StandardApiResponse<any>> {
+    this.logger.log(`Enabling biometric authentication for user: ${req.user.id}`);
+    return this.authService.enableBiometric(req.user.id, enableBiometricDto);
+  }
+
+  @Post('biometric/signin')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 attempts per minute
+  @ApiOperation({ summary: 'Sign in with biometric authentication' })
+  @ApiResponse({ status: 200, description: 'User successfully signed in with biometrics' })
+  @ApiResponse({ status: 401, description: 'Invalid biometric credentials' })
+  async signInWithBiometric(@Body() biometricSignInDto: BiometricSignInDto): Promise<StandardApiResponse<SessionResponseDto>> {
+    this.logger.log(`Biometric sign in attempt for email: ${biometricSignInDto.email}`);
+    return this.authService.signInWithBiometric(biometricSignInDto);
+  }
+
+  @Post('biometric/disable')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Disable biometric authentication' })
+  @ApiResponse({ status: 200, description: 'Biometric authentication disabled successfully' })
+  @ApiResponse({ status: 400, description: 'Failed to disable biometric authentication' })
+  async disableBiometric(
+    @Request() req: AuthenticatedRequest,
+    @Body() disableBiometricDto: DisableBiometricDto,
+  ): Promise<StandardApiResponse<any>> {
+    this.logger.log(`Disabling biometric authentication for user: ${req.user.id}`);
+    return this.authService.disableBiometric(req.user.id, disableBiometricDto);
+  }
+
+  @Get('biometric/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get biometric authentication status' })
+  @ApiResponse({ status: 200, description: 'Biometric status retrieved successfully' })
+  async getBiometricStatus(@Request() req: AuthenticatedRequest): Promise<StandardApiResponse<any>> {
+    this.logger.log(`Getting biometric status for user: ${req.user.id}`);
+    return this.authService.getBiometricStatus(req.user.id);
   }
 }
