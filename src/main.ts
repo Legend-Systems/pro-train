@@ -59,8 +59,7 @@ async function bootstrap() {
       },
       'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!
     )
-    .addTag('Authentication', 'Authentication and user management endpoints')
-    .addTag('User Profile', 'User profile management endpoints')
+
     .addServer(
       `${configService.get('API_URL') || 'http://localhost:4400'}`,
       'API Server',

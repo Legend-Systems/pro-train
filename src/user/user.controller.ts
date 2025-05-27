@@ -26,7 +26,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { StandardApiResponse } from './dto/common-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
-@ApiTags('👤 User Profile Management')
+@ApiTags('👤 User & Profile Management')
 @Controller('user')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
@@ -72,59 +72,59 @@ export class UserController {
     schema: {
       type: 'object',
       properties: {
-        success: { 
-          type: 'boolean', 
+        success: {
+          type: 'boolean',
           example: true,
-          description: 'Operation success status'
+          description: 'Operation success status',
         },
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           example: 'Profile retrieved successfully',
-          description: 'Human-readable success message'
+          description: 'Human-readable success message',
         },
         data: {
           type: 'object',
           description: 'User profile data (password excluded)',
           properties: {
-            id: { 
-              type: 'string', 
+            id: {
+              type: 'string',
               example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-              description: 'Unique user identifier'
+              description: 'Unique user identifier',
             },
-            email: { 
-              type: 'string', 
+            email: {
+              type: 'string',
               example: 'john.doe@example.com',
-              description: 'User email address'
+              description: 'User email address',
             },
-            name: { 
-              type: 'string', 
+            name: {
+              type: 'string',
               example: 'John Doe',
-              description: 'Full display name'
+              description: 'Full display name',
             },
-            firstName: { 
-              type: 'string', 
+            firstName: {
+              type: 'string',
               example: 'John',
-              description: 'First name (optional)'
+              description: 'First name (optional)',
             },
-            lastName: { 
-              type: 'string', 
+            lastName: {
+              type: 'string',
               example: 'Doe',
-              description: 'Last name (optional)'
+              description: 'Last name (optional)',
             },
             avatar: {
               type: 'string',
               example: 'https://cdn.example.com/avatars/john-doe.jpg',
-              description: 'Profile picture URL (optional)'
+              description: 'Profile picture URL (optional)',
             },
-            createdAt: { 
-              type: 'string', 
+            createdAt: {
+              type: 'string',
               example: '2024-01-01T00:00:00.000Z',
-              description: 'Account creation timestamp'
+              description: 'Account creation timestamp',
             },
-            updatedAt: { 
-              type: 'string', 
+            updatedAt: {
+              type: 'string',
               example: '2024-01-15T10:30:45.123Z',
-              description: 'Last profile update timestamp'
+              description: 'Last profile update timestamp',
             },
           },
         },
@@ -270,54 +270,54 @@ export class UserController {
     schema: {
       type: 'object',
       properties: {
-        success: { 
-          type: 'boolean', 
+        success: {
+          type: 'boolean',
           example: true,
-          description: 'Update operation success status'
+          description: 'Update operation success status',
         },
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           example: 'Profile updated successfully',
-          description: 'Human-readable success message'
+          description: 'Human-readable success message',
         },
         data: {
           type: 'object',
           description: 'Updated user profile data',
           properties: {
-            id: { 
-              type: 'string', 
+            id: {
+              type: 'string',
               example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-              description: 'User unique identifier'
+              description: 'User unique identifier',
             },
-            email: { 
-              type: 'string', 
+            email: {
+              type: 'string',
               example: 'jane.smith@example.com',
-              description: 'Updated email address'
+              description: 'Updated email address',
             },
-            name: { 
-              type: 'string', 
+            name: {
+              type: 'string',
               example: 'Jane Smith',
-              description: 'Updated full name'
+              description: 'Updated full name',
             },
-            firstName: { 
-              type: 'string', 
+            firstName: {
+              type: 'string',
               example: 'Jane',
-              description: 'Updated first name'
+              description: 'Updated first name',
             },
-            lastName: { 
-              type: 'string', 
+            lastName: {
+              type: 'string',
               example: 'Smith',
-              description: 'Updated last name'
+              description: 'Updated last name',
             },
             avatar: {
               type: 'string',
               example: 'https://cdn.example.com/avatars/jane-smith-new.jpg',
-              description: 'Updated avatar URL'
+              description: 'Updated avatar URL',
             },
-            updatedAt: { 
-              type: 'string', 
+            updatedAt: {
+              type: 'string',
               example: '2024-01-15T10:45:30.567Z',
-              description: 'Profile update timestamp'
+              description: 'Profile update timestamp',
             },
           },
         },
@@ -331,13 +331,13 @@ export class UserController {
       type: 'object',
       properties: {
         statusCode: { type: 'number', example: 400 },
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           examples: [
             'Use /user/change-password endpoint to update password',
             'Name must be at least 2 characters long',
-            'Please provide a valid email address'
-          ]
+            'Please provide a valid email address',
+          ],
         },
         error: { type: 'string', example: 'Bad Request' },
       },
@@ -492,19 +492,19 @@ export class UserController {
     schema: {
       type: 'object',
       properties: {
-        success: { 
-          type: 'boolean', 
+        success: {
+          type: 'boolean',
           example: true,
-          description: 'Password change success status'
+          description: 'Password change success status',
         },
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           example: 'Password changed successfully',
-          description: 'Success confirmation message'
+          description: 'Success confirmation message',
         },
-        data: { 
+        data: {
           type: 'null',
-          description: 'No additional data returned for security'
+          description: 'No additional data returned for security',
         },
       },
     },
@@ -516,13 +516,13 @@ export class UserController {
       type: 'object',
       properties: {
         statusCode: { type: 'number', example: 400 },
-        message: { 
-          type: 'string', 
+        message: {
+          type: 'string',
           examples: [
             'Current password is incorrect',
             'Password must be at least 8 characters long',
-            'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
-          ]
+            'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+          ],
         },
         error: { type: 'string', example: 'Bad Request' },
       },

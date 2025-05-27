@@ -2,20 +2,13 @@ import {
   Controller,
   Post,
   Body,
-  UseGuards,
   HttpCode,
   HttpStatus,
   UsePipes,
   ValidationPipe,
   Logger,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBody,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -28,7 +21,6 @@ import {
   SessionResponseDto,
   StandardApiResponse,
 } from '../user/dto/session-response.dto';
-import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('🔐 Authentication & Account Management')
 @Controller('auth')
@@ -385,76 +377,6 @@ export class AuthController {
   ): Promise<StandardApiResponse<SessionResponseDto>> {
     this.logger.log(`Sign in attempt for email: ${signInDto.email}`);
     return this.authService.signIn(signInDto);
-  }
-
-  @Post('signout')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: '👋 User Logout & Session Termination',
-    description: `
-      **Safely terminates user session and invalidates authentication**
-      
-      This endpoint handles user logout with the following considerations:
-      - Client-side token removal instruction
-      - Session cleanup preparation
-      - Security logging for audit trails
-      - Future token blacklisting support
-      
-      **Security Features:**
-      - Requires valid JWT authentication
-      - Logout action logging
-      - Session termination confirmation
-      - Token invalidation guidance
-      
-      **Logout Process:**
-      1. User requests logout
-      2. JWT token is validated
-      3. Logout is logged for security
-      4. Client receives termination confirmation
-      5. Client removes tokens locally
-      
-      **Note:** Currently implements client-side token removal. 
-      Future versions will include server-side token blacklisting.
-      
-      **Use Cases:**
-      - User initiated logout
-      - Security-triggered logout
-      - Session timeout handling
-      - Device logout
-    `,
-    operationId: 'logoutUser',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '✅ Successfully logged out',
-    schema: {
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          example: 'Successfully signed out',
-          description: 'Logout confirmation message',
-        },
-      },
-    },
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: '🚫 Invalid or missing authentication token',
-    schema: {
-      type: 'object',
-      properties: {
-        statusCode: { type: 'number', example: 401 },
-        message: { type: 'string', example: 'Unauthorized' },
-      },
-    },
-  })
-  signOut(): { message: string } {
-    // For JWT, signout is handled client-side by removing the token
-    // In a real app, you might want to implement token blacklisting
-    return { message: 'Successfully signed out' };
   }
 
   @Post('refresh')
