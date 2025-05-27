@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsString, MinLength } from 'class-validator';
 import { Exclude } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -9,6 +9,13 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
+
+export enum UserRole {
+  BRANDON = 'brandon',
+  OWNER = 'owner',
+  ADMIN = 'admin',
+  USER = 'user',
+}
 
 @Entity('users')
 @Index('IDX_USER_EMAIL', ['email'])
@@ -75,6 +82,16 @@ export class User {
   @IsString()
   avatar?: string;
 
+  @Column({ nullable: true, default: UserRole.USER })
+  @ApiProperty({
+    description: 'User role',
+    example: 'admin',
+    required: false,
+  })
+  @IsEnum(UserRole)
+  role?: UserRole;
+
+  @IsString()
   @CreateDateColumn()
   @ApiProperty({
     description: 'Account creation date',
