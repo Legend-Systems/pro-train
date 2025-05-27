@@ -47,8 +47,8 @@ import { User } from './user/entities/user.entity';
         password: configService.get('DATABASE_PASSWORD') || 'loro',
         database: configService.get('DATABASE_NAME') || 'loro-old',
         entities: [User],
-        synchronize: configService.get('NODE_ENV') === 'development', // Only in development
-        logging: configService.get('NODE_ENV') === 'development',
+        synchronize: true,
+        logging: false,
         autoLoadEntities: true,
       }),
       inject: [ConfigService],
