@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsOptional, IsEmail } from 'class-validator';
+import { IsString, IsOptional, IsEmail } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class EnableBiometricDto {
@@ -40,14 +40,7 @@ export class BiometricSignInDto {
   @IsString()
   biometricToken: string;
 
-  @ApiProperty({
-    description: 'Remember me option for extended session',
-    example: false,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean({ message: 'Remember me must be a boolean value' })
-  rememberMe?: boolean;
+
 }
 
 export class DisableBiometricDto {

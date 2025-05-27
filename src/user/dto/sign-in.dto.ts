@@ -1,10 +1,4 @@
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-  IsOptional,
-  IsBoolean,
-} from 'class-validator';
+import { IsEmail, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SignInDto {
@@ -23,13 +17,4 @@ export class SignInDto {
   @IsString({ message: 'Password is required' })
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   password: string;
-
-  @ApiProperty({
-    description: 'Remember me option for extended session',
-    example: false,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean({ message: 'Remember me must be a boolean value' })
-  rememberMe?: boolean;
 }
