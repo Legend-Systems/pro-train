@@ -172,6 +172,7 @@ export class AuthService {
     }
 
     // TODO: Generate password reset token and send email
+    // Waiting for communications service setup (email provider integration)
     // For now, just return success message
     return {
       success: true,
@@ -195,6 +196,7 @@ export class AuthService {
     }
 
     // TODO: Validate reset token and update password
+    // Waiting for communications service setup (email token validation)
     // For now, just return placeholder
     await Promise.resolve(); // Keep async for future implementation
     throw new BadRequestException(
@@ -209,6 +211,7 @@ export class AuthService {
     const { token: _token } = verifyEmailDto;
 
     // TODO: Validate email verification token
+    // Waiting for communications service setup (email verification system)
     // For now, just return placeholder
     await Promise.resolve(); // Keep async for future implementation
     return {
@@ -229,6 +232,7 @@ export class AuthService {
     }
 
     // TODO: Generate verification token and send email
+    // Waiting for communications service setup (email delivery service)
     // For now, just return success message
     return {
       success: true,
