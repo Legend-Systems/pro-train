@@ -14,12 +14,12 @@ import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../user/dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
+import { TokenManagerService } from './token-manager.service';
 import {
   SessionResponseDto,
-  UserResponseDto,
   StandardApiResponse,
 } from '../user/dto/session-response.dto';
-import { TokenManagerService } from './token-manager.service';
+import { UserResponseDto } from '../user/dto/session-response.dto';
 
 @Injectable()
 export class AuthService {

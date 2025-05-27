@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PrimaryGeneratedColumn } from 'typeorm';
 
 export class UserResponseDto {
-  @PrimaryGeneratedColumn()
+  @ApiProperty({
+    description: 'User unique identifier',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
   uid: string;
 
   @ApiProperty({
@@ -59,14 +61,14 @@ export class SessionResponseDto {
   accessToken: string;
 
   @ApiProperty({
-    description: 'JWT refresh token (optional)',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    description: 'JWT refresh token',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     required: false,
   })
   refreshToken?: string;
 
   @ApiProperty({
-    description: 'Token expiry time in seconds',
+    description: 'Token expiration time in seconds',
     example: 3600,
     required: false,
   })
@@ -81,18 +83,19 @@ export class SessionResponseDto {
 
 export class StandardApiResponse<T = any> {
   @ApiProperty({
-    description: 'Indicates if the request was successful',
+    description: 'Indicates if the operation was successful',
     example: true,
   })
   success: boolean;
 
   @ApiProperty({
-    description: 'Response data',
+    description: 'Response data payload',
+    required: false,
   })
   data?: T;
 
   @ApiProperty({
-    description: 'Response message',
+    description: 'Human-readable message about the operation result',
     example: 'Operation completed successfully',
   })
   message: string;
@@ -100,7 +103,7 @@ export class StandardApiResponse<T = any> {
 
 export class AuthSuccessResponse extends StandardApiResponse<SessionResponseDto> {
   @ApiProperty({
-    description: 'Authentication data',
+    description: 'Authentication session data',
     type: SessionResponseDto,
   })
   data: SessionResponseDto;
