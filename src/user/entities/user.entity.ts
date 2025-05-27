@@ -7,9 +7,13 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('users')
+@Index('IDX_USER_EMAIL', ['email'])
+@Index('IDX_USER_CREATED_AT', ['createdAt'])
+@Index('IDX_USER_NAME_SEARCH', ['firstName', 'lastName'])
 export class User {
   @PrimaryGeneratedColumn('uuid')
   @ApiProperty({
@@ -70,30 +74,6 @@ export class User {
   })
   @IsString()
   avatar?: string;
-
-  @Column({ default: false })
-  @ApiProperty({
-    description: 'Whether biometric authentication is enabled for this user',
-    example: false,
-    required: false,
-  })
-  biometricEnabled: boolean;
-
-  @Column({ nullable: true })
-  @ApiProperty({
-    description: 'Encrypted biometric authentication token',
-    required: false,
-  })
-  @Exclude({ toPlainOnly: true })
-  biometricToken?: string;
-
-  @Column({ type: 'timestamp', nullable: true })
-  @ApiProperty({
-    description: 'Last biometric authentication date',
-    example: '2024-01-01T00:00:00.000Z',
-    required: false,
-  })
-  lastBiometricAuth?: Date;
 
   @CreateDateColumn()
   @ApiProperty({

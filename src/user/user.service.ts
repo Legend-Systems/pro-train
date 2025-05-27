@@ -50,7 +50,10 @@ export class UserService {
     }
   }
 
-  async updateProfile(id: string, updateData: Partial<UpdateUserDto>): Promise<User> {
+  async updateProfile(
+    id: string,
+    updateData: Partial<UpdateUserDto>,
+  ): Promise<User> {
     await this.userRepository.update(id, updateData);
     const user = await this.findById(id);
     if (!user) {
@@ -59,14 +62,21 @@ export class UserService {
     return user;
   }
 
-  async changePassword(id: string, currentPassword: string, newPassword: string): Promise<boolean> {
+  async changePassword(
+    id: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<boolean> {
     const user = await this.findById(id);
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
     // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
     if (!isCurrentPasswordValid) {
       return false;
     }
@@ -78,17 +88,5 @@ export class UserService {
     // Update password
     await this.userRepository.update(id, { password: hashedNewPassword });
     return true;
-  }
-
-  async updateBiometricSettings(
-    id: string,
-    biometricData: Partial<Pick<User, 'biometricEnabled' | 'biometricToken' | 'lastBiometricAuth'>>,
-  ): Promise<User> {
-    await this.userRepository.update(id, biometricData as any);
-    const user = await this.findById(id);
-    if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
-    }
-    return user;
   }
 }

@@ -25,9 +25,29 @@ async function bootstrap() {
 
   // Setup Swagger documentation
   const config = new DocumentBuilder()
-    .setTitle('Orrbit API')
-    .setDescription('The Orrbit API documentation')
-    .setVersion('1.0')
+    .setTitle('Orrbit Playground')
+    .setDescription(
+      `🚀 **Orrbit Playground API** - A comprehensive user management and authentication system
+
+      ## Features
+      - **Complete User Management** - Full CRUD operations with profile management
+      - **Secure Authentication** - JWT-based authentication with refresh tokens
+      - **Email Verification** - Account verification and password reset flows
+      - **Password Management** - Secure password changes and reset functionality
+      - **High Performance** - Optimized with database indexing and efficient queries
+
+      ## Security
+      - 🔐 **JWT Authentication** with Bearer token support
+      - 🛡️ **Input Validation** on all endpoints
+      - 🔒 **Password Hashing** using bcrypt with salt rounds
+      - 📧 **Email Verification** for account security
+      - ⏰ **Token Expiration** and refresh mechanisms
+
+      ## Documentation Standards
+      All endpoints include comprehensive examples, detailed parameter descriptions, 
+      and complete response schemas for easy integration.`,
+    )
+    .setVersion('2.0.0')
     .addBearerAuth(
       {
         type: 'http',
