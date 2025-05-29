@@ -14,6 +14,7 @@ import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../user/dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
+import { RefreshTokenDto } from '../user/dto/refresh-token.dto';
 import { TokenManagerService } from './token-manager.service';
 import {
   SessionResponseDto,
@@ -229,5 +230,55 @@ export class AuthService {
       success: true,
       message: 'Verification email sent',
     };
+  }
+
+  /**
+   * Refresh access token using refresh token
+   */
+  async refreshToken(
+    refreshTokenDto: RefreshTokenDto,
+  ): Promise<StandardApiResponse<any>> {
+    const { refreshToken } = refreshTokenDto;
+
+    try {
+      // Validate refresh token
+      const validation =
+        this.tokenManagerService.validateRefreshToken(refreshToken);
+
+      if (!validation.isValid) {
+        throw new UnauthorizedException('Invalid or expired refresh token');
+      }
+
+      // Find user by ID from refresh token
+      const user = await this.userService.findById(validation.userId);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // Generate new token pair
+      const newTokenPair = await this.tokenManagerService.refreshAccessToken(
+        refreshToken,
+        {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+        },
+      );
+
+      return {
+        success: true,
+        data: {
+          accessToken: newTokenPair.accessToken,
+          refreshToken: newTokenPair.refreshToken,
+          expiresIn: newTokenPair.expiresIn,
+        },
+        message: 'Token refreshed successfully',
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 }

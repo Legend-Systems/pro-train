@@ -17,6 +17,7 @@ import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
 import { ResetPasswordDto } from '../user/dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
+import { RefreshTokenDto } from '../user/dto/refresh-token.dto';
 import {
   SessionResponseDto,
   StandardApiResponse,
@@ -381,45 +382,131 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 attempts per minute
   @ApiOperation({
     summary: '🔄 Refresh Authentication Token',
     description: `
       **Refreshes expired access tokens using refresh tokens**
       
-      This endpoint will handle token refresh functionality:
-      - Validate existing refresh token
-      - Generate new access token
-      - Optional refresh token rotation
-      - Maintain session continuity
-      
-      **Note:** This endpoint is currently in development.
-      Implementation will include comprehensive token management.
-      
-      **Future Features:**
+      This endpoint handles token refresh functionality with:
       - Refresh token validation
       - New access token generation
+      - Optional refresh token rotation
+      - Session continuity maintenance
+      - Security token validation
+      
+      **Security Features:**
+      - Rate limiting: 10 attempts per minute
+      - Refresh token validation
       - Token rotation security
+      - Expired token cleanup
+      - Invalid token detection
+      
+      **Refresh Flow:**
+      1. Client submits refresh token
+      2. System validates refresh token
+      3. New access token is generated
+      4. Optional new refresh token provided
+      5. Old refresh token is invalidated
+      6. New tokens returned to client
+      
+      **Use Cases:**
+      - Automatic token refresh
       - Session extension
+      - Seamless user experience
+      - Background token management
     `,
     operationId: 'refreshAuthToken',
   })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '🚧 Endpoint under development',
-    schema: {
-      type: 'object',
-      properties: {
-        message: {
-          type: 'string',
-          example: 'Refresh token endpoint - to be implemented',
-          description: 'Development status message',
+  @ApiBody({
+    type: RefreshTokenDto,
+    description: 'Refresh token for generating new access token',
+    examples: {
+      'token-refresh': {
+        summary: '🔄 Token Refresh Request',
+        description: 'Refresh access token using valid refresh token',
+        value: {
+          refreshToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
         },
       },
     },
   })
-  refreshToken(): { message: string } {
-    // TODO: Implement refresh token logic
-    return { message: 'Refresh token endpoint - to be implemented' };
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '✅ Token successfully refreshed',
+    schema: {
+      type: 'object',
+      properties: {
+        success: {
+          type: 'boolean',
+          example: true,
+          description: 'Token refresh success status',
+        },
+        message: {
+          type: 'string',
+          example: 'Token refreshed successfully',
+          description: 'Success confirmation message',
+        },
+        data: {
+          type: 'object',
+          description: 'New authentication tokens',
+          properties: {
+            accessToken: {
+              type: 'string',
+              example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              description: 'New JWT access token for API authentication',
+            },
+            refreshToken: {
+              type: 'string',
+              example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+              description: 'New JWT refresh token (if rotation enabled)',
+            },
+            expiresIn: {
+              type: 'number',
+              example: 3600,
+              description: 'Access token expiration time in seconds',
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: '🚫 Invalid or expired refresh token',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 401 },
+        message: {
+          type: 'string',
+          example: 'Invalid or expired refresh token',
+        },
+        error: { type: 'string', example: 'Unauthorized' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: '❌ Invalid refresh token format',
+    schema: {
+      type: 'object',
+      properties: {
+        statusCode: { type: 'number', example: 400 },
+        message: {
+          type: 'array',
+          items: { type: 'string' },
+          examples: [['Refresh token is required']],
+        },
+        error: { type: 'string', example: 'Bad Request' },
+      },
+    },
+  })
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+  ): Promise<StandardApiResponse<any>> {
+    this.logger.log('Token refresh request received');
+    return this.authService.refreshToken(refreshTokenDto);
   }
 
   @Post('forgot-password')
