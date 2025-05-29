@@ -42,7 +42,7 @@ import { User } from './user/entities/user.entity';
       useFactory: (configService: ConfigService) => ({
         type: 'mysql',
         host: configService.get('DATABASE_HOST') || '129.232.204.10',
-        port: +(configService.get<number>('DATABASE_PORT') || 3306),
+        port: +(configService.get('DATABASE_PORT') || 3306),
         username: configService.get('DATABASE_USERNAME') || 'loro',
         password: configService.get('DATABASE_PASSWORD') || 'loro',
         database: configService.get('DATABASE_NAME') || 'loro-old',
@@ -50,6 +50,22 @@ import { User } from './user/entities/user.entity';
         synchronize: true,
         logging: false,
         autoLoadEntities: true,
+        // Connection pool configuration
+        extra: {
+          connectionLimit: 20,
+          acquireTimeout: 30000,
+          timeout: 30000,
+          reconnect: true,
+          idleTimeout: 30000,
+          charset: 'utf8mb4',
+        },
+        // Retry configuration
+        retryAttempts: 3,
+        retryDelay: 3000,
+        // Connection timeout
+        connectTimeout: 30000,
+        // Keep alive
+        keepConnectionAlive: true,
       }),
       inject: [ConfigService],
     }),

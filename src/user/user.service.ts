@@ -13,25 +13,64 @@ export class UserService {
     private readonly userRepository: Repository<User>,
   ) {}
 
+  private async retryOperation<T>(
+    operation: () => Promise<T>,
+    maxRetries = 3,
+    delay = 1000,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        const isConnectionError =
+          error instanceof Error &&
+          (error.message.includes('ECONNRESET') ||
+            error.message.includes('Connection lost') ||
+            error.message.includes('connect ETIMEDOUT'));
+
+        if (isConnectionError && attempt < maxRetries) {
+          console.log(
+            `Database connection error on attempt ${attempt}, retrying in ${delay}ms...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          delay *= 2; // Exponential backoff
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const user = this.userRepository.create(createUserDto);
-    return await this.userRepository.save(user);
+    return this.retryOperation(async () => {
+      const user = this.userRepository.create(createUserDto);
+      return await this.userRepository.save(user);
+    });
   }
 
   async findAll(): Promise<User[]> {
-    return await this.userRepository.find();
+    return this.retryOperation(async () => {
+      return await this.userRepository.find();
+    });
   }
 
   async findOne(id: string): Promise<User | null> {
-    return await this.userRepository.findOne({ where: { id } });
+    return this.retryOperation(async () => {
+      return await this.userRepository.findOne({ where: { id } });
+    });
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return await this.userRepository.findOne({ where: { email } });
+    return this.retryOperation(async () => {
+      return await this.userRepository.findOne({ where: { email } });
+    });
   }
 
   async findById(id: string): Promise<User | null> {
-    return await this.userRepository.findOne({ where: { id } });
+    return this.retryOperation(async () => {
+      return await this.userRepository.findOne({ where: { id } });
+    });
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
