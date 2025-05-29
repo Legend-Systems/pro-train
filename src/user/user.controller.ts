@@ -392,7 +392,7 @@ export class UserController {
             }
 
             // Remove password from update data (use separate endpoint)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
             const { password, ...updateData } = updateUserDto;
 
             if (password) {
