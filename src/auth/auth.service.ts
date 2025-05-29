@@ -1,284 +1,287 @@
 import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-  BadRequestException,
-  NotFoundException,
+    Injectable,
+    UnauthorizedException,
+    ConflictException,
+    BadRequestException,
+    NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { User } from '../user/entities/user.entity';
 import { UserService } from '../user/user.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { SignInDto } from '../user/dto/sign-in.dto';
-import { ForgotPasswordDto } from '../user/dto/forgot-password.dto';
-import { ResetPasswordDto } from '../user/dto/reset-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
 import { RefreshTokenDto } from '../user/dto/refresh-token.dto';
 import { TokenManagerService } from './token-manager.service';
 import {
-  SessionResponseDto,
-  StandardApiResponse,
+    SessionResponseDto,
+    StandardApiResponse,
 } from '../user/dto/session-response.dto';
 import { UserResponseDto } from '../user/dto/session-response.dto';
 
 @Injectable()
 export class AuthService {
-  private readonly saltRounds = 12;
+    private readonly saltRounds = 12;
 
-  constructor(
-    private readonly userService: UserService,
-    private readonly tokenManagerService: TokenManagerService,
-  ) {}
+    constructor(
+        private readonly userService: UserService,
+        private readonly tokenManagerService: TokenManagerService,
+    ) {}
 
-  async signUp(
-    createUserDto: CreateUserDto,
-  ): Promise<StandardApiResponse<SessionResponseDto>> {
-    const { email, password, name, firstName, lastName } = createUserDto;
+    async signUp(
+        createUserDto: CreateUserDto,
+    ): Promise<StandardApiResponse<SessionResponseDto>> {
+        const { email, password, name, firstName, lastName } = createUserDto;
 
-    // Check if user already exists
-    const existingUser = await this.userService.findByEmail(email);
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+        // Check if user already exists
+        const existingUser = await this.userService.findByEmail(email);
+        if (existingUser) {
+            throw new ConflictException('User with this email already exists');
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, this.saltRounds);
+
+        // Create user
+        const user = await this.userService.create({
+            email,
+            password: hashedPassword,
+            name,
+            firstName,
+            lastName,
+        });
+
+        // Generate JWT tokens
+        const tokenPair = await this.tokenManagerService.generateTokenPair({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+        });
+
+        // Return user without password
+        const userResponse: UserResponseDto = {
+            uid: user.id,
+            email: user.email,
+            name: user.name,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatar: user.avatar,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+        };
+
+        return {
+            success: true,
+            data: {
+                accessToken: tokenPair.accessToken,
+                refreshToken: tokenPair.refreshToken,
+                expiresIn: tokenPair.expiresIn,
+                user: userResponse,
+            },
+            message: 'User registered successfully',
+        };
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, this.saltRounds);
+    async signIn(
+        signInDto: SignInDto,
+    ): Promise<StandardApiResponse<SessionResponseDto>> {
+        const { email, password } = signInDto;
 
-    // Create user
-    const user = await this.userService.create({
-      email,
-      password: hashedPassword,
-      name,
-      firstName,
-      lastName,
-    });
+        // Find user by email
+        const user = await this.userService.findByEmail(email);
+        if (!user) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
 
-    // Generate JWT tokens
-    const tokenPair = await this.tokenManagerService.generateTokenPair({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    });
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
 
-    // Return user without password
-    const userResponse: UserResponseDto = {
-      uid: user.id,
-      email: user.email,
-      name: user.name,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatar: user.avatar,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+        // Generate JWT tokens
+        const tokenPair = await this.tokenManagerService.generateTokenPair({
+            id: user.id,
+            email: user.email,
+            name: user.name,
+        });
 
-    return {
-      success: true,
-      data: {
-        accessToken: tokenPair.accessToken,
-        refreshToken: tokenPair.refreshToken,
-        expiresIn: tokenPair.expiresIn,
-        user: userResponse,
-      },
-      message: 'User registered successfully',
-    };
-  }
+        // Return user without password
+        const userResponse: UserResponseDto = {
+            uid: user.id,
+            email: user.email,
+            name: user.name,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatar: user.avatar,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+        };
 
-  async signIn(
-    signInDto: SignInDto,
-  ): Promise<StandardApiResponse<SessionResponseDto>> {
-    const { email, password } = signInDto;
-
-    // Find user by email
-    const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+        return {
+            success: true,
+            data: {
+                accessToken: tokenPair.accessToken,
+                refreshToken: tokenPair.refreshToken,
+                expiresIn: tokenPair.expiresIn,
+                user: userResponse,
+            },
+            message: 'User signed in successfully',
+        };
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+    async validateUser(email: string, password: string): Promise<any> {
+        const user = await this.userService.findByEmail(email);
+        if (user && (await bcrypt.compare(password, user.password))) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { password: _, ...result } = user;
+            return result;
+        }
+        return null;
     }
 
-    // Generate JWT tokens
-    const tokenPair = await this.tokenManagerService.generateTokenPair({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-    });
-
-    // Return user without password
-    const userResponse: UserResponseDto = {
-      uid: user.id,
-      email: user.email,
-      name: user.name,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      avatar: user.avatar,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
-
-    return {
-      success: true,
-      data: {
-        accessToken: tokenPair.accessToken,
-        refreshToken: tokenPair.refreshToken,
-        expiresIn: tokenPair.expiresIn,
-        user: userResponse,
-      },
-      message: 'User signed in successfully',
-    };
-  }
-
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.userService.findByEmail(email);
-    if (user && (await bcrypt.compare(password, user.password))) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { password: _, ...result } = user;
-      return result;
-    }
-    return null;
-  }
-
-  async findById(id: string): Promise<User | null> {
-    return await this.userService.findOne(id);
-  }
-
-  async forgotPassword(
-    forgotPasswordDto: ForgotPasswordDto,
-  ): Promise<StandardApiResponse<any>> {
-    const { email } = forgotPasswordDto;
-
-    // Check if user exists
-    const user = await this.userService.findByEmail(email);
-    if (!user) {
-      // Return success even if user doesn't exist for security
-      return {
-        success: true,
-        message:
-          'If an account with that email exists, a password reset link has been sent.',
-      };
+    async findById(id: string): Promise<User | null> {
+        return await this.userService.findOne(id);
     }
 
-    // TODO: Generate password reset token and send email
-    // Waiting for communications service setup (email provider integration)
-    // For now, just return success message
-    return {
-      success: true,
-      message:
-        'If an account with that email exists, a password reset link has been sent.',
-    };
-  }
+    async forgotPassword(
+        forgotPasswordDto: ForgotPasswordDto,
+    ): Promise<StandardApiResponse<any>> {
+        const { email } = forgotPasswordDto;
 
-  async resetPassword(
-    resetPasswordDto: ResetPasswordDto,
-  ): Promise<StandardApiResponse<any>> {
-    const {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      token: _token,
-      password,
-      confirmPassword,
-    } = resetPasswordDto;
+        // Check if user exists
+        const user = await this.userService.findByEmail(email);
+        if (!user) {
+            // Return success even if user doesn't exist for security
+            return {
+                success: true,
+                message:
+                    'If an account with that email exists, a password reset link has been sent.',
+            };
+        }
 
-    if (password !== confirmPassword) {
-      throw new BadRequestException('Passwords do not match');
+        // TODO: Generate password reset token and send email
+        // Waiting for communications service setup (email provider integration)
+        // For now, just return success message
+        return {
+            success: true,
+            message:
+                'If an account with that email exists, a password reset link has been sent.',
+        };
     }
 
-    // TODO: Validate reset token and update password
-    // Waiting for communications service setup (email token validation)
-    // For now, just return placeholder
-    await Promise.resolve(); // Keep async for future implementation
-    throw new BadRequestException(
-      'Password reset functionality not yet implemented',
-    );
-  }
+    async resetPassword(
+        resetPasswordDto: ResetPasswordDto,
+    ): Promise<StandardApiResponse<any>> {
+        const {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            token: _token,
+            password,
+            confirmPassword,
+        } = resetPasswordDto;
 
-  async verifyEmail(
-    verifyEmailDto: VerifyEmailDto,
-  ): Promise<StandardApiResponse<any>> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { token: _token } = verifyEmailDto;
+        if (password !== confirmPassword) {
+            throw new BadRequestException('Passwords do not match');
+        }
 
-    // TODO: Validate email verification token
-    // Waiting for communications service setup (email verification system)
-    // For now, just return placeholder
-    await Promise.resolve(); // Keep async for future implementation
-    return {
-      success: true,
-      message: 'Email verification functionality not yet implemented',
-    };
-  }
-
-  async resendVerification(
-    resendVerificationDto: ResendVerificationDto,
-  ): Promise<StandardApiResponse<any>> {
-    const { email } = resendVerificationDto;
-
-    // Check if user exists
-    const user = await this.userService.findByEmail(email);
-    if (!user) {
-      throw new NotFoundException('User not found');
+        // TODO: Validate reset token and update password
+        // Waiting for communications service setup (email token validation)
+        // For now, just return placeholder
+        await Promise.resolve(); // Keep async for future implementation
+        throw new BadRequestException(
+            'Password reset functionality not yet implemented',
+        );
     }
 
-    // TODO: Generate verification token and send email
-    // Waiting for communications service setup (email delivery service)
-    // For now, just return success message
-    return {
-      success: true,
-      message: 'Verification email sent',
-    };
-  }
+    async verifyEmail(
+        verifyEmailDto: VerifyEmailDto,
+    ): Promise<StandardApiResponse<any>> {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { token: _token } = verifyEmailDto;
 
-  /**
-   * Refresh access token using refresh token
-   */
-  async refreshToken(
-    refreshTokenDto: RefreshTokenDto,
-  ): Promise<StandardApiResponse<any>> {
-    const { refreshToken } = refreshTokenDto;
-
-    try {
-      // Validate refresh token
-      const validation =
-        this.tokenManagerService.validateRefreshToken(refreshToken);
-
-      if (!validation.isValid) {
-        throw new UnauthorizedException('Invalid or expired refresh token');
-      }
-
-      // Find user by ID from refresh token
-      const user = await this.userService.findById(validation.userId);
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // Generate new token pair
-      const newTokenPair = await this.tokenManagerService.refreshAccessToken(
-        refreshToken,
-        {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
-      );
-
-      return {
-        success: true,
-        data: {
-          accessToken: newTokenPair.accessToken,
-          refreshToken: newTokenPair.refreshToken,
-          expiresIn: newTokenPair.expiresIn,
-        },
-        message: 'Token refreshed successfully',
-      };
-    } catch (error) {
-      if (error instanceof UnauthorizedException) {
-        throw error;
-      }
-      throw new UnauthorizedException('Invalid refresh token');
+        // TODO: Validate email verification token
+        // Waiting for communications service setup (email verification system)
+        // For now, just return placeholder
+        await Promise.resolve(); // Keep async for future implementation
+        return {
+            success: true,
+            message: 'Email verification functionality not yet implemented',
+        };
     }
-  }
+
+    async resendVerification(
+        resendVerificationDto: ResendVerificationDto,
+    ): Promise<StandardApiResponse<any>> {
+        const { email } = resendVerificationDto;
+
+        // Check if user exists
+        const user = await this.userService.findByEmail(email);
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        // TODO: Generate verification token and send email
+        // Waiting for communications service setup (email delivery service)
+        // For now, just return success message
+        return {
+            success: true,
+            message: 'Verification email sent',
+        };
+    }
+
+    /**
+     * Refresh access token using refresh token
+     */
+    async refreshToken(
+        refreshTokenDto: RefreshTokenDto,
+    ): Promise<StandardApiResponse<any>> {
+        const { refreshToken } = refreshTokenDto;
+
+        try {
+            // Validate refresh token
+            const validation =
+                this.tokenManagerService.validateRefreshToken(refreshToken);
+
+            if (!validation.isValid) {
+                throw new UnauthorizedException(
+                    'Invalid or expired refresh token',
+                );
+            }
+
+            // Find user by ID from refresh token
+            const user = await this.userService.findById(validation.userId);
+            if (!user) {
+                throw new UnauthorizedException('User not found');
+            }
+
+            // Generate new token pair
+            const newTokenPair =
+                await this.tokenManagerService.refreshAccessToken(
+                    refreshToken,
+                    {
+                        id: user.id,
+                        email: user.email,
+                        name: user.name,
+                    },
+                );
+
+            return {
+                success: true,
+                data: {
+                    accessToken: newTokenPair.accessToken,
+                    refreshToken: newTokenPair.refreshToken,
+                    expiresIn: newTokenPair.expiresIn,
+                },
+                message: 'Token refreshed successfully',
+            };
+        } catch (error) {
+            if (error instanceof UnauthorizedException) {
+                throw error;
+            }
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+    }
 }

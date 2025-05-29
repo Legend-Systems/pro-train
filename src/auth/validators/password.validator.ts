@@ -1,37 +1,38 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
 
 export function IsStrongPassword(validationOptions?: ValidationOptions) {
-  return function (object: object, propertyName: string) {
-    registerDecorator({
-      name: 'isStrongPassword',
-      target: object.constructor,
-      propertyName: propertyName,
-      options: validationOptions,
-      validator: {
-        validate(value: any) {
-          if (typeof value !== 'string') return false;
+    return function (object: object, propertyName: string) {
+        registerDecorator({
+            name: 'isStrongPassword',
+            target: object.constructor,
+            propertyName: propertyName,
+            options: validationOptions,
+            validator: {
+                validate(value: any) {
+                    if (typeof value !== 'string') return false;
 
-          // At least 8 characters
-          if (value.length < 8) return false;
+                    // At least 8 characters
+                    if (value.length < 8) return false;
 
-          // Contains at least one uppercase letter
-          if (!/[A-Z]/.test(value)) return false;
+                    // Contains at least one uppercase letter
+                    if (!/[A-Z]/.test(value)) return false;
 
-          // Contains at least one lowercase letter
-          if (!/[a-z]/.test(value)) return false;
+                    // Contains at least one lowercase letter
+                    if (!/[a-z]/.test(value)) return false;
 
-          // Contains at least one number
-          if (!/\d/.test(value)) return false;
+                    // Contains at least one number
+                    if (!/\d/.test(value)) return false;
 
-          // Contains at least one special character
-          if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)) return false;
+                    // Contains at least one special character
+                    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value))
+                        return false;
 
-          return true;
-        },
-        defaultMessage() {
-          return 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character';
-        },
-      },
-    });
-  };
+                    return true;
+                },
+                defaultMessage() {
+                    return 'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character';
+                },
+            },
+        });
+    };
 }
