@@ -15,24 +15,16 @@ export class UserResponseDto {
   email: string;
 
   @ApiProperty({
-    description: 'User full name',
-    example: 'John Doe',
-  })
-  name: string;
-
-  @ApiProperty({
     description: 'User first name',
     example: 'John',
-    required: false,
   })
-  firstName?: string;
+  firstName: string;
 
   @ApiProperty({
     description: 'User last name',
     example: 'Doe',
-    required: false,
   })
-  lastName?: string;
+  lastName: string;
 
   @ApiProperty({
     description: 'User avatar URL',

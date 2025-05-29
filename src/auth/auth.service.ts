@@ -34,7 +34,7 @@ export class AuthService {
   async signUp(
     createUserDto: CreateUserDto,
   ): Promise<StandardApiResponse<SessionResponseDto>> {
-    const { email, password, name, firstName, lastName } = createUserDto;
+    const { email, password, firstName, lastName, avatar } = createUserDto;
 
     // Check if user already exists
     const existingUser = await this.userService.findByEmail(email);
@@ -49,23 +49,23 @@ export class AuthService {
     const user = await this.userService.create({
       email,
       password: hashedPassword,
-      name,
       firstName,
       lastName,
+      avatar,
     });
 
     // Generate JWT tokens
     const tokenPair = await this.tokenManagerService.generateTokenPair({
       id: user.id,
       email: user.email,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
     });
 
     // Return user without password
     const userResponse: UserResponseDto = {
       uid: user.id,
       email: user.email,
-      name: user.name,
       firstName: user.firstName,
       lastName: user.lastName,
       avatar: user.avatar,
@@ -107,14 +107,14 @@ export class AuthService {
     const tokenPair = await this.tokenManagerService.generateTokenPair({
       id: user.id,
       email: user.email,
-      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
     });
 
     // Return user without password
     const userResponse: UserResponseDto = {
       uid: user.id,
       email: user.email,
-      name: user.name,
       firstName: user.firstName,
       lastName: user.lastName,
       avatar: user.avatar,
@@ -122,8 +122,6 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
-
-    console.log('userResponse', userResponse);
 
     return {
       success: true,
@@ -265,7 +263,8 @@ export class AuthService {
         {
           id: user.id,
           email: user.email,
-          name: user.name,
+          firstName: user.firstName,
+          lastName: user.lastName,
         },
       );
 
