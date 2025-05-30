@@ -1,20 +1,11 @@
-import {
-    Injectable,
-    NotFoundException,
-    BadRequestException,
-    InternalServerErrorException,
-    Logger,
-} from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Leaderboard } from './entities/leaderboard.entity';
 import { CreateLeaderboardDto } from './dto/create-leaderboard.dto';
-import { UpdateLeaderboardDto } from './dto/update-leaderboard.dto';
 import { LeaderboardResponseDto } from './dto/leaderboard-response.dto';
 import { Result } from '../results/entities/result.entity';
 import { plainToClass } from 'class-transformer';
-import { User } from '../user/entities/user.entity';
-import { Course } from '../course/entities/course.entity';
 
 @Injectable()
 export class LeaderboardService {
