@@ -59,11 +59,6 @@ async function bootstrap() {
             },
             'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!
         )
-
-        .addServer(
-            `${configService.get('API_URL') || 'http://localhost:4400'}`,
-            'API Server',
-        )
         .build();
 
     const document = SwaggerModule.createDocument(app, config);
