@@ -15,6 +15,7 @@ import {
     CourseStatsDto,
 } from './dto/course-response.dto';
 import { Course } from './entities/course.entity';
+import { Test } from '../test/entities/test.entity';
 import { UserService } from '../user/user.service';
 
 @Injectable()
@@ -22,6 +23,8 @@ export class CourseService {
     constructor(
         @InjectRepository(Course)
         private readonly courseRepository: Repository<Course>,
+        @InjectRepository(Test)
+        private readonly testRepository: Repository<Test>,
         private readonly userService: UserService,
     ) {}
 
@@ -131,12 +134,23 @@ export class CourseService {
 
             const [courses, total] = await query.getManyAndCount();
 
-            // TODO: Add test and student counts when other entities are implemented
-            const coursesWithCounts = courses.map(course => ({
-                ...course,
-                testCount: 0, // Will be calculated when Test entity is available
-                studentCount: 0, // Will be calculated when TestAttempt entity is available
-            }));
+            // Calculate actual test counts for each course
+            const coursesWithCounts = await Promise.all(
+                courses.map(async course => {
+                    const testCount = await this.testRepository.count({
+                        where: { courseId: course.courseId },
+                    });
+
+                    // TODO: Calculate student count when TestAttempt entity is available
+                    const studentCount = 0;
+
+                    return {
+                        ...course,
+                        testCount,
+                        studentCount,
+                    };
+                }),
+            );
 
             return {
                 courses: coursesWithCounts,
@@ -159,18 +173,27 @@ export class CourseService {
                 return null;
             }
 
-            // TODO: Calculate real statistics when other entities are implemented
+            // Calculate actual statistics with available entities
+            const totalTests = await this.testRepository.count({
+                where: { courseId: id },
+            });
+
+            const activeTests = await this.testRepository.count({
+                where: { courseId: id, isActive: true },
+            });
+
+            // TODO: Calculate totalAttempts and averageScore when TestAttempt entity is available
             const statistics = {
-                totalTests: 0,
-                activeTests: 0,
+                totalTests,
+                activeTests,
                 totalAttempts: 0,
                 averageScore: 0,
             };
 
             return {
                 ...course,
-                testCount: statistics.totalTests,
-                studentCount: 0,
+                testCount: totalTests,
+                studentCount: 0, // TODO: Calculate when TestAttempt entity is available
                 statistics,
             };
         });
@@ -223,11 +246,16 @@ export class CourseService {
         return this.retryOperation(async () => {
             await this.validateOwnership(id, userId);
 
-            // TODO: Check for active tests when Test entity is implemented
-            // const activeTests = await this.testService.countActiveTests(id);
-            // if (activeTests > 0) {
-            //     throw new BadRequestException('Cannot delete course with active tests');
-            // }
+            // Check for active tests before deletion
+            const activeTestCount = await this.testRepository.count({
+                where: { courseId: id, isActive: true },
+            });
+
+            if (activeTestCount > 0) {
+                throw new ForbiddenException(
+                    `Cannot delete course with ${activeTestCount} active tests. Please deactivate all tests first.`,
+                );
+            }
 
             const result = await this.courseRepository.delete(id);
             if (result.affected === 0) {
@@ -243,11 +271,20 @@ export class CourseService {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
-            // TODO: Calculate real statistics when other entities are implemented
+            // Calculate actual statistics with available entities
+            const totalTests = await this.testRepository.count({
+                where: { courseId: id },
+            });
+
+            const activeTests = await this.testRepository.count({
+                where: { courseId: id, isActive: true },
+            });
+
+            // TODO: Calculate real attempt statistics when TestAttempt entity is available
             return {
                 courseId: id,
-                totalTests: 0,
-                activeTests: 0,
+                totalTests,
+                activeTests,
                 totalAttempts: 0,
                 uniqueStudents: 0,
                 averageScore: 0,

@@ -7,6 +7,7 @@ import {
     Column,
     CreateDateColumn,
     UpdateDateColumn,
+    OneToMany,
     Index,
 } from 'typeorm';
 
@@ -95,6 +96,26 @@ export class User {
         example: '2024-01-01T00:00:00.000Z',
     })
     updatedAt: Date;
+
+    // Relations - using string references to avoid circular dependencies
+    @OneToMany('Course', 'creator')
+    createdCourses: any[];
+
+    // Note: These relations will be added as we implement other entities
+    // @OneToMany('TestAttempt', 'user')
+    // testAttempts: any[];
+
+    // @OneToMany('Result', 'user')
+    // results: any[];
+
+    // @OneToMany('Answer', 'markedByUser')
+    // markedAnswers: any[];
+
+    // @OneToMany('Leaderboard', 'user')
+    // leaderboardEntries: any[];
+
+    // @OneToMany('TrainingProgress', 'user')
+    // trainingProgress: any[];
 
     constructor(partial: Partial<User>) {
         Object.assign(this, partial);

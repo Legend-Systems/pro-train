@@ -5,6 +5,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
+    OneToMany,
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
@@ -68,10 +69,10 @@ export class Course {
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
     creator: User;
 
-    // Note: These relations will be added as we implement other entities
-    // @OneToMany(() => Test, test => test.course)
-    // tests: Test[];
+    @OneToMany('Test', 'course')
+    tests: any[];
 
+    // Note: These relations will be added as we implement other entities
     // @OneToMany(() => Result, result => result.course)
     // results: Result[];
 
