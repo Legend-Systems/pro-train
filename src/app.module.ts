@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { User } from './user/entities/user.entity';
+import { Course } from './course/entities/course.entity';
 import { CourseModule } from './course/course.module';
 import { TestModule } from './test/test.module';
 import { QuestionsModule } from './questions/questions.module';
@@ -55,7 +56,7 @@ import { TrainingProgressModule } from './training_progress/training_progress.mo
                 username: configService.get('DATABASE_USERNAME'),
                 password: configService.get('DATABASE_PASSWORD'),
                 database: configService.get('DATABASE_NAME'),
-                entities: [User],
+                entities: [User, Course],
                 synchronize: true,
                 logging: false,
                 autoLoadEntities: true,
