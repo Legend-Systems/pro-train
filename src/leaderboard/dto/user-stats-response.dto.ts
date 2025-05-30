@@ -52,4 +52,4 @@ export class UserStatsResponseDto {
     })
     @Expose()
     recentActivity: LeaderboardResponseDto[];
-} 
+}

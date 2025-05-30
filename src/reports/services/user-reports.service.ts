@@ -279,13 +279,15 @@ export class UserReportsService {
         let improvementRate = 0;
 
         if (recentResults.length >= 3) {
-            const firstHalf = recentResults
-                .slice(0, Math.floor(recentResults.length / 2))
-                .reduce((sum, r) => sum + r.score, 0) /
+            const firstHalf =
+                recentResults
+                    .slice(0, Math.floor(recentResults.length / 2))
+                    .reduce((sum, r) => sum + r.score, 0) /
                 Math.floor(recentResults.length / 2);
-            const secondHalf = recentResults
-                .slice(Math.floor(recentResults.length / 2))
-                .reduce((sum, r) => sum + r.score, 0) /
+            const secondHalf =
+                recentResults
+                    .slice(Math.floor(recentResults.length / 2))
+                    .reduce((sum, r) => sum + r.score, 0) /
                 Math.ceil(recentResults.length / 2);
 
             improvementRate = ((secondHalf - firstHalf) / firstHalf) * 100;
@@ -343,7 +345,11 @@ export class UserReportsService {
 
         // Calculate first attempt success rate
         const firstAttempts = await this.testAttemptRepository.count({
-            where: { userId, attemptNumber: 1, status: AttemptStatus.SUBMITTED },
+            where: {
+                userId,
+                attemptNumber: 1,
+                status: AttemptStatus.SUBMITTED,
+            },
         });
 
         const firstAttemptSuccesses = await this.testAttemptRepository
@@ -356,7 +362,9 @@ export class UserReportsService {
             .getCount();
 
         const firstAttemptSuccessRate =
-            firstAttempts > 0 ? (firstAttemptSuccesses / firstAttempts) * 100 : 0;
+            firstAttempts > 0
+                ? (firstAttemptSuccesses / firstAttempts) * 100
+                : 0;
 
         // Calculate time efficiency score (based on completion time vs average)
         const userAvgTime = await this.testAttemptRepository
@@ -382,7 +390,10 @@ export class UserReportsService {
             userAvgTime?.avgTime && globalAvgTime?.avgTime
                 ? Math.min(
                       100,
-                      100 - ((userAvgTime.avgTime - globalAvgTime.avgTime) / globalAvgTime.avgTime) * 100,
+                      100 -
+                          ((userAvgTime.avgTime - globalAvgTime.avgTime) /
+                              globalAvgTime.avgTime) *
+                              100,
                   )
                 : 50; // Default neutral score
 
@@ -405,9 +416,8 @@ export class UserReportsService {
     async getGlobalUserStats(): Promise<GlobalUserStatsDto> {
         const cacheKey = 'global_user_stats';
 
-        const cachedData = await this.cacheManager.get<GlobalUserStatsDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<GlobalUserStatsDto>(cacheKey);
         if (cachedData) {
             return cachedData;
         }
@@ -461,11 +471,11 @@ export class UserReportsService {
             )
             .getRawOne();
 
-        const averageSessionDuration =
-            (avgSessionResult?.avgSeconds || 0) / 60; // Convert to minutes
+        const averageSessionDuration = (avgSessionResult?.avgSeconds || 0) / 60; // Convert to minutes
 
         // User retention rate (users active in last 30 days / total users)
-        const retentionRate = totalUsers > 0 ? (monthlyActiveUsers / totalUsers) * 100 : 0;
+        const retentionRate =
+            totalUsers > 0 ? (monthlyActiveUsers / totalUsers) * 100 : 0;
 
         const globalStats: GlobalUserStatsDto = {
             totalUsers,
@@ -473,7 +483,8 @@ export class UserReportsService {
             weeklyActiveUsers,
             monthlyActiveUsers,
             newUsersThisWeek,
-            averageSessionDuration: Math.round(averageSessionDuration * 100) / 100,
+            averageSessionDuration:
+                Math.round(averageSessionDuration * 100) / 100,
             retentionRate: Math.round(retentionRate * 100) / 100,
         };
 
@@ -509,4 +520,4 @@ export class UserReportsService {
 
         return registrationData;
     }
-} 
+}

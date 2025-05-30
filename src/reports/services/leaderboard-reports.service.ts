@@ -42,9 +42,10 @@ export class LeaderboardReportsService {
         const cacheKey = `leaderboard_analytics_${userId || 'global'}_${courseId || 'all'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<LeaderboardAnalyticsReportDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<LeaderboardAnalyticsReportDto>(
+                cacheKey,
+            );
 
         if (cachedData) {
             return {
@@ -76,9 +77,10 @@ export class LeaderboardReportsService {
         const cacheKey = 'global_leaderboard_stats';
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<GlobalLeaderboardStatsReportDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<GlobalLeaderboardStatsReportDto>(
+                cacheKey,
+            );
 
         if (cachedData) {
             return {
@@ -141,17 +143,18 @@ export class LeaderboardReportsService {
         const statsData: GlobalLeaderboardStatsReportDto = {
             totalParticipants: Number(totalParticipants?.count || 0),
             averagePoints: Math.round(averagePoints * 100) / 100,
-            topGlobalPerformers: topGlobalPerformers.map((performer) => ({
+            topGlobalPerformers: topGlobalPerformers.map(performer => ({
                 userId: performer.userId,
                 name: `${performer.firstName} ${performer.lastName}`,
                 totalPoints: Number(performer.totalPoints),
                 coursesParticipated: Number(performer.coursesParticipated),
             })),
-            mostActiveCourses: courseActivity.map((course) => ({
+            mostActiveCourses: courseActivity.map(course => ({
                 courseId: course.courseId,
                 title: course.title,
                 participants: Number(course.participants),
-                averagePoints: Math.round(Number(course.averagePoints) * 100) / 100,
+                averagePoints:
+                    Math.round(Number(course.averagePoints) * 100) / 100,
                 topScore: Number(course.topScore),
             })),
             recentActivity,
@@ -172,9 +175,8 @@ export class LeaderboardReportsService {
         const cacheKey = `top_performers_${courseId || 'global'}_${limit}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<TopPerformerReportDto[]>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<TopPerformerReportDto[]>(cacheKey);
 
         if (cachedData) {
             return cachedData;
@@ -199,13 +201,15 @@ export class LeaderboardReportsService {
             .limit(limit)
             .getRawMany();
 
-        const topPerformers: TopPerformerReportDto[] = performers.map((performer) => ({
-            userId: performer.userId,
-            name: `${performer.firstName} ${performer.lastName}`,
-            points: Number(performer.points),
-            rank: Number(performer.rank),
-            courseId: performer.courseId,
-        }));
+        const topPerformers: TopPerformerReportDto[] = performers.map(
+            performer => ({
+                userId: performer.userId,
+                name: `${performer.firstName} ${performer.lastName}`,
+                points: Number(performer.points),
+                rank: Number(performer.rank),
+                courseId: performer.courseId,
+            }),
+        );
 
         // Cache the result for 15 minutes (900 seconds)
         await this.cacheManager.set(cacheKey, topPerformers, 900);
@@ -220,9 +224,8 @@ export class LeaderboardReportsService {
         const cacheKey = `rank_movements_${courseId || 'global'}_${days}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<RankMovementReportDto[]>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<RankMovementReportDto[]>(cacheKey);
 
         if (cachedData) {
             return cachedData;
@@ -252,15 +255,19 @@ export class LeaderboardReportsService {
             .orderBy('l.lastUpdated', 'DESC')
             .getRawMany();
 
-        const rankMovements: RankMovementReportDto[] = movements.map((movement) => ({
-            userId: movement.userId,
-            name: `${movement.firstName} ${movement.lastName}`,
-            currentRank: Number(movement.currentRank),
-            previousRank: Number(movement.currentRank) + Math.floor(Math.random() * 5 - 2), // Simulated
-            rankChange: Math.floor(Math.random() * 10 - 5), // Simulated
-            currentPoints: Number(movement.currentPoints),
-            pointsChange: Math.floor(Math.random() * 100 - 50), // Simulated
-        }));
+        const rankMovements: RankMovementReportDto[] = movements.map(
+            movement => ({
+                userId: movement.userId,
+                name: `${movement.firstName} ${movement.lastName}`,
+                currentRank: Number(movement.currentRank),
+                previousRank:
+                    Number(movement.currentRank) +
+                    Math.floor(Math.random() * 5 - 2), // Simulated
+                rankChange: Math.floor(Math.random() * 10 - 5), // Simulated
+                currentPoints: Number(movement.currentPoints),
+                pointsChange: Math.floor(Math.random() * 100 - 50), // Simulated
+            }),
+        );
 
         // Cache the result for 1 hour (3600 seconds)
         await this.cacheManager.set(cacheKey, rankMovements, 3600);
@@ -274,9 +281,8 @@ export class LeaderboardReportsService {
         const cacheKey = `competitive_metrics_${courseId || 'global'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<CompetitiveMetricsReportDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<CompetitiveMetricsReportDto>(cacheKey);
 
         if (cachedData) {
             return cachedData;
@@ -295,34 +301,44 @@ export class LeaderboardReportsService {
             .orderBy('l.points', 'DESC')
             .getRawMany();
 
-        const points = leaderboardData.map((entry) => Number(entry.points));
+        const points = leaderboardData.map(entry => Number(entry.points));
         const totalParticipants = points.length;
 
         // Calculate standard deviation to measure competition intensity
-        const mean = points.reduce((sum, point) => sum + point, 0) / totalParticipants;
+        const mean =
+            points.reduce((sum, point) => sum + point, 0) / totalParticipants;
         const standardDeviation = Math.sqrt(
-            points.reduce((sum, point) => sum + Math.pow(point - mean, 2), 0) / totalParticipants,
+            points.reduce((sum, point) => sum + Math.pow(point - mean, 2), 0) /
+                totalParticipants,
         );
 
         // Competition intensity (lower std dev = tighter competition)
-        const competitionIntensity = standardDeviation > 0 ? Math.max(0, 100 - (standardDeviation / mean) * 100) : 0;
+        const competitionIntensity =
+            standardDeviation > 0
+                ? Math.max(0, 100 - (standardDeviation / mean) * 100)
+                : 0;
 
         // Top 10% threshold
         const top10Threshold = Math.floor(totalParticipants * 0.1);
         const top10Points = points.slice(0, top10Threshold);
-        const averageTop10 = top10Points.reduce((sum, point) => sum + point, 0) / top10Points.length;
+        const averageTop10 =
+            top10Points.reduce((sum, point) => sum + point, 0) /
+            top10Points.length;
 
         // Bottom 10% threshold
         const bottom10Threshold = Math.floor(totalParticipants * 0.9);
         const bottom10Points = points.slice(bottom10Threshold);
-        const averageBottom10 = bottom10Points.reduce((sum, point) => sum + point, 0) / bottom10Points.length;
+        const averageBottom10 =
+            bottom10Points.reduce((sum, point) => sum + point, 0) /
+            bottom10Points.length;
 
         const metrics: CompetitiveMetricsReportDto = {
             totalParticipants,
             competitionIntensity: Math.round(competitionIntensity * 100) / 100,
             averagePoints: Math.round(mean * 100) / 100,
             topPerformerThreshold: Math.round(averageTop10 * 100) / 100,
-            participationGap: Math.round((averageTop10 - averageBottom10) * 100) / 100,
+            participationGap:
+                Math.round((averageTop10 - averageBottom10) * 100) / 100,
             standardDeviation: Math.round(standardDeviation * 100) / 100,
         };
 
@@ -344,7 +360,9 @@ export class LeaderboardReportsService {
 
         if (courseId) {
             const courseCondition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${courseCondition} l.courseId = :courseId`, { courseId });
+            query = query.where(`${courseCondition} l.courseId = :courseId`, {
+                courseId,
+            });
         }
 
         // User's current rankings
@@ -356,14 +374,22 @@ export class LeaderboardReportsService {
             .getRawMany();
 
         const totalRankings = userRankings.length;
-        const averageRank = totalRankings > 0 
-            ? userRankings.reduce((sum, ranking) => sum + Number(ranking.rank), 0) / totalRankings
-            : 0;
+        const averageRank =
+            totalRankings > 0
+                ? userRankings.reduce(
+                      (sum, ranking) => sum + Number(ranking.rank),
+                      0,
+                  ) / totalRankings
+                : 0;
 
-        const totalPoints = userRankings.reduce((sum, ranking) => sum + Number(ranking.points), 0);
-        const bestRank = totalRankings > 0 
-            ? Math.min(...userRankings.map(r => Number(r.rank)))
-            : 0;
+        const totalPoints = userRankings.reduce(
+            (sum, ranking) => sum + Number(ranking.points),
+            0,
+        );
+        const bestRank =
+            totalRankings > 0
+                ? Math.min(...userRankings.map(r => Number(r.rank)))
+                : 0;
 
         // Recent improvements
         const thirtyDaysAgo = new Date();
@@ -374,11 +400,15 @@ export class LeaderboardReportsService {
             .where('l.lastUpdated >= :thirtyDaysAgo', { thirtyDaysAgo });
 
         if (userId) {
-            recentQuery = recentQuery.andWhere('l.userId = :userId', { userId });
+            recentQuery = recentQuery.andWhere('l.userId = :userId', {
+                userId,
+            });
         }
 
         if (courseId) {
-            recentQuery = recentQuery.andWhere('l.courseId = :courseId', { courseId });
+            recentQuery = recentQuery.andWhere('l.courseId = :courseId', {
+                courseId,
+            });
         }
 
         const recentActivity = await recentQuery.getCount();
@@ -412,7 +442,9 @@ export class LeaderboardReportsService {
 
         if (courseId) {
             const condition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${condition} l.courseId = :courseId`, { courseId });
+            query = query.where(`${condition} l.courseId = :courseId`, {
+                courseId,
+            });
         }
 
         const trends = await query.getRawMany();
@@ -433,18 +465,22 @@ export class LeaderboardReportsService {
 
         if (courseId) {
             const condition = userId ? 'AND' : 'WHERE';
-            courseQuery = courseQuery.where(`${condition} l.courseId = :courseId`, { courseId });
+            courseQuery = courseQuery.where(
+                `${condition} l.courseId = :courseId`,
+                { courseId },
+            );
         }
 
         const coursePerformance = await courseQuery.getRawMany();
 
         return {
-            performanceTrends: trends.map((trend) => ({
+            performanceTrends: trends.map(trend => ({
                 date: trend.date,
-                averagePoints: Math.round(Number(trend.averagePoints) * 100) / 100,
+                averagePoints:
+                    Math.round(Number(trend.averagePoints) * 100) / 100,
                 averageRank: Math.round(Number(trend.averageRank) * 100) / 100,
             })),
-            coursePerformance: coursePerformance.map((course) => ({
+            coursePerformance: coursePerformance.map(course => ({
                 courseId: course.courseId,
                 courseName: course.courseName,
                 rank: Number(course.rank),
@@ -452,4 +488,4 @@ export class LeaderboardReportsService {
             })),
         };
     }
-} 
+}

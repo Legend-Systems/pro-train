@@ -332,4 +332,4 @@ export class PerformanceTrendReportDto {
         example: 65.2,
     })
     passRate: number;
-} 
+}

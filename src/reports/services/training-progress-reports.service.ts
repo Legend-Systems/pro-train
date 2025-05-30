@@ -45,9 +45,10 @@ export class TrainingProgressReportsService {
         const cacheKey = `training_progress_analytics_${userId}_${courseId || 'all'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<TrainingProgressAnalyticsReportDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<TrainingProgressAnalyticsReportDto>(
+                cacheKey,
+            );
 
         if (cachedData) {
             return {
@@ -79,9 +80,10 @@ export class TrainingProgressReportsService {
         const cacheKey = 'global_training_progress_stats';
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<GlobalTrainingProgressStatsReportDto>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<GlobalTrainingProgressStatsReportDto>(
+                cacheKey,
+            );
 
         if (cachedData) {
             return {
@@ -91,7 +93,8 @@ export class TrainingProgressReportsService {
         }
 
         // Total learning paths
-        const totalLearningPaths = await this.trainingProgressRepository.count();
+        const totalLearningPaths =
+            await this.trainingProgressRepository.count();
 
         // Average completion percentage
         const avgCompletionResult = await this.trainingProgressRepository
@@ -99,7 +102,9 @@ export class TrainingProgressReportsService {
             .select('AVG(tp.completionPercentage)', 'avgCompletion')
             .getRawOne();
 
-        const averageCompletion = Number(avgCompletionResult?.avgCompletion || 0);
+        const averageCompletion = Number(
+            avgCompletionResult?.avgCompletion || 0,
+        );
 
         // Active learners (progress updated in last 7 days)
         const sevenDaysAgo = new Date();
@@ -145,16 +150,19 @@ export class TrainingProgressReportsService {
             activeLearners: Number(activeLearners?.count || 0),
             completionDistribution: {
                 completed: Number(completionDistribution.completed),
-                nearlyCompleted: Number(completionDistribution.nearly_completed),
+                nearlyCompleted: Number(
+                    completionDistribution.nearly_completed,
+                ),
                 halfway: Number(completionDistribution.halfway),
                 started: Number(completionDistribution.started),
                 justStarted: Number(completionDistribution.just_started),
             },
-            popularLearningPaths: popularPaths.map((path) => ({
+            popularLearningPaths: popularPaths.map(path => ({
                 courseId: path.courseId,
                 title: path.title,
                 enrollments: Number(path.enrollments),
-                averageCompletion: Math.round(Number(path.averageCompletion) * 100) / 100,
+                averageCompletion:
+                    Math.round(Number(path.averageCompletion) * 100) / 100,
             })),
             learningVelocityTrends: velocityTrends,
             generatedAt: new Date(),
@@ -174,9 +182,10 @@ export class TrainingProgressReportsService {
         const cacheKey = `learning_path_completion_${userId || 'global'}_${courseId || 'all'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<LearningPathCompletionReportDto[]>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<LearningPathCompletionReportDto[]>(
+                cacheKey,
+            );
 
         if (cachedData) {
             return cachedData;
@@ -198,25 +207,28 @@ export class TrainingProgressReportsService {
 
         if (courseId) {
             const condition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${condition} tp.courseId = :courseId`, { courseId });
+            query = query.where(`${condition} tp.courseId = :courseId`, {
+                courseId,
+            });
         }
 
         const completions = await query
             .orderBy('tp.completionPercentage', 'DESC')
             .getRawMany();
 
-        const learningPaths: LearningPathCompletionReportDto[] = completions.map((completion) => ({
-            courseId: completion.courseId,
-            title: completion.title,
-            completionPercentage: Number(completion.completionPercentage),
-            currentModule: completion.currentModule,
-            timeSpent: Number(completion.timeSpentMinutes || 0),
-            lastActivity: completion.lastUpdated,
-            estimatedTimeToComplete: this.calculateEstimatedTimeToComplete(
-                Number(completion.completionPercentage),
-                Number(completion.timeSpentMinutes || 0),
-            ),
-        }));
+        const learningPaths: LearningPathCompletionReportDto[] =
+            completions.map(completion => ({
+                courseId: completion.courseId,
+                title: completion.title,
+                completionPercentage: Number(completion.completionPercentage),
+                currentModule: completion.currentModule,
+                timeSpent: Number(completion.timeSpentMinutes || 0),
+                lastActivity: completion.lastUpdated,
+                estimatedTimeToComplete: this.calculateEstimatedTimeToComplete(
+                    Number(completion.completionPercentage),
+                    Number(completion.timeSpentMinutes || 0),
+                ),
+            }));
 
         // Cache the result for 45 minutes (2700 seconds)
         await this.cacheManager.set(cacheKey, learningPaths, 2700);
@@ -231,9 +243,8 @@ export class TrainingProgressReportsService {
         const cacheKey = `skill_development_${userId}_${courseId || 'all'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<SkillDevelopmentReportDto[]>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<SkillDevelopmentReportDto[]>(cacheKey);
 
         if (cachedData) {
             return cachedData;
@@ -252,7 +263,9 @@ export class TrainingProgressReportsService {
             .addSelect('COUNT(ta.attemptId)', 'totalAttempts')
             .addSelect('tp.timeSpentMinutes', 'timeSpentMinutes')
             .where('tp.userId = :userId', { userId })
-            .groupBy('c.courseId, c.title, tp.completionPercentage, tp.timeSpentMinutes');
+            .groupBy(
+                'c.courseId, c.title, tp.completionPercentage, tp.timeSpentMinutes',
+            );
 
         if (courseId) {
             query = query.andWhere('tp.courseId = :courseId', { courseId });
@@ -260,24 +273,32 @@ export class TrainingProgressReportsService {
 
         const skills = await query.getRawMany();
 
-        const skillDevelopment: SkillDevelopmentReportDto[] = skills.map((skill) => {
-            const averageScore = Number(skill.averageTestScore || 0);
-            const progressPercentage = Number(skill.progressPercentage);
-            const timeSpent = Number(skill.timeSpentMinutes || 0);
+        const skillDevelopment: SkillDevelopmentReportDto[] = skills.map(
+            skill => {
+                const averageScore = Number(skill.averageTestScore || 0);
+                const progressPercentage = Number(skill.progressPercentage);
+                const timeSpent = Number(skill.timeSpentMinutes || 0);
 
-            // Calculate skill level based on progress and performance
-            const skillLevel = this.calculateSkillLevel(progressPercentage, averageScore);
+                // Calculate skill level based on progress and performance
+                const skillLevel = this.calculateSkillLevel(
+                    progressPercentage,
+                    averageScore,
+                );
 
-            return {
-                skillArea: skill.courseName,
-                skillLevel,
-                progressPercentage,
-                averageTestScore: Math.round(averageScore * 100) / 100,
-                totalAttempts: Number(skill.totalAttempts || 0),
-                timeSpent,
-                improvementRate: this.calculateImprovementRate(progressPercentage, averageScore),
-            };
-        });
+                return {
+                    skillArea: skill.courseName,
+                    skillLevel,
+                    progressPercentage,
+                    averageTestScore: Math.round(averageScore * 100) / 100,
+                    totalAttempts: Number(skill.totalAttempts || 0),
+                    timeSpent,
+                    improvementRate: this.calculateImprovementRate(
+                        progressPercentage,
+                        averageScore,
+                    ),
+                };
+            },
+        );
 
         // Cache the result for 1 hour (3600 seconds)
         await this.cacheManager.set(cacheKey, skillDevelopment, 3600);
@@ -292,9 +313,8 @@ export class TrainingProgressReportsService {
         const cacheKey = `progress_milestones_${userId}_${courseId || 'all'}`;
 
         // Try to get from cache first
-        const cachedData = await this.cacheManager.get<ProgressMilestoneReportDto[]>(
-            cacheKey,
-        );
+        const cachedData =
+            await this.cacheManager.get<ProgressMilestoneReportDto[]>(cacheKey);
 
         if (cachedData) {
             return cachedData;
@@ -315,19 +335,24 @@ export class TrainingProgressReportsService {
 
         const progressData = await query.getRawMany();
 
-        const milestones: ProgressMilestoneReportDto[] = progressData.map((progress) => {
-            const completionPercentage = Number(progress.completionPercentage);
-            const milestones = this.generateMilestones(completionPercentage);
+        const milestones: ProgressMilestoneReportDto[] = progressData.map(
+            progress => {
+                const completionPercentage = Number(
+                    progress.completionPercentage,
+                );
+                const milestones =
+                    this.generateMilestones(completionPercentage);
 
-            return {
-                courseName: progress.courseName,
-                currentProgress: completionPercentage,
-                currentModule: progress.currentModule,
-                milestonesAchieved: milestones.achieved,
-                nextMilestone: milestones.next,
-                lastUpdate: progress.lastUpdated,
-            };
-        });
+                return {
+                    courseName: progress.courseName,
+                    currentProgress: completionPercentage,
+                    currentModule: progress.currentModule,
+                    milestonesAchieved: milestones.achieved,
+                    nextMilestone: milestones.next,
+                    lastUpdate: progress.lastUpdated,
+                };
+            },
+        );
 
         // Cache the result for 1 hour (3600 seconds)
         await this.cacheManager.set(cacheKey, milestones, 3600);
@@ -350,19 +375,28 @@ export class TrainingProgressReportsService {
         const progressData = await query.getMany();
 
         const totalCourses = progressData.length;
-        const completedCourses = progressData.filter(p => p.completionPercentage === 100).length;
-        const averageCompletion = totalCourses > 0 
-            ? progressData.reduce((sum, p) => sum + p.completionPercentage, 0) / totalCourses
-            : 0;
+        const completedCourses = progressData.filter(
+            p => p.completionPercentage === 100,
+        ).length;
+        const averageCompletion =
+            totalCourses > 0
+                ? progressData.reduce(
+                      (sum, p) => sum + p.completionPercentage,
+                      0,
+                  ) / totalCourses
+                : 0;
 
-        const totalTimeSpent = progressData.reduce((sum, p) => sum + (p.timeSpentMinutes || 0), 0);
+        const totalTimeSpent = progressData.reduce(
+            (sum, p) => sum + (p.timeSpentMinutes || 0),
+            0,
+        );
 
         // Recent activity
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
         const recentActivity = progressData.filter(
-            p => p.lastUpdated && p.lastUpdated >= sevenDaysAgo
+            p => p.lastUpdated && p.lastUpdated >= sevenDaysAgo,
         ).length;
 
         return {
@@ -405,17 +439,20 @@ export class TrainingProgressReportsService {
             .orderBy('tp.completionPercentage', 'DESC');
 
         if (courseId) {
-            courseQuery = courseQuery.andWhere('tp.courseId = :courseId', { courseId });
+            courseQuery = courseQuery.andWhere('tp.courseId = :courseId', {
+                courseId,
+            });
         }
 
         const courseProgress = await courseQuery.getRawMany();
 
         return {
-            learningVelocity: velocityTrends.map((trend) => ({
+            learningVelocity: velocityTrends.map(trend => ({
                 date: trend.date,
-                averageCompletion: Math.round(Number(trend.averageCompletion) * 100) / 100,
+                averageCompletion:
+                    Math.round(Number(trend.averageCompletion) * 100) / 100,
             })),
-            courseProgress: courseProgress.map((course) => ({
+            courseProgress: courseProgress.map(course => ({
                 courseName: course.courseName,
                 completionPercentage: Number(course.completionPercentage),
                 timeSpent: Number(course.timeSpentMinutes || 0),
@@ -436,11 +473,14 @@ export class TrainingProgressReportsService {
             .groupBy('DATE(tp.lastUpdated)')
             .orderBy('DATE(tp.lastUpdated)', 'ASC')
             .getRawMany()
-            .then(trends => trends.map(trend => ({
-                date: trend.date,
-                averageCompletion: Math.round(Number(trend.averageCompletion) * 100) / 100,
-                activeUsers: Number(trend.activeUsers),
-            })));
+            .then(trends =>
+                trends.map(trend => ({
+                    date: trend.date,
+                    averageCompletion:
+                        Math.round(Number(trend.averageCompletion) * 100) / 100,
+                    activeUsers: Number(trend.activeUsers),
+                })),
+            );
     }
 
     private calculateEstimatedTimeToComplete(
@@ -458,7 +498,7 @@ export class TrainingProgressReportsService {
         averageScore: number,
     ): 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert' {
         const combinedScore = (progressPercentage + averageScore) / 2;
-        
+
         if (combinedScore >= 90) return 'Expert';
         if (combinedScore >= 75) return 'Advanced';
         if (combinedScore >= 50) return 'Intermediate';
@@ -474,9 +514,10 @@ export class TrainingProgressReportsService {
         return Math.round(((progressPercentage + averageScore) / 2) * 0.8);
     }
 
-    private generateMilestones(
-        completionPercentage: number,
-    ): { achieved: string[]; next: string } {
+    private generateMilestones(completionPercentage: number): {
+        achieved: string[];
+        next: string;
+    } {
         const milestones = [
             { threshold: 25, name: 'Getting Started' },
             { threshold: 50, name: 'Halfway Point' },
@@ -488,9 +529,10 @@ export class TrainingProgressReportsService {
             .filter(m => completionPercentage >= m.threshold)
             .map(m => m.name);
 
-        const next = milestones
-            .find(m => completionPercentage < m.threshold)?.name || 'All Milestones Achieved';
+        const next =
+            milestones.find(m => completionPercentage < m.threshold)?.name ||
+            'All Milestones Achieved';
 
         return { achieved, next };
     }
-} 
+}

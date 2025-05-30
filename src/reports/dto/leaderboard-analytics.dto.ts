@@ -339,4 +339,4 @@ export class CompetitiveMetricsReportDto {
         example: 125.3,
     })
     standardDeviation: number;
-} 
+}

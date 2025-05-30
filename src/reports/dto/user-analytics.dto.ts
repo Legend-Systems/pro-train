@@ -264,4 +264,4 @@ export class GlobalUserStatsDto {
     })
     @IsNumber()
     retentionRate: number;
-} 
+}

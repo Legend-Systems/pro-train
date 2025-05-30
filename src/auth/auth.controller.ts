@@ -396,40 +396,48 @@ export class AuthController {
                         },
                         leaderboard: {
                             type: 'object',
-                            description: 'User leaderboard statistics and metrics',
+                            description:
+                                'User leaderboard statistics and metrics',
                             properties: {
                                 totalPoints: {
                                     type: 'number',
                                     example: 1250.75,
-                                    description: 'Total points earned across all courses',
+                                    description:
+                                        'Total points earned across all courses',
                                 },
                                 totalTestsCompleted: {
                                     type: 'number',
                                     example: 15,
-                                    description: 'Total number of tests completed',
+                                    description:
+                                        'Total number of tests completed',
                                 },
                                 averageScore: {
                                     type: 'number',
                                     example: 88.5,
-                                    description: 'Overall average score across all tests',
+                                    description:
+                                        'Overall average score across all tests',
                                 },
                                 coursesEnrolled: {
                                     type: 'number',
                                     example: 3,
-                                    description: 'Number of courses enrolled in',
+                                    description:
+                                        'Number of courses enrolled in',
                                 },
                                 bestRank: {
                                     type: 'number',
                                     example: 2,
                                     nullable: true,
-                                    description: 'Best rank achieved across all courses',
+                                    description:
+                                        'Best rank achieved across all courses',
                                 },
                                 recentActivity: {
                                     type: 'array',
-                                    description: 'Recent activity in the last 5 courses',
+                                    description:
+                                        'Recent activity in the last 5 courses',
                                     items: {
                                         type: 'object',
-                                        description: 'Leaderboard entry details',
+                                        description:
+                                            'Leaderboard entry details',
                                     },
                                 },
                             },

@@ -372,4 +372,4 @@ export class ProgressMilestoneReportDto {
         example: '2024-01-15T16:45:00Z',
     })
     lastUpdate: Date;
-} 
+}
