@@ -121,4 +121,4 @@ export class ResultFilterDto {
     @IsOptional()
     @IsEnum(['ASC', 'DESC'])
     sortOrder?: 'ASC' | 'DESC' = 'DESC';
-} 
+}

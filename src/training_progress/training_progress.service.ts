@@ -1,7 +1,6 @@
 import {
     Injectable,
     NotFoundException,
-    BadRequestException,
     InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -79,7 +78,8 @@ export class TrainingProgressService {
                         updateData.completionPercentage;
                 }
                 if (updateData?.timeSpentMinutes !== undefined) {
-                    progressEntry.timeSpentMinutes += updateData.timeSpentMinutes;
+                    progressEntry.timeSpentMinutes +=
+                        updateData.timeSpentMinutes;
                 }
                 if (updateData?.questionsCompleted !== undefined) {
                     progressEntry.questionsCompleted =
@@ -103,9 +103,8 @@ export class TrainingProgressService {
                 progressEntry = this.progressRepository.create(createDto);
             }
 
-            const savedProgress = await this.progressRepository.save(
-                progressEntry,
-            );
+            const savedProgress =
+                await this.progressRepository.save(progressEntry);
 
             // Fetch with relations for response
             const fullProgress = await this.progressRepository.findOne({
@@ -142,10 +141,14 @@ export class TrainingProgressService {
                 .getMany();
 
             return progressEntries.map(entry =>
-                plainToClass(TrainingProgressResponseDto, entry, { excludeExtraneousValues: true }),
+                plainToClass(TrainingProgressResponseDto, entry, {
+                    excludeExtraneousValues: true,
+                }),
             );
         } catch (error) {
-            throw new InternalServerErrorException('Failed to fetch course progress');
+            throw new InternalServerErrorException(
+                'Failed to fetch course progress',
+            );
         }
     }
 
@@ -172,17 +175,20 @@ export class TrainingProgressService {
                 timeSpentMinutes: entry.timeSpentMinutes,
             }));
 
-            const overallCompletion = progressEntries.reduce(
-                (sum, entry) => sum + entry.completionPercentage,
-                0,
-            ) / progressEntries.length;
+            const overallCompletion =
+                progressEntries.reduce(
+                    (sum, entry) => sum + entry.completionPercentage,
+                    0,
+                ) / progressEntries.length;
 
             return {
                 overallCompletion: Math.round(overallCompletion * 100) / 100,
                 testCompletions,
             };
         } catch (error) {
-            throw new InternalServerErrorException('Failed to calculate completion');
+            throw new InternalServerErrorException(
+                'Failed to calculate completion',
+            );
         }
     }
 
@@ -202,30 +208,45 @@ export class TrainingProgressService {
                 .where('progress.userId = :userId', { userId });
 
             if (courseId) {
-                queryBuilder.andWhere('progress.courseId = :courseId', { courseId });
+                queryBuilder.andWhere('progress.courseId = :courseId', {
+                    courseId,
+                });
             }
 
             const progressEntries = await queryBuilder.getMany();
 
             const stats = {
-                totalTimeSpent: progressEntries.reduce((sum, entry) => sum + entry.timeSpentMinutes, 0),
+                totalTimeSpent: progressEntries.reduce(
+                    (sum, entry) => sum + entry.timeSpentMinutes,
+                    0,
+                ),
                 totalQuestionsCompleted: progressEntries.reduce(
                     (sum, entry) => sum + entry.questionsCompleted,
                     0,
                 ),
-                averageCompletion: progressEntries.length > 0
-                    ? progressEntries.reduce((sum, entry) => sum + entry.completionPercentage, 0) /
-                      progressEntries.length
-                    : 0,
-                coursesInProgress: new Set(progressEntries.map(entry => entry.courseId)).size,
-                testsCompleted: progressEntries.filter(entry => entry.completionPercentage >= 100).length,
+                averageCompletion:
+                    progressEntries.length > 0
+                        ? progressEntries.reduce(
+                              (sum, entry) => sum + entry.completionPercentage,
+                              0,
+                          ) / progressEntries.length
+                        : 0,
+                coursesInProgress: new Set(
+                    progressEntries.map(entry => entry.courseId),
+                ).size,
+                testsCompleted: progressEntries.filter(
+                    entry => entry.completionPercentage >= 100,
+                ).length,
             };
 
-            stats.averageCompletion = Math.round(stats.averageCompletion * 100) / 100;
+            stats.averageCompletion =
+                Math.round(stats.averageCompletion * 100) / 100;
 
             return stats;
         } catch (error) {
-            throw new InternalServerErrorException('Failed to get progress stats');
+            throw new InternalServerErrorException(
+                'Failed to get progress stats',
+            );
         }
     }
 
@@ -237,7 +258,9 @@ export class TrainingProgressService {
             });
 
             if (!progress) {
-                throw new NotFoundException(`Training progress with ID ${progressId} not found`);
+                throw new NotFoundException(
+                    `Training progress with ID ${progressId} not found`,
+                );
             }
 
             return plainToClass(TrainingProgressResponseDto, progress, {
@@ -247,7 +270,9 @@ export class TrainingProgressService {
             if (error instanceof NotFoundException) {
                 throw error;
             }
-            throw new InternalServerErrorException('Failed to fetch training progress');
+            throw new InternalServerErrorException(
+                'Failed to fetch training progress',
+            );
         }
     }
 
@@ -262,14 +287,17 @@ export class TrainingProgressService {
             });
 
             if (!progress) {
-                throw new NotFoundException(`Training progress with ID ${progressId} not found`);
+                throw new NotFoundException(
+                    `Training progress with ID ${progressId} not found`,
+                );
             }
 
             // Update fields
             Object.assign(progress, updateTrainingProgressDto);
             progress.lastUpdated = new Date();
 
-            const updatedProgress = await this.progressRepository.save(progress);
+            const updatedProgress =
+                await this.progressRepository.save(progress);
 
             return plainToClass(TrainingProgressResponseDto, updatedProgress, {
                 excludeExtraneousValues: true,
@@ -278,7 +306,9 @@ export class TrainingProgressService {
             if (error instanceof NotFoundException) {
                 throw error;
             }
-            throw new InternalServerErrorException('Failed to update training progress');
+            throw new InternalServerErrorException(
+                'Failed to update training progress',
+            );
         }
     }
 
@@ -289,7 +319,9 @@ export class TrainingProgressService {
             });
 
             if (!progress) {
-                throw new NotFoundException(`Training progress with ID ${progressId} not found`);
+                throw new NotFoundException(
+                    `Training progress with ID ${progressId} not found`,
+                );
             }
 
             await this.progressRepository.remove(progress);
@@ -297,7 +329,9 @@ export class TrainingProgressService {
             if (error instanceof NotFoundException) {
                 throw error;
             }
-            throw new InternalServerErrorException('Failed to delete training progress');
+            throw new InternalServerErrorException(
+                'Failed to delete training progress',
+            );
         }
     }
 }

@@ -3,6 +3,7 @@ import {
     NotFoundException,
     BadRequestException,
     InternalServerErrorException,
+    Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,6 +13,8 @@ import { UpdateLeaderboardDto } from './dto/update-leaderboard.dto';
 import { LeaderboardResponseDto } from './dto/leaderboard-response.dto';
 import { Result } from '../results/entities/result.entity';
 import { plainToClass } from 'class-transformer';
+import { User } from '../user/entities/user.entity';
+import { Course } from '../course/entities/course.entity';
 
 @Injectable()
 export class LeaderboardService {
@@ -26,7 +29,12 @@ export class LeaderboardService {
         courseId: number,
         page: number = 1,
         limit: number = 10,
-    ): Promise<{ leaderboard: LeaderboardResponseDto[]; total: number; page: number; limit: number }> {
+    ): Promise<{
+        leaderboard: LeaderboardResponseDto[];
+        total: number;
+        page: number;
+        limit: number;
+    }> {
         try {
             const skip = (page - 1) * limit;
 
@@ -41,7 +49,9 @@ export class LeaderboardService {
                 .getManyAndCount();
 
             const responseLeaderboard = leaderboardEntries.map(entry =>
-                plainToClass(LeaderboardResponseDto, entry, { excludeExtraneousValues: true }),
+                plainToClass(LeaderboardResponseDto, entry, {
+                    excludeExtraneousValues: true,
+                }),
             );
 
             return {
@@ -50,12 +60,17 @@ export class LeaderboardService {
                 page,
                 limit,
             };
-        } catch (error) {
-            throw new InternalServerErrorException('Failed to fetch course leaderboard');
+        } catch (_error) {
+            throw new InternalServerErrorException(
+                'Failed to fetch course leaderboard',
+            );
         }
     }
 
-    async getUserRank(courseId: number, userId: string): Promise<LeaderboardResponseDto | null> {
+    async getUserRank(
+        courseId: number,
+        userId: string,
+    ): Promise<LeaderboardResponseDto | null> {
         try {
             const leaderboardEntry = await this.leaderboardRepository
                 .createQueryBuilder('leaderboard')
@@ -72,7 +87,7 @@ export class LeaderboardService {
             return plainToClass(LeaderboardResponseDto, leaderboardEntry, {
                 excludeExtraneousValues: true,
             });
-        } catch (error) {
+        } catch (_error) {
             throw new InternalServerErrorException('Failed to fetch user rank');
         }
     }
@@ -86,11 +101,14 @@ export class LeaderboardService {
                 .getMany();
 
             // Group results by user
-            const userStats = new Map<string, {
-                totalPoints: number;
-                testsCompleted: number;
-                averageScore: number;
-            }>();
+            const userStats = new Map<
+                string,
+                {
+                    totalPoints: number;
+                    testsCompleted: number;
+                    averageScore: number;
+                }
+            >();
 
             results.forEach(result => {
                 const userId = result.userId;
@@ -102,34 +120,42 @@ export class LeaderboardService {
 
                 existing.totalPoints += Number(result.score);
                 existing.testsCompleted += 1;
-                existing.averageScore = existing.totalPoints / existing.testsCompleted;
+                existing.averageScore =
+                    existing.totalPoints / existing.testsCompleted;
 
                 userStats.set(userId, existing);
             });
 
             // Sort users by average score (descending)
-            const sortedUsers = Array.from(userStats.entries())
-                .sort((a, b) => b[1].averageScore - a[1].averageScore);
+            const sortedUsers = Array.from(userStats.entries()).sort(
+                (a, b) => b[1].averageScore - a[1].averageScore,
+            );
 
             // Clear existing leaderboard for this course
             await this.leaderboardRepository.delete({ courseId });
 
             // Create new leaderboard entries
-            const leaderboardEntries: CreateLeaderboardDto[] = sortedUsers.map(([userId, stats], index) => ({
-                courseId,
-                userId,
-                rank: index + 1,
-                averageScore: Math.round(stats.averageScore * 100) / 100,
-                testsCompleted: stats.testsCompleted,
-                totalPoints: Math.round(stats.totalPoints * 100) / 100,
-            }));
+            const leaderboardEntries: CreateLeaderboardDto[] = sortedUsers.map(
+                ([userId, stats], index) => ({
+                    courseId,
+                    userId,
+                    rank: index + 1,
+                    averageScore: Math.round(stats.averageScore * 100) / 100,
+                    testsCompleted: stats.testsCompleted,
+                    totalPoints: Math.round(stats.totalPoints * 100) / 100,
+                }),
+            );
 
             if (leaderboardEntries.length > 0) {
-                const entities = leaderboardEntries.map(dto => this.leaderboardRepository.create(dto));
+                const entities = leaderboardEntries.map(dto =>
+                    this.leaderboardRepository.create(dto),
+                );
                 await this.leaderboardRepository.save(entities);
             }
         } catch (error) {
-            throw new InternalServerErrorException('Failed to update leaderboard');
+            throw new InternalServerErrorException(
+                'Failed to update leaderboard',
+            );
         }
     }
 
@@ -149,7 +175,10 @@ export class LeaderboardService {
             }
 
             // Calculate user stats
-            const totalPoints = userResults.reduce((sum, result) => sum + Number(result.score), 0);
+            const totalPoints = userResults.reduce(
+                (sum, result) => sum + Number(result.score),
+                0,
+            );
             const testsCompleted = userResults.length;
             const averageScore = totalPoints / testsCompleted;
 
@@ -160,9 +189,11 @@ export class LeaderboardService {
 
             if (leaderboardEntry) {
                 // Update existing entry
-                leaderboardEntry.averageScore = Math.round(averageScore * 100) / 100;
+                leaderboardEntry.averageScore =
+                    Math.round(averageScore * 100) / 100;
                 leaderboardEntry.testsCompleted = testsCompleted;
-                leaderboardEntry.totalPoints = Math.round(totalPoints * 100) / 100;
+                leaderboardEntry.totalPoints =
+                    Math.round(totalPoints * 100) / 100;
                 leaderboardEntry.lastUpdated = new Date();
             } else {
                 // Create new entry with temporary rank
@@ -182,7 +213,9 @@ export class LeaderboardService {
             // Recalculate ranks for the entire course
             await this.recalculateRanks(courseId);
         } catch (error) {
-            throw new InternalServerErrorException('Failed to update user score');
+            throw new InternalServerErrorException(
+                'Failed to update user score',
+            );
         }
     }
 

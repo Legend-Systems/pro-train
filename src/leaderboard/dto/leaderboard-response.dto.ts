@@ -136,4 +136,4 @@ export class LeaderboardResponseDto {
     })
     @Expose()
     course: CourseInfo;
-} 
+}

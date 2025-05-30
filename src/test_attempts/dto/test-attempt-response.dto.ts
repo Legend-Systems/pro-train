@@ -114,4 +114,4 @@ export class TestAttemptResponseDto {
         example: 10,
     })
     totalQuestions?: number;
-} 
+}

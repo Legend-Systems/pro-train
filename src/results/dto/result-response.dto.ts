@@ -224,4 +224,4 @@ export class ResultResponseDto {
     })
     @Expose()
     attempt: AttemptInfo;
-} 
+}

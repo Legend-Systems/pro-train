@@ -176,4 +176,4 @@ export class TrainingProgressResponseDto {
     })
     @Expose()
     test?: TestInfo;
-} 
+}

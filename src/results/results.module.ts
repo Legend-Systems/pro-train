@@ -9,12 +9,7 @@ import { Question } from '../questions/entities/question.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([
-            Result,
-            TestAttempt,
-            Answer,
-            Question,
-        ]),
+        TypeOrmModule.forFeature([Result, TestAttempt, Answer, Question]),
     ],
     controllers: [ResultsController],
     providers: [ResultsService],

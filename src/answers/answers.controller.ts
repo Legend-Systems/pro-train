@@ -80,7 +80,8 @@ export class AnswersController {
                 value: {
                     attemptId: 1,
                     questionId: 2,
-                    textAnswer: 'The time complexity of binary search is O(log n)',
+                    textAnswer:
+                        'The time complexity of binary search is O(log n)',
                 },
             },
         },

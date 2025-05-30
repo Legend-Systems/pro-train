@@ -74,13 +74,13 @@ export class ResultAnalyticsDto {
     @ApiProperty({
         description: 'Grade distribution',
         example: {
-            'A': 30,
-            'B': 40,
-            'C': 35,
-            'D': 20,
-            'F': 25,
+            A: 30,
+            B: 40,
+            C: 35,
+            D: 20,
+            F: 25,
         },
     })
     @Expose()
     gradeDistribution: Record<string, number>;
-} 
+}

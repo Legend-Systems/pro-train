@@ -181,7 +181,8 @@ export class AnswersService {
         answer.isMarked = true;
         answer.markedByUserId = userId;
         answer.markedAt = new Date();
-        answer.isCorrect = markAnswerDto.pointsAwarded === answer.question.points;
+        answer.isCorrect =
+            markAnswerDto.pointsAwarded === answer.question.points;
 
         const markedAnswer = await this.answerRepository.save(answer);
 
@@ -213,7 +214,7 @@ export class AnswersService {
             order: { questionId: 'ASC' },
         });
 
-        return answers.map((answer) => this.mapToResponseDto(answer));
+        return answers.map(answer => this.mapToResponseDto(answer));
     }
 
     async findByQuestion(
@@ -227,7 +228,7 @@ export class AnswersService {
             order: { createdAt: 'DESC' },
         });
 
-        return answers.map((answer) => this.mapToResponseDto(answer));
+        return answers.map(answer => this.mapToResponseDto(answer));
     }
 
     async bulkCreate(

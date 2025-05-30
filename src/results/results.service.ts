@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Result } from './entities/result.entity';
 import { CreateResultDto } from './dto/create-result.dto';
-import { UpdateResultDto } from './dto/update-result.dto';
 import { ResultResponseDto } from './dto/result-response.dto';
 import { ResultFilterDto } from './dto/result-filter.dto';
 import { ResultAnalyticsDto } from './dto/result-analytics.dto';
@@ -41,11 +40,15 @@ export class ResultsService {
             });
 
             if (!attempt) {
-                throw new NotFoundException(`Test attempt with ID ${attemptId} not found`);
+                throw new NotFoundException(
+                    `Test attempt with ID ${attemptId} not found`,
+                );
             }
 
             if (attempt.status !== AttemptStatus.SUBMITTED) {
-                throw new BadRequestException('Cannot create result for incomplete attempt');
+                throw new BadRequestException(
+                    'Cannot create result for incomplete attempt',
+                );
             }
 
             // Check if result already exists
@@ -54,11 +57,14 @@ export class ResultsService {
             });
 
             if (existingResult) {
-                throw new BadRequestException('Result already exists for this attempt');
+                throw new BadRequestException(
+                    'Result already exists for this attempt',
+                );
             }
 
             // Calculate the score
-            const { score, maxScore, percentage } = await this.calculateScore(attemptId);
+            const { score, maxScore, percentage } =
+                await this.calculateScore(attemptId);
 
             // Determine if passed (assuming 60% pass rate)
             const passed = percentage >= 60;
@@ -81,30 +87,42 @@ export class ResultsService {
 
             return this.findOne(savedResult.resultId);
         } catch (error) {
-            if (error instanceof NotFoundException || error instanceof BadRequestException) {
+            if (
+                error instanceof NotFoundException ||
+                error instanceof BadRequestException
+            ) {
                 throw error;
             }
-            throw new InternalServerErrorException('Failed to create result from attempt');
+            throw new InternalServerErrorException(
+                'Failed to create result from attempt',
+            );
         }
     }
 
     async findUserResults(
         userId: string,
         filterDto: ResultFilterDto,
-    ): Promise<{ results: ResultResponseDto[]; total: number; page: number; limit: number }> {
+    ): Promise<{
+        results: ResultResponseDto[];
+        total: number;
+        page: number;
+        limit: number;
+    }> {
         try {
             const { page = 1, limit = 10, ...filters } = filterDto;
             const skip = (page - 1) * limit;
 
             const queryBuilder = this.buildFilterQuery({ ...filters, userId });
-            
+
             const [results, total] = await queryBuilder
                 .skip(skip)
                 .take(limit)
                 .getManyAndCount();
 
             const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, { excludeExtraneousValues: true }),
+                plainToClass(ResultResponseDto, result, {
+                    excludeExtraneousValues: true,
+                }),
             );
 
             return {
@@ -114,7 +132,9 @@ export class ResultsService {
                 limit,
             };
         } catch (error) {
-            throw new InternalServerErrorException('Failed to fetch user results');
+            throw new InternalServerErrorException(
+                'Failed to fetch user results',
+            );
         }
     }
 
@@ -122,20 +142,27 @@ export class ResultsService {
         testId: number,
         userId?: string,
         filterDto?: ResultFilterDto,
-    ): Promise<{ results: ResultResponseDto[]; total: number; page: number; limit: number }> {
+    ): Promise<{
+        results: ResultResponseDto[];
+        total: number;
+        page: number;
+        limit: number;
+    }> {
         try {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
             const skip = (page - 1) * limit;
 
             const queryBuilder = this.buildFilterQuery({ ...filters, testId });
-            
+
             const [results, total] = await queryBuilder
                 .skip(skip)
                 .take(limit)
                 .getManyAndCount();
 
             const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, { excludeExtraneousValues: true }),
+                plainToClass(ResultResponseDto, result, {
+                    excludeExtraneousValues: true,
+                }),
             );
 
             return {
@@ -145,7 +172,9 @@ export class ResultsService {
                 limit,
             };
         } catch (error) {
-            throw new InternalServerErrorException('Failed to fetch test results');
+            throw new InternalServerErrorException(
+                'Failed to fetch test results',
+            );
         }
     }
 
@@ -153,20 +182,30 @@ export class ResultsService {
         courseId: number,
         userId?: string,
         filterDto?: ResultFilterDto,
-    ): Promise<{ results: ResultResponseDto[]; total: number; page: number; limit: number }> {
+    ): Promise<{
+        results: ResultResponseDto[];
+        total: number;
+        page: number;
+        limit: number;
+    }> {
         try {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
             const skip = (page - 1) * limit;
 
-            const queryBuilder = this.buildFilterQuery({ ...filters, courseId });
-            
+            const queryBuilder = this.buildFilterQuery({
+                ...filters,
+                courseId,
+            });
+
             const [results, total] = await queryBuilder
                 .skip(skip)
                 .take(limit)
                 .getManyAndCount();
 
             const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, { excludeExtraneousValues: true }),
+                plainToClass(ResultResponseDto, result, {
+                    excludeExtraneousValues: true,
+                }),
             );
 
             return {
@@ -176,7 +215,9 @@ export class ResultsService {
                 limit,
             };
         } catch (error) {
-            throw new InternalServerErrorException('Failed to fetch course results');
+            throw new InternalServerErrorException(
+                'Failed to fetch course results',
+            );
         }
     }
 
@@ -203,16 +244,24 @@ export class ResultsService {
                 throw new ForbiddenException('Access denied to this result');
             }
 
-            return plainToClass(ResultResponseDto, result, { excludeExtraneousValues: true });
+            return plainToClass(ResultResponseDto, result, {
+                excludeExtraneousValues: true,
+            });
         } catch (error) {
-            if (error instanceof NotFoundException || error instanceof ForbiddenException) {
+            if (
+                error instanceof NotFoundException ||
+                error instanceof ForbiddenException
+            ) {
                 throw error;
             }
             throw new InternalServerErrorException('Failed to fetch result');
         }
     }
 
-    async getTestAnalytics(testId: number, userId?: string): Promise<ResultAnalyticsDto> {
+    async getTestAnalytics(
+        testId: number,
+        userId?: string,
+    ): Promise<ResultAnalyticsDto> {
         try {
             const results = await this.resultRepository.find({
                 where: { testId },
@@ -234,9 +283,15 @@ export class ResultsService {
             }
 
             const totalResults = results.length;
-            const averagePercentage = results.reduce((sum, r) => sum + Number(r.percentage), 0) / totalResults;
-            const averageScore = results.reduce((sum, r) => sum + Number(r.score), 0) / totalResults;
-            const percentages = results.map(r => Number(r.percentage)).sort((a, b) => a - b);
+            const averagePercentage =
+                results.reduce((sum, r) => sum + Number(r.percentage), 0) /
+                totalResults;
+            const averageScore =
+                results.reduce((sum, r) => sum + Number(r.score), 0) /
+                totalResults;
+            const percentages = results
+                .map(r => Number(r.percentage))
+                .sort((a, b) => a - b);
             const highestPercentage = percentages[percentages.length - 1];
             const lowestPercentage = percentages[0];
             const passedCount = results.filter(r => r.passed).length;
@@ -285,11 +340,16 @@ export class ResultsService {
                 gradeDistribution,
             };
         } catch (error) {
-            throw new InternalServerErrorException('Failed to generate test analytics');
+            throw new InternalServerErrorException(
+                'Failed to generate test analytics',
+            );
         }
     }
 
-    async recalculateResult(resultId: number, userId?: string): Promise<ResultResponseDto> {
+    async recalculateResult(
+        resultId: number,
+        userId?: string,
+    ): Promise<ResultResponseDto> {
         try {
             const result = await this.resultRepository.findOne({
                 where: { resultId },
@@ -297,11 +357,15 @@ export class ResultsService {
             });
 
             if (!result) {
-                throw new NotFoundException(`Result with ID ${resultId} not found`);
+                throw new NotFoundException(
+                    `Result with ID ${resultId} not found`,
+                );
             }
 
             // Recalculate score
-            const { score, maxScore, percentage } = await this.calculateScore(result.attemptId);
+            const { score, maxScore, percentage } = await this.calculateScore(
+                result.attemptId,
+            );
 
             // Update result
             result.score = score;
@@ -317,7 +381,9 @@ export class ResultsService {
             if (error instanceof NotFoundException) {
                 throw error;
             }
-            throw new InternalServerErrorException('Failed to recalculate result');
+            throw new InternalServerErrorException(
+                'Failed to recalculate result',
+            );
         }
     }
 
@@ -347,9 +413,15 @@ export class ResultsService {
 
         for (const question of questions) {
             maxScore += question.points;
-            
-            const answer = answers.find(a => a.questionId === question.questionId);
-            if (answer && answer.pointsAwarded !== null && answer.pointsAwarded !== undefined) {
+
+            const answer = answers.find(
+                a => a.questionId === question.questionId,
+            );
+            if (
+                answer &&
+                answer.pointsAwarded !== null &&
+                answer.pointsAwarded !== undefined
+            ) {
                 totalScore += answer.pointsAwarded;
             } else if (answer && answer.selectedOption) {
                 // Auto-calculate for objective questions
@@ -369,7 +441,9 @@ export class ResultsService {
         };
     }
 
-    private buildFilterQuery(filters: Partial<ResultFilterDto>): SelectQueryBuilder<Result> {
+    private buildFilterQuery(
+        filters: Partial<ResultFilterDto>,
+    ): SelectQueryBuilder<Result> {
         const queryBuilder = this.resultRepository
             .createQueryBuilder('result')
             .leftJoinAndSelect('result.user', 'user')
@@ -378,19 +452,27 @@ export class ResultsService {
             .leftJoinAndSelect('result.attempt', 'attempt');
 
         if (filters.userId) {
-            queryBuilder.andWhere('result.userId = :userId', { userId: filters.userId });
+            queryBuilder.andWhere('result.userId = :userId', {
+                userId: filters.userId,
+            });
         }
 
         if (filters.testId) {
-            queryBuilder.andWhere('result.testId = :testId', { testId: filters.testId });
+            queryBuilder.andWhere('result.testId = :testId', {
+                testId: filters.testId,
+            });
         }
 
         if (filters.courseId) {
-            queryBuilder.andWhere('result.courseId = :courseId', { courseId: filters.courseId });
+            queryBuilder.andWhere('result.courseId = :courseId', {
+                courseId: filters.courseId,
+            });
         }
 
         if (filters.passed !== undefined) {
-            queryBuilder.andWhere('result.passed = :passed', { passed: filters.passed });
+            queryBuilder.andWhere('result.passed = :passed', {
+                passed: filters.passed,
+            });
         }
 
         if (filters.minPercentage !== undefined) {
