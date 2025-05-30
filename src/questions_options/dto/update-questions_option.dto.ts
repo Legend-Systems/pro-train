@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateQuestionsOptionDto } from './create-questions_option.dto';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
+import { CreateQuestionOptionDto } from './create-questions_option.dto';
 
-export class UpdateQuestionsOptionDto extends PartialType(CreateQuestionsOptionDto) {}
+export class UpdateQuestionOptionDto extends PartialType(
+    OmitType(CreateQuestionOptionDto, ['questionId'] as const),
+) {}

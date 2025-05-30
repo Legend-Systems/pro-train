@@ -3,7 +3,7 @@ import { ResultsService } from './results.service';
 import { ResultsController } from './results.controller';
 
 @Module({
-  controllers: [ResultsController],
-  providers: [ResultsService],
+    controllers: [ResultsController],
+    providers: [ResultsService],
 })
 export class ResultsModule {}

@@ -5,6 +5,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
+    OneToMany,
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
@@ -131,10 +132,10 @@ export class Test {
     @ManyToOne(() => Course, { onDelete: 'CASCADE' })
     course: Course;
 
-    // Note: These relations will be added as we implement other entities
-    // @OneToMany(() => Question, question => question.test)
-    // questions: Question[];
+    @OneToMany('Question', 'test')
+    questions: any[];
 
+    // Note: These relations will be added as we implement other entities
     // @OneToMany(() => TestAttempt, attempt => attempt.test)
     // testAttempts: TestAttempt[];
 

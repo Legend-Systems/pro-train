@@ -89,4 +89,4 @@ export class CourseFilterDto {
     @IsOptional()
     @IsString()
     sortOrder?: 'ASC' | 'DESC' = 'DESC';
-} 
+}

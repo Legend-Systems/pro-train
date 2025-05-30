@@ -4,23 +4,23 @@ import { UpdateResultDto } from './dto/update-result.dto';
 
 @Injectable()
 export class ResultsService {
-  create(createResultDto: CreateResultDto) {
-    return 'This action adds a new result';
-  }
+    create(createResultDto: CreateResultDto) {
+        return 'This action adds a new result';
+    }
 
-  findAll() {
-    return `This action returns all results`;
-  }
+    findAll() {
+        return `This action returns all results`;
+    }
 
-  findOne(id: number) {
-    return `This action returns a #${id} result`;
-  }
+    findOne(id: number) {
+        return `This action returns a #${id} result`;
+    }
 
-  update(id: number, updateResultDto: UpdateResultDto) {
-    return `This action updates a #${id} result`;
-  }
+    update(id: number, updateResultDto: UpdateResultDto) {
+        return `This action updates a #${id} result`;
+    }
 
-  remove(id: number) {
-    return `This action removes a #${id} result`;
-  }
+    remove(id: number) {
+        return `This action removes a #${id} result`;
+    }
 }
