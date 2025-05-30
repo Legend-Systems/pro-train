@@ -21,6 +21,9 @@ import {
     StandardApiResponse,
 } from '../user/dto/session-response.dto';
 import { UserResponseDto } from '../user/dto/session-response.dto';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
+import { UserStatsResponseDto } from '../leaderboard/dto/user-stats-response.dto';
+import { plainToClass } from 'class-transformer';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +32,7 @@ export class AuthService {
     constructor(
         private readonly userService: UserService,
         private readonly tokenManagerService: TokenManagerService,
+        private readonly leaderboardService: LeaderboardService,
     ) {}
 
     async signUp(
@@ -111,6 +115,14 @@ export class AuthService {
             lastName: user.lastName,
         });
 
+        // Get user leaderboard stats
+        const userStats = await this.leaderboardService.getUserOverallStats(
+            user.id,
+        );
+        const leaderboardData = plainToClass(UserStatsResponseDto, userStats, {
+            excludeExtraneousValues: true,
+        });
+
         // Return user without password
         const userResponse: UserResponseDto = {
             uid: user.id,
@@ -130,6 +142,7 @@ export class AuthService {
                 refreshToken: tokenPair.refreshToken,
                 expiresIn: tokenPair.expiresIn,
                 user: userResponse,
+                leaderboard: leaderboardData,
             },
             message: 'User signed in successfully',
         };

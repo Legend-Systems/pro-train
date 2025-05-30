@@ -230,6 +230,7 @@ export class AuthController {
       - JWT token generation for session management
       - Rate limiting to prevent brute force attacks
       - Login attempt monitoring and logging
+      - Returns user leaderboard statistics and metrics
       
       **Security Features:**
       - Rate limiting: 5 attempts per minute per IP
@@ -243,14 +244,58 @@ export class AuthController {
       2. System validates credentials
       3. Password is verified against hash
       4. JWT tokens are generated
-      5. Session data is returned
-      6. User is authenticated for protected endpoints
+      5. User leaderboard stats are fetched
+      6. Session data with metrics is returned
+      7. User is authenticated for protected endpoints
+      
+      **Using the Access Token:**
+      After successful authentication, use the returned access token in the Authorization header for protected endpoints:
+      
+      \`\`\`
+      Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+      \`\`\`
+      
+      **Example API Calls with Headers:**
+      
+      \`\`\`javascript
+      // JavaScript/Node.js example
+      const response = await fetch('/api/protected-endpoint', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      \`\`\`
+      
+      \`\`\`bash
+      # cURL example
+      curl -X GET "https://api.example.com/protected-endpoint" \\
+        -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \\
+        -H "Content-Type: application/json" \\
+        -H "Accept: application/json"
+      \`\`\`
+      
+      \`\`\`python
+      # Python requests example
+      import requests
+      
+      headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+      
+      response = requests.get('https://api.example.com/protected-endpoint', headers=headers)
+      \`\`\`
       
       **Use Cases:**
       - User login from web application
       - Mobile app authentication
       - API client authentication
       - Session restoration
+      - Leaderboard data retrieval
     `,
         operationId: 'authenticateUser',
     })
@@ -346,6 +391,46 @@ export class AuthController {
                                     type: 'number',
                                     example: 3600,
                                     description: 'Token expiration in seconds',
+                                },
+                            },
+                        },
+                        leaderboard: {
+                            type: 'object',
+                            description: 'User leaderboard statistics and metrics',
+                            properties: {
+                                totalPoints: {
+                                    type: 'number',
+                                    example: 1250.75,
+                                    description: 'Total points earned across all courses',
+                                },
+                                totalTestsCompleted: {
+                                    type: 'number',
+                                    example: 15,
+                                    description: 'Total number of tests completed',
+                                },
+                                averageScore: {
+                                    type: 'number',
+                                    example: 88.5,
+                                    description: 'Overall average score across all tests',
+                                },
+                                coursesEnrolled: {
+                                    type: 'number',
+                                    example: 3,
+                                    description: 'Number of courses enrolled in',
+                                },
+                                bestRank: {
+                                    type: 'number',
+                                    example: 2,
+                                    nullable: true,
+                                    description: 'Best rank achieved across all courses',
+                                },
+                                recentActivity: {
+                                    type: 'array',
+                                    description: 'Recent activity in the last 5 courses',
+                                    items: {
+                                        type: 'object',
+                                        description: 'Leaderboard entry details',
+                                    },
                                 },
                             },
                         },

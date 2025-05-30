@@ -257,7 +257,7 @@ export class AnswersService {
         // Auto-mark objective questions (multiple choice)
         const answers = await this.answerRepository.find({
             where: { attemptId, isMarked: false },
-            relations: ['question', 'selectedOption'],
+            relations: ['question', 'selectedOption', 'attempt'],
         });
 
         for (const answer of answers) {

@@ -7,10 +7,12 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { TokenManagerService } from './token-manager.service';
 import { UserModule } from '../user/user.module';
+import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 
 @Module({
     imports: [
         UserModule,
+        LeaderboardModule,
         PassportModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],

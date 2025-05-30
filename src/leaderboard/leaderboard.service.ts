@@ -176,6 +176,7 @@ export class LeaderboardService {
             // Find or create leaderboard entry
             let leaderboardEntry = await this.leaderboardRepository.findOne({
                 where: { courseId, userId },
+                relations: ['user', 'course'],
             });
 
             if (leaderboardEntry) {
@@ -201,7 +202,7 @@ export class LeaderboardService {
 
             await this.leaderboardRepository.save(leaderboardEntry);
 
-            // Recalculate ranks for the entire course
+            // Recalculate ranks for the course
             await this.recalculateRanks(courseId);
         } catch (error) {
             throw new InternalServerErrorException(
@@ -226,6 +227,83 @@ export class LeaderboardService {
 
         if (entries.length > 0) {
             await this.leaderboardRepository.save(entries);
+        }
+    }
+
+    async getUserOverallStats(userId: string): Promise<{
+        totalPoints: number;
+        totalTestsCompleted: number;
+        averageScore: number;
+        coursesEnrolled: number;
+        bestRank: number | null;
+        recentActivity: LeaderboardResponseDto[];
+    }> {
+        try {
+            // Get all leaderboard entries for the user
+            const userLeaderboardEntries = await this.leaderboardRepository
+                .createQueryBuilder('leaderboard')
+                .leftJoinAndSelect('leaderboard.user', 'user')
+                .leftJoinAndSelect('leaderboard.course', 'course')
+                .where('leaderboard.userId = :userId', { userId })
+                .orderBy('leaderboard.lastUpdated', 'DESC')
+                .getMany();
+
+            if (userLeaderboardEntries.length === 0) {
+                return {
+                    totalPoints: 0,
+                    totalTestsCompleted: 0,
+                    averageScore: 0,
+                    coursesEnrolled: 0,
+                    bestRank: null,
+                    recentActivity: [],
+                };
+            }
+
+            // Calculate overall stats
+            const totalPoints = userLeaderboardEntries.reduce(
+                (sum, entry) => sum + Number(entry.totalPoints),
+                0,
+            );
+            const totalTestsCompleted = userLeaderboardEntries.reduce(
+                (sum, entry) => sum + entry.testsCompleted,
+                0,
+            );
+            const averageScore =
+                totalTestsCompleted > 0
+                    ? userLeaderboardEntries.reduce(
+                          (sum, entry) =>
+                              sum +
+                              Number(entry.averageScore) * entry.testsCompleted,
+                          0,
+                      ) / totalTestsCompleted
+                    : 0;
+
+            const coursesEnrolled = userLeaderboardEntries.length;
+            const bestRank = Math.min(
+                ...userLeaderboardEntries.map(entry => entry.rank),
+            );
+
+            // Get recent activity (last 5 courses with activity)
+            const recentActivity = userLeaderboardEntries
+                .slice(0, 5)
+                .map(entry =>
+                    plainToClass(LeaderboardResponseDto, entry, {
+                        excludeExtraneousValues: true,
+                    }),
+                );
+
+            return {
+                totalPoints: Math.round(totalPoints * 100) / 100,
+                totalTestsCompleted,
+                averageScore: Math.round(averageScore * 100) / 100,
+                coursesEnrolled,
+                bestRank,
+                recentActivity,
+            };
+        } catch (error) {
+            throw new InternalServerErrorException(
+                'Failed to fetch user overall stats',
+            );
         }
     }
 }

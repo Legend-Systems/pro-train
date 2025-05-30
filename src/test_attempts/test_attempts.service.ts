@@ -17,6 +17,8 @@ import { User } from '../user/entities/user.entity';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptListResponseDto } from './dto/test-attempt-list-response.dto';
+import { ResultsService } from '../results/results.service';
+import { AnswersService } from '../answers/answers.service';
 
 @Injectable()
 export class TestAttemptsService {
@@ -30,6 +32,8 @@ export class TestAttemptsService {
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
         private readonly dataSource: DataSource,
+        private readonly resultsService: ResultsService,
+        private readonly answersService: AnswersService,
     ) {}
 
     /**
@@ -47,7 +51,7 @@ export class TestAttemptsService {
                 if (attempt === maxRetries) {
                     this.logger.error(
                         `Operation failed after ${maxRetries} attempts`,
-                        error.stack,
+                        error instanceof Error ? error.stack : String(error),
                     );
                     throw error;
                 }
@@ -161,6 +165,37 @@ export class TestAttemptsService {
             attempt.progressPercentage = 100;
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
+
+            // Trigger auto-marking and result creation flow
+            try {
+                this.logger.log(
+                    `Starting auto-processing for attempt ${attemptId}`,
+                );
+
+                // Step 1: Auto-mark objective questions
+                await this.answersService.autoMark(attemptId);
+                this.logger.log(
+                    `Auto-marking completed for attempt ${attemptId}`,
+                );
+
+                // Step 2: Create result based on marked answers
+                const result =
+                    await this.resultsService.createFromAttempt(attemptId);
+                this.logger.log(
+                    `Result created for attempt ${attemptId}: ${result.resultId}`,
+                );
+
+                this.logger.log(
+                    `Auto-processing completed successfully for attempt ${attemptId}`,
+                );
+            } catch (error) {
+                this.logger.error(
+                    `Error during auto-processing for attempt ${attemptId}`,
+                    error instanceof Error ? error.stack : String(error),
+                );
+                // Don't throw here - the attempt submission itself was successful
+                // The processing can be retried later if needed
+            }
 
             return this.mapToResponseDto(savedAttempt);
         });
@@ -306,7 +341,7 @@ export class TestAttemptsService {
     ): Promise<TestAttempt> {
         const attempt = await this.testAttemptRepository.findOne({
             where: { attemptId },
-            relations: ['test', 'test.course', 'user'],
+            relations: ['test', 'test.course', 'user', 'answers', 'results'],
         });
 
         if (!attempt) {

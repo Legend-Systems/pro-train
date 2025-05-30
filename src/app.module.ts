@@ -22,6 +22,7 @@ import { AnswersModule } from './answers/answers.module';
 import { ResultsModule } from './results/results.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { TrainingProgressModule } from './training_progress/training_progress.module';
+import { ReportsModule } from './reports/reports.module';
 import { Answer } from './answers/entities/answer.entity';
 import { Result } from './results/entities/result.entity';
 import { Leaderboard } from './leaderboard/entities/leaderboard.entity';
@@ -110,6 +111,7 @@ import { TrainingProgress } from './training_progress/entities/training_progress
         ResultsModule,
         LeaderboardModule,
         TrainingProgressModule,
+        ReportsModule,
     ],
     controllers: [AppController],
     providers: [

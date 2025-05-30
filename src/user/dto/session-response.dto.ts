@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../entities/user.entity';
+import { UserStatsResponseDto } from '../../leaderboard/dto/user-stats-response.dto';
 
 export class UserResponseDto {
     @ApiProperty({
@@ -80,6 +81,13 @@ export class SessionResponseDto {
         type: UserResponseDto,
     })
     user: UserResponseDto;
+
+    @ApiProperty({
+        description: 'User leaderboard statistics and metrics',
+        type: UserStatsResponseDto,
+        required: false,
+    })
+    leaderboard?: UserStatsResponseDto;
 }
 
 export class StandardApiResponse<T = any> {

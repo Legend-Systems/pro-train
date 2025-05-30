@@ -17,6 +17,7 @@ import { Answer } from '../answers/entities/answer.entity';
 import { Question } from '../questions/entities/question.entity';
 import { plainToClass } from 'class-transformer';
 import { AttemptStatus } from '../test_attempts/entities/test_attempt.entity';
+import { LeaderboardService } from '../leaderboard/leaderboard.service';
 
 @Injectable()
 export class ResultsService {
@@ -29,6 +30,7 @@ export class ResultsService {
         private readonly answerRepository: Repository<Answer>,
         @InjectRepository(Question)
         private readonly questionRepository: Repository<Question>,
+        private readonly leaderboardService: LeaderboardService,
     ) {}
 
     async createFromAttempt(attemptId: number): Promise<ResultResponseDto> {
@@ -84,6 +86,22 @@ export class ResultsService {
 
             const result = this.resultRepository.create(resultData);
             const savedResult = await this.resultRepository.save(result);
+
+            // Trigger leaderboard update for the course and user
+            try {
+                await this.leaderboardService.updateUserScore(
+                    attempt.test.courseId,
+                    attempt.userId,
+                );
+            } catch (leaderboardError) {
+                // Log error but don't fail the result creation
+                console.error(
+                    `Failed to update leaderboard for user ${attempt.userId} in course ${attempt.test.courseId}`,
+                    leaderboardError instanceof Error
+                        ? leaderboardError.message
+                        : leaderboardError,
+                );
+            }
 
             return this.findOne(savedResult.resultId);
         } catch (error) {
@@ -375,6 +393,22 @@ export class ResultsService {
             result.calculatedAt = new Date();
 
             await this.resultRepository.save(result);
+
+            // Trigger leaderboard update for the course and user
+            try {
+                await this.leaderboardService.updateUserScore(
+                    result.courseId,
+                    result.userId,
+                );
+            } catch (leaderboardError) {
+                // Log error but don't fail the result recalculation
+                console.error(
+                    `Failed to update leaderboard for user ${result.userId} in course ${result.courseId}`,
+                    leaderboardError instanceof Error
+                        ? leaderboardError.message
+                        : leaderboardError,
+                );
+            }
 
             return this.findOne(resultId, userId);
         } catch (error) {

@@ -6,10 +6,12 @@ import { Result } from './entities/result.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Answer } from '../answers/entities/answer.entity';
 import { Question } from '../questions/entities/question.entity';
+import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([Result, TestAttempt, Answer, Question]),
+        LeaderboardModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService],
