@@ -25,9 +25,9 @@ async function bootstrap() {
 
     // Setup Swagger documentation
     const config = new DocumentBuilder()
-        .setTitle('ORRBIT Playground')
+        .setTitle('EXXAM Playground')
         .setDescription(
-            `🚀 **ORRBIT Playground API** - A comprehensive user management and authentication system
+            `🚀 **EXXAM Playground API** - A comprehensive user management and authentication system
 
       ## Features
       - **Complete User Management** - Full CRUD operations with profile management

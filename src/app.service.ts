@@ -281,7 +281,7 @@ export class AppService {
                 'CHECK constraints for data integrity',
                 'Materialized views for analytics efficiency',
                 'Proper foreign key relationships with cascade/restrict policies',
-                'Cross-region compatibility with timestamptz',
+                'Cross-region compatibility with timestamp',
             ],
         };
     }

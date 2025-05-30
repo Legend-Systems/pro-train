@@ -1,41 +1,21 @@
-import {
-    Entity,
-    PrimaryGeneratedColumn,
-    Column,
-    CreateDateColumn,
-    UpdateDateColumn,
-    ManyToOne,
-    Index,
-    Check,
-} from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {
-    IsUUID,
     IsNumber,
+    IsOptional,
     IsString,
     IsBoolean,
-    IsOptional,
+    IsUUID,
     IsDateString,
 } from 'class-validator';
-import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
-import { Question } from '../../questions/entities/question.entity';
-import { User } from '../../user/entities/user.entity';
 
-@Entity('answers')
-@Index('IDX_ANSWER_ATTEMPT', ['attemptId'])
-@Index('IDX_ANSWER_QUESTION', ['questionId'])
-@Index('IDX_ANSWER_MARKED', ['isMarked'])
-@Check('CHK_ANSWER_POINTS', 'points_awarded >= 0')
-export class Answer {
-    @PrimaryGeneratedColumn()
+export class AnswerResponseDto {
     @ApiProperty({
         description: 'Answer unique identifier',
         example: 1,
     })
+    @IsNumber()
     answerId: number;
 
-    @Column()
-    @Index()
     @ApiProperty({
         description: 'Test attempt ID this answer belongs to',
         example: 1,
@@ -43,8 +23,6 @@ export class Answer {
     @IsNumber()
     attemptId: number;
 
-    @Column()
-    @Index()
     @ApiProperty({
         description: 'Question ID this answer responds to',
         example: 1,
@@ -52,7 +30,6 @@ export class Answer {
     @IsNumber()
     questionId: number;
 
-    @Column({ nullable: true })
     @ApiProperty({
         description: 'Selected option ID for multiple choice questions',
         example: 1,
@@ -62,7 +39,6 @@ export class Answer {
     @IsNumber()
     selectedOptionId?: number;
 
-    @Column('text', { nullable: true })
     @ApiProperty({
         description: 'Text answer for open-ended questions',
         example: 'The time complexity of binary search is O(log n)',
@@ -72,18 +48,15 @@ export class Answer {
     @IsString()
     textAnswer?: string;
 
-    @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
     @ApiProperty({
         description: 'Points awarded for this answer',
         example: 4.5,
-        minimum: 0,
         required: false,
     })
     @IsOptional()
     @IsNumber()
     pointsAwarded?: number;
 
-    @Column({ default: false })
     @ApiProperty({
         description: 'Whether this answer has been marked/graded',
         example: true,
@@ -91,18 +64,15 @@ export class Answer {
     @IsBoolean()
     isMarked: boolean;
 
-    @Column({ default: false })
     @ApiProperty({
-        description:
-            'Whether this answer is correct (for auto-graded questions)',
+        description: 'Whether this answer is correct',
         example: true,
     })
     @IsBoolean()
     isCorrect: boolean;
 
-    @Column('uuid', { nullable: true })
     @ApiProperty({
-        description: 'User ID who marked this answer (for manual grading)',
+        description: 'User ID who marked this answer',
         example: '123e4567-e89b-12d3-a456-426614174000',
         required: false,
     })
@@ -110,7 +80,6 @@ export class Answer {
     @IsUUID()
     markedByUserId?: string;
 
-    @Column({ type: 'timestamp', nullable: true })
     @ApiProperty({
         description: 'When this answer was marked/graded',
         example: '2024-01-01T11:00:00.000Z',
@@ -120,9 +89,8 @@ export class Answer {
     @IsDateString()
     markedAt?: Date;
 
-    @Column('text', { nullable: true })
     @ApiProperty({
-        description: 'Feedback from the marker for manual grading',
+        description: 'Feedback from the marker',
         example: 'Good understanding but could provide more detail',
         required: false,
     })
@@ -130,34 +98,40 @@ export class Answer {
     @IsString()
     feedback?: string;
 
-    @CreateDateColumn()
     @ApiProperty({
         description: 'Answer submission timestamp',
         example: '2024-01-01T09:30:00.000Z',
     })
+    @IsDateString()
     createdAt: Date;
 
-    @UpdateDateColumn()
     @ApiProperty({
         description: 'Answer last update timestamp',
         example: '2024-01-01T11:00:00.000Z',
     })
+    @IsDateString()
     updatedAt: Date;
 
-    // Relations
-    @ManyToOne(() => TestAttempt, { onDelete: 'CASCADE' })
-    attempt: TestAttempt;
+    @ApiProperty({
+        description: 'Question details',
+        required: false,
+    })
+    @IsOptional()
+    question?: {
+        questionId: number;
+        questionText: string;
+        questionType: string;
+        points: number;
+    };
 
-    @ManyToOne(() => Question, { onDelete: 'RESTRICT' })
-    question: Question;
-
-    @ManyToOne('QuestionOption', { nullable: true, onDelete: 'RESTRICT' })
-    selectedOption: any;
-
-    @ManyToOne(() => User, { nullable: true, onDelete: 'RESTRICT' })
-    markedByUser: User;
-
-    constructor(partial: Partial<Answer>) {
-        Object.assign(this, partial);
-    }
-}
+    @ApiProperty({
+        description: 'Selected option details',
+        required: false,
+    })
+    @IsOptional()
+    selectedOption?: {
+        optionId: number;
+        optionText: string;
+        isCorrect: boolean;
+    };
+} 

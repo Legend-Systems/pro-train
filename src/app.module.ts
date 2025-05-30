@@ -9,6 +9,10 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { User } from './user/entities/user.entity';
 import { Course } from './course/entities/course.entity';
+import { Test } from './test/entities/test.entity';
+import { Question } from './questions/entities/question.entity';
+import { QuestionOption } from './questions_options/entities/questions_option.entity';
+import { TestAttempt } from './test_attempts/entities/test_attempt.entity';
 import { CourseModule } from './course/course.module';
 import { TestModule } from './test/test.module';
 import { QuestionsModule } from './questions/questions.module';
@@ -18,6 +22,10 @@ import { AnswersModule } from './answers/answers.module';
 import { ResultsModule } from './results/results.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { TrainingProgressModule } from './training_progress/training_progress.module';
+import { Answer } from './answers/entities/answer.entity';
+import { Result } from './results/entities/result.entity';
+import { Leaderboard } from './leaderboard/entities/leaderboard.entity';
+import { TrainingProgress } from './training_progress/entities/training_progress.entity';
 
 @Module({
     imports: [
@@ -56,7 +64,18 @@ import { TrainingProgressModule } from './training_progress/training_progress.mo
                 username: configService.get('DATABASE_USERNAME'),
                 password: configService.get('DATABASE_PASSWORD'),
                 database: configService.get('DATABASE_NAME'),
-                entities: [User, Course],
+                entities: [
+                    User,
+                    Course,
+                    Test,
+                    Question,
+                    QuestionOption,
+                    TestAttempt,
+                    Answer,
+                    Result,
+                    Leaderboard,
+                    TrainingProgress,
+                ],
                 synchronize: true,
                 logging: false,
                 autoLoadEntities: true,
