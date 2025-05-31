@@ -3,8 +3,6 @@ import {
     PrimaryGeneratedColumn,
     Column,
     ManyToOne,
-    CreateDateColumn,
-    UpdateDateColumn,
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
@@ -83,6 +81,13 @@ export class Branch {
     @IsBoolean({ message: 'Active status must be a boolean' })
     isActive: boolean;
 
+    @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    @ApiProperty({
+        description: 'Branch creation date',
+        example: '2024-01-01T00:00:00.000Z',
+    })
+    createdAt: Date;
+
     @Column({ nullable: true })
     @ApiProperty({
         description: 'Branch manager name',
@@ -107,23 +112,7 @@ export class Branch {
     @IsObject({ message: 'Operating hours must be an object' })
     operatingHours?: OperatingHours;
 
-    @CreateDateColumn()
-    @ApiProperty({
-        description: 'Branch creation date',
-        example: '2024-01-01T00:00:00.000Z',
-    })
-    createdAt: Date;
-
-    @UpdateDateColumn()
-    @ApiProperty({
-        description: 'Last update date',
-        example: '2024-01-15T10:30:45.123Z',
-    })
-    updatedAt: Date;
-
-    @ManyToOne(() => Organization, organization => organization.branches, {
-        onDelete: 'CASCADE',
-    })
+    @ManyToOne(() => Organization, organization => organization.branches)
     @ApiProperty({
         description: 'Organization this branch belongs to',
         type: () => Organization,

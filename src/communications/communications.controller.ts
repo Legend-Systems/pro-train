@@ -7,11 +7,13 @@ import {
     Param,
     Delete,
 } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import { CommunicationsService } from './communications.service';
 import { CreateCommunicationDto } from './dto/create-communication.dto';
 import { UpdateCommunicationDto } from './dto/update-communication.dto';
 
 @Controller('communications')
+@ApiExcludeController()
 export class CommunicationsController {
     constructor(
         private readonly communicationsService: CommunicationsService,

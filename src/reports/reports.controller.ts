@@ -207,6 +207,25 @@ export class ReportsController {
         },
     })
     @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid course ID format or analytics parameters',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: [
+                        'Course ID must be a positive integer',
+                        'Invalid date range parameters',
+                    ],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
         status: HttpStatus.FORBIDDEN,
         description:
             '🔒 Forbidden - Insufficient permissions for course analytics',
@@ -218,6 +237,19 @@ export class ReportsController {
                     type: 'string',
                     example: 'Insufficient permissions',
                 },
+                error: { type: 'string', example: 'Forbidden' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        description: '🔥 Internal server error during analytics computation',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 500 },
+                message: { type: 'string', example: 'Internal server error' },
+                error: { type: 'string', example: 'Internal Server Error' },
             },
         },
     })
@@ -358,6 +390,25 @@ export class ReportsController {
         },
     })
     @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid course ID or enrollment query parameters',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: [
+                        'Course ID must be a positive integer',
+                        'Invalid date range for enrollment analysis',
+                    ],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
         description: '🚫 Unauthorized - Invalid or missing JWT token',
         schema: {
@@ -365,6 +416,20 @@ export class ReportsController {
             properties: {
                 statusCode: { type: 'number', example: 401 },
                 message: { type: 'string', example: 'Unauthorized' },
+                error: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        description:
+            '🔥 Internal server error during enrollment data retrieval',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 500 },
+                message: { type: 'string', example: 'Internal server error' },
+                error: { type: 'string', example: 'Internal Server Error' },
             },
         },
     })
@@ -602,6 +667,22 @@ export class ReportsController {
         },
     })
     @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid user ID format',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: ['User ID must be a valid UUID format'],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
         description: '🚫 Unauthorized - Invalid or missing JWT token',
         schema: {
@@ -609,6 +690,20 @@ export class ReportsController {
             properties: {
                 statusCode: { type: 'number', example: 401 },
                 message: { type: 'string', example: 'Unauthorized' },
+                error: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        description:
+            '🔥 Internal server error during user analytics computation',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 500 },
+                message: { type: 'string', example: 'Internal server error' },
+                error: { type: 'string', example: 'Internal Server Error' },
             },
         },
     })
@@ -1073,7 +1168,8 @@ export class ReportsController {
     })
     @ApiParam({
         name: 'userId',
-        description: 'Unique UUID identifier of the user for comprehensive results analysis',
+        description:
+            'Unique UUID identifier of the user for comprehensive results analysis',
         type: 'string',
         example: '123e4567-e89b-12d3-a456-426614174000',
         required: true,
@@ -1106,12 +1202,14 @@ export class ReportsController {
                         totalAttempts: {
                             type: 'number',
                             example: 45,
-                            description: 'Total number of test attempts by user',
+                            description:
+                                'Total number of test attempts by user',
                         },
                         averageScore: {
                             type: 'number',
                             example: 87.5,
-                            description: 'Overall average score across all attempts',
+                            description:
+                                'Overall average score across all attempts',
                         },
                         bestScore: {
                             type: 'number',
@@ -1124,12 +1222,14 @@ export class ReportsController {
                                 last30Days: {
                                     type: 'number',
                                     example: 89.2,
-                                    description: 'Average score in last 30 days',
+                                    description:
+                                        'Average score in last 30 days',
                                 },
                                 improvementTrend: {
                                     type: 'string',
                                     example: 'improving',
-                                    description: 'Performance trend: improving, declining, stable',
+                                    description:
+                                        'Performance trend: improving, declining, stable',
                                 },
                             },
                         },
@@ -1190,7 +1290,8 @@ export class ReportsController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: '🔒 Forbidden - Insufficient permissions to access user results',
+        description:
+            '🔒 Forbidden - Insufficient permissions to access user results',
         schema: {
             type: 'object',
             properties: {
@@ -1334,8 +1435,14 @@ export class ReportsController {
                                         type: 'string',
                                         example: 'Advanced Mathematics',
                                     },
-                                    averageScore: { type: 'number', example: 89.2 },
-                                    totalAttempts: { type: 'number', example: 234 },
+                                    averageScore: {
+                                        type: 'number',
+                                        example: 89.2,
+                                    },
+                                    totalAttempts: {
+                                        type: 'number',
+                                        example: 234,
+                                    },
                                 },
                             },
                         },
@@ -1370,12 +1477,14 @@ export class ReportsController {
                                 monthlyGrowth: {
                                     type: 'number',
                                     example: 12.5,
-                                    description: 'Monthly growth in test attempts (%)',
+                                    description:
+                                        'Monthly growth in test attempts (%)',
                                 },
                                 performanceImprovement: {
                                     type: 'number',
                                     example: 3.2,
-                                    description: 'Average score improvement over last quarter',
+                                    description:
+                                        'Average score improvement over last quarter',
                                 },
                             },
                         },
@@ -1406,13 +1515,17 @@ export class ReportsController {
             type: 'object',
             properties: {
                 statusCode: { type: 'number', example: 500 },
-                message: { 
-                    type: 'string', 
-                    example: 'Unable to process global statistics due to system error' 
+                message: {
+                    type: 'string',
+                    example:
+                        'Unable to process global statistics due to system error',
                 },
                 error: { type: 'string', example: 'Internal Server Error' },
                 timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' },
-                path: { type: 'string', example: '/api/reports/results/global-stats' },
+                path: {
+                    type: 'string',
+                    example: '/api/reports/results/global-stats',
+                },
             },
         },
     })
@@ -1423,14 +1536,23 @@ export class ReportsController {
             type: 'object',
             properties: {
                 statusCode: { type: 'number', example: 401 },
-                message: { type: 'string', example: 'Unauthorized access. Please provide a valid JWT token.' },
+                message: {
+                    type: 'string',
+                    example:
+                        'Unauthorized access. Please provide a valid JWT token.',
+                },
                 error: { type: 'string', example: 'Unauthorized' },
                 timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' },
-                path: { type: 'string', example: '/api/reports/results/global-stats' },
+                path: {
+                    type: 'string',
+                    example: '/api/reports/results/global-stats',
+                },
             },
         },
     })
-    async getGlobalResultsStats(): Promise<StandardApiResponse<GlobalResultsStatsReportDto>> {
+    async getGlobalResultsStats(): Promise<
+        StandardApiResponse<GlobalResultsStatsReportDto>
+    > {
         try {
             this.logger.log('Retrieving global results statistics');
 
@@ -1504,14 +1626,16 @@ export class ReportsController {
     @ApiQuery({
         name: 'userId',
         required: false,
-        description: 'Filter trends by specific user UUID for personalized analysis',
+        description:
+            'Filter trends by specific user UUID for personalized analysis',
         example: '123e4567-e89b-12d3-a456-426614174000',
         type: 'string',
     })
     @ApiQuery({
         name: 'courseId',
         required: false,
-        description: 'Filter trends by specific course ID for course-level analysis',
+        description:
+            'Filter trends by specific course ID for course-level analysis',
         example: 1,
         type: 'number',
     })
@@ -1571,22 +1695,26 @@ export class ReportsController {
                                     averageScore: {
                                         type: 'number',
                                         example: 84.7,
-                                        description: 'Average score for this period',
+                                        description:
+                                            'Average score for this period',
                                     },
                                     attempts: {
                                         type: 'number',
                                         example: 23,
-                                        description: 'Number of attempts in period',
+                                        description:
+                                            'Number of attempts in period',
                                     },
                                     passRate: {
                                         type: 'number',
                                         example: 78.3,
-                                        description: 'Pass rate percentage for period',
+                                        description:
+                                            'Pass rate percentage for period',
                                     },
                                     trendDirection: {
                                         type: 'string',
                                         example: 'improving',
-                                        description: 'Trend direction: improving, declining, stable',
+                                        description:
+                                            'Trend direction: improving, declining, stable',
                                     },
                                 },
                             },
@@ -1597,12 +1725,14 @@ export class ReportsController {
                                 overallTrend: {
                                     type: 'string',
                                     example: 'improving',
-                                    description: 'Overall trend across entire period',
+                                    description:
+                                        'Overall trend across entire period',
                                 },
                                 averageImprovement: {
                                     type: 'number',
                                     example: 5.2,
-                                    description: 'Average improvement percentage',
+                                    description:
+                                        'Average improvement percentage',
                                 },
                                 bestPeriod: {
                                     type: 'string',
@@ -1612,7 +1742,8 @@ export class ReportsController {
                                 consistency: {
                                     type: 'number',
                                     example: 0.85,
-                                    description: 'Performance consistency score (0-1)',
+                                    description:
+                                        'Performance consistency score (0-1)',
                                 },
                             },
                         },
@@ -1726,14 +1857,16 @@ export class ReportsController {
     @ApiQuery({
         name: 'userId',
         required: false,
-        description: 'Filter analytics by specific user UUID for personalized leaderboard insights',
+        description:
+            'Filter analytics by specific user UUID for personalized leaderboard insights',
         example: '123e4567-e89b-12d3-a456-426614174000',
         type: 'string',
     })
     @ApiQuery({
         name: 'courseId',
         required: false,
-        description: 'Filter analytics by specific course ID for course-level competitive analysis',
+        description:
+            'Filter analytics by specific course ID for course-level competitive analysis',
         example: 1,
         type: 'number',
     })
@@ -1779,7 +1912,8 @@ export class ReportsController {
                                 properties: {
                                     userId: {
                                         type: 'string',
-                                        example: '123e4567-e89b-12d3-a456-426614174000',
+                                        example:
+                                            '123e4567-e89b-12d3-a456-426614174000',
                                         description: 'User unique identifier',
                                     },
                                     rank: {
@@ -1790,7 +1924,8 @@ export class ReportsController {
                                     score: {
                                         type: 'number',
                                         example: 95.2,
-                                        description: 'User score on the leaderboard',
+                                        description:
+                                            'User score on the leaderboard',
                                     },
                                     progress: {
                                         type: 'number',
@@ -1800,7 +1935,8 @@ export class ReportsController {
                                     streak: {
                                         type: 'number',
                                         example: 12,
-                                        description: 'Current streak of consecutive days',
+                                        description:
+                                            'Current streak of consecutive days',
                                     },
                                 },
                             },
@@ -1813,13 +1949,16 @@ export class ReportsController {
                                     properties: {
                                         userId: {
                                             type: 'string',
-                                            example: '123e4567-e89b-12d3-a456-426614174000',
-                                            description: 'User unique identifier',
+                                            example:
+                                                '123e4567-e89b-12d3-a456-426614174000',
+                                            description:
+                                                'User unique identifier',
                                         },
                                         rank: {
                                             type: 'number',
                                             example: 1,
-                                            description: 'Current leaderboard rank',
+                                            description:
+                                                'Current leaderboard rank',
                                         },
                                         score: {
                                             type: 'number',
@@ -1831,12 +1970,14 @@ export class ReportsController {
                                 averageScore: {
                                     type: 'number',
                                     example: 87.5,
-                                    description: 'Average score across all leaderboard entries',
+                                    description:
+                                        'Average score across all leaderboard entries',
                                 },
                                 passRate: {
                                     type: 'number',
                                     example: 75.3,
-                                    description: 'Average pass rate across leaderboard entries',
+                                    description:
+                                        'Average pass rate across leaderboard entries',
                                 },
                             },
                         },
@@ -1912,7 +2053,9 @@ export class ReportsController {
             },
         },
     })
-    async getGlobalLeaderboardStats(): Promise<StandardApiResponse<GlobalLeaderboardStatsReportDto>> {
+    async getGlobalLeaderboardStats(): Promise<
+        StandardApiResponse<GlobalLeaderboardStatsReportDto>
+    > {
         try {
             this.logger.log('Retrieving global leaderboard statistics');
 
@@ -2056,7 +2199,8 @@ export class ReportsController {
     })
     @ApiParam({
         name: 'userId',
-        description: 'Unique UUID identifier of the user for comprehensive training progress analysis',
+        description:
+            'Unique UUID identifier of the user for comprehensive training progress analysis',
         type: 'string',
         example: '123e4567-e89b-12d3-a456-426614174000',
         required: true,
@@ -2064,14 +2208,16 @@ export class ReportsController {
     @ApiQuery({
         name: 'courseId',
         required: false,
-        description: 'Filter progress analytics by specific course ID for focused course analysis',
+        description:
+            'Filter progress analytics by specific course ID for focused course analysis',
         example: 1,
         type: 'number',
     })
     @ApiQuery({
         name: 'includeDetails',
         required: false,
-        description: 'Include detailed breakdown of each learning module and skill area',
+        description:
+            'Include detailed breakdown of each learning module and skill area',
         example: true,
         type: 'boolean',
     })
@@ -2095,7 +2241,8 @@ export class ReportsController {
                 },
                 message: {
                     type: 'string',
-                    example: 'Training progress analytics retrieved successfully',
+                    example:
+                        'Training progress analytics retrieved successfully',
                     description: 'Human-readable success message',
                 },
                 data: {
@@ -2217,7 +2364,9 @@ export class ReportsController {
             },
         },
     })
-    async getGlobalTrainingProgressStats(): Promise<StandardApiResponse<GlobalTrainingProgressStatsReportDto>> {
+    async getGlobalTrainingProgressStats(): Promise<
+        StandardApiResponse<GlobalTrainingProgressStatsReportDto>
+    > {
         try {
             this.logger.log('Retrieving global training progress statistics');
 

@@ -3,8 +3,6 @@ import {
     PrimaryGeneratedColumn,
     Column,
     OneToMany,
-    CreateDateColumn,
-    UpdateDateColumn,
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
@@ -51,6 +49,13 @@ export class Organization {
     @IsBoolean({ message: 'Active status must be a boolean' })
     isActive: boolean;
 
+    @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+    @ApiProperty({
+        description: 'Organization creation date',
+        example: '2024-01-01T00:00:00.000Z',
+    })
+    createdAt: Date;
+
     @Column({ nullable: true })
     @ApiProperty({
         description: 'Organization logo URL',
@@ -71,21 +76,7 @@ export class Organization {
     @IsUrl({}, { message: 'Website must be a valid URL' })
     website?: string;
 
-    @CreateDateColumn()
-    @ApiProperty({
-        description: 'Organization creation date',
-        example: '2024-01-01T00:00:00.000Z',
-    })
-    createdAt: Date;
-
-    @UpdateDateColumn()
-    @ApiProperty({
-        description: 'Last update date',
-        example: '2024-01-15T10:30:45.123Z',
-    })
-    updatedAt: Date;
-
-    @OneToMany(() => Branch, branch => branch.organization, { cascade: true })
+    @OneToMany(() => Branch, branch => branch.organization)
     @ApiProperty({
         description: 'Organization branches',
         type: () => [Branch],
