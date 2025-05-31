@@ -31,6 +31,7 @@ import { UpdateQuestionOptionDto } from './dto/update-questions_option.dto';
 import { QuestionOptionResponseDto } from './dto/question-option-response.dto';
 import { QuestionOptionListResponseDto } from './dto/question-option-list-response.dto';
 import { BulkCreateOptionsDto } from './dto/bulk-create-options.dto';
+import { StandardOperationResponse } from '../user/dto/common-response.dto';
 
 @ApiTags('🔧 Question Options Management')
 @Controller('question-options')
@@ -118,7 +119,7 @@ export class QuestionsOptionsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Question option created successfully',
-        type: QuestionOptionResponseDto,
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -155,23 +156,21 @@ export class QuestionsOptionsController {
         @Body() createQuestionOptionDto: CreateQuestionOptionDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
-    ): Promise<QuestionOptionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Creating option for question ${createQuestionOptionDto.questionId} by user: ${userId}`,
             );
 
-            const option = await this.questionsOptionsService.create(
+            const result = await this.questionsOptionsService.create(
                 createQuestionOptionDto,
                 scope,
                 userId,
             );
 
-            this.logger.log(
-                `Question option created successfully with ID: ${option.optionId}`,
-            );
+            this.logger.log(`Question option created successfully`);
 
-            return option;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error creating question option for user ${userId}:`,
@@ -253,7 +252,7 @@ export class QuestionsOptionsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Question options created successfully',
-        type: [QuestionOptionResponseDto],
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -275,23 +274,21 @@ export class QuestionsOptionsController {
         @Body() bulkCreateDto: BulkCreateOptionsDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
-    ): Promise<QuestionOptionResponseDto[]> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Creating ${bulkCreateDto.options.length} options for question ${bulkCreateDto.questionId} by user: ${userId}`,
             );
 
-            const options = await this.questionsOptionsService.createBulk(
+            const result = await this.questionsOptionsService.createBulk(
                 bulkCreateDto,
                 scope,
                 userId,
             );
 
-            this.logger.log(
-                `${options.length} question options created successfully`,
-            );
+            this.logger.log(`Question options created successfully in bulk`);
 
-            return options;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error creating bulk question options for user ${userId}:`,
@@ -535,7 +532,7 @@ export class QuestionsOptionsController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Question option updated successfully',
-        type: QuestionOptionResponseDto,
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -558,13 +555,13 @@ export class QuestionsOptionsController {
         @Body() updateQuestionOptionDto: UpdateQuestionOptionDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
-    ): Promise<QuestionOptionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Updating question option ${id} by user: ${userId}`,
             );
 
-            const option = await this.questionsOptionsService.update(
+            const result = await this.questionsOptionsService.update(
                 id,
                 updateQuestionOptionDto,
                 scope,
@@ -573,7 +570,7 @@ export class QuestionsOptionsController {
 
             this.logger.log(`Question option ${id} updated successfully`);
 
-            return option;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error updating question option ${id} by user ${userId}:`,
@@ -660,15 +657,21 @@ export class QuestionsOptionsController {
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Deleting question option ${id} by user: ${userId}`,
             );
 
-            await this.questionsOptionsService.remove(id, scope, userId);
+            const result = await this.questionsOptionsService.remove(
+                id,
+                scope,
+                userId,
+            );
 
             this.logger.log(`Question option ${id} deleted successfully`);
+
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error deleting question option ${id} by user ${userId}:`,

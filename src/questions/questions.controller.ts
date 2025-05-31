@@ -34,6 +34,7 @@ import { QuestionFilterDto } from './dto/question-filter.dto';
 import { QuestionResponseDto } from './dto/question-response.dto';
 import { QuestionListResponseDto } from './dto/question-list-response.dto';
 import { BulkCreateQuestionsDto } from './dto/bulk-create-questions.dto';
+import { StandardOperationResponse } from '../user/dto/common-response.dto';
 
 @ApiTags('❓ Questions Management')
 @Controller('questions')
@@ -127,7 +128,7 @@ export class QuestionsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Question created successfully',
-        type: QuestionResponseDto,
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -167,22 +168,22 @@ export class QuestionsController {
     async create(
         @Body() createQuestionDto: CreateQuestionDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Creating question for test ${createQuestionDto.testId} by user: ${scope.userId}`,
             );
 
-            const question = await this.questionsService.create(
+            const result = await this.questionsService.create(
                 createQuestionDto,
                 scope,
             );
 
             this.logger.log(
-                `Question created successfully with ID: ${question.questionId}`,
+                `Question created successfully for test ${createQuestionDto.testId}`,
             );
 
-            return question;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error creating question for user ${scope.userId}:`,
@@ -283,7 +284,7 @@ export class QuestionsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Questions created successfully in bulk',
-        type: [QuestionResponseDto],
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -301,22 +302,22 @@ export class QuestionsController {
     async createBulk(
         @Body() bulkCreateDto: BulkCreateQuestionsDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto[]> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Creating ${bulkCreateDto.questions.length} questions in bulk for user: ${scope.userId}`,
             );
 
-            const questions = await this.questionsService.createBulk(
+            const result = await this.questionsService.createBulk(
                 bulkCreateDto,
                 scope,
             );
 
             this.logger.log(
-                `${questions.length} questions created successfully in bulk`,
+                `${bulkCreateDto.questions.length} questions created successfully in bulk`,
             );
 
-            return questions;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error creating questions in bulk for user ${scope.userId}:`,
@@ -614,7 +615,7 @@ export class QuestionsController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Question updated successfully',
-        type: QuestionResponseDto,
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -640,13 +641,13 @@ export class QuestionsController {
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionDto: UpdateQuestionDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Updating question ${id} for user: ${scope.userId}`,
             );
 
-            const question = await this.questionsService.update(
+            const result = await this.questionsService.update(
                 id,
                 updateQuestionDto,
                 scope.userId,
@@ -654,7 +655,7 @@ export class QuestionsController {
 
             this.logger.log(`Question ${id} updated successfully`);
 
-            return question;
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error updating question ${id} for user ${scope.userId}:`,
@@ -665,7 +666,7 @@ export class QuestionsController {
     }
 
     @Patch('reorder')
-    @HttpCode(HttpStatus.NO_CONTENT)
+    @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: '🔄 Reorder Questions in Test',
         description: `
@@ -764,8 +765,9 @@ export class QuestionsController {
         },
     })
     @ApiResponse({
-        status: HttpStatus.NO_CONTENT,
+        status: HttpStatus.OK,
         description: '✅ Questions reordered successfully',
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -790,13 +792,13 @@ export class QuestionsController {
             questions: { questionId: number; newOrderIndex: number }[];
         },
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Reordering ${reorderData.questions.length} questions in test ${reorderData.testId}`,
             );
 
-            await this.questionsService.reorder(
+            const result = await this.questionsService.reorder(
                 reorderData.testId,
                 reorderData.questions,
                 scope.userId,
@@ -805,6 +807,8 @@ export class QuestionsController {
             this.logger.log(
                 `Questions reordered successfully in test ${reorderData.testId}`,
             );
+
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error reordering questions in test ${reorderData.testId}:`,
@@ -815,7 +819,7 @@ export class QuestionsController {
     }
 
     @Delete(':id')
-    @HttpCode(HttpStatus.NO_CONTENT)
+    @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: '🗑️ Delete Question',
         description: `
@@ -861,8 +865,9 @@ export class QuestionsController {
         example: 1,
     })
     @ApiResponse({
-        status: HttpStatus.NO_CONTENT,
+        status: HttpStatus.OK,
         description: '✅ Question deleted successfully',
+        type: StandardOperationResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -883,15 +888,17 @@ export class QuestionsController {
     async remove(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Deleting question ${id} for user: ${scope.userId}`,
             );
 
-            await this.questionsService.remove(id, scope.userId);
+            const result = await this.questionsService.remove(id, scope.userId);
 
             this.logger.log(`Question ${id} deleted successfully`);
+
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error deleting question ${id} for user ${scope.userId}:`,

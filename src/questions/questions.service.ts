@@ -4,9 +4,12 @@ import {
     ForbiddenException,
     ConflictException,
     Logger,
+    Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryRunner, DataSource } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
@@ -14,6 +17,7 @@ import { QuestionFilterDto } from './dto/question-filter.dto';
 import { QuestionResponseDto } from './dto/question-response.dto';
 import { QuestionListResponseDto } from './dto/question-list-response.dto';
 import { BulkCreateQuestionsDto } from './dto/bulk-create-questions.dto';
+import { StandardOperationResponse } from '../user/dto/common-response.dto';
 import { Question } from './entities/question.entity';
 import { Test } from '../test/entities/test.entity';
 import { TestService } from '../test/test.service';
@@ -22,6 +26,22 @@ import { TestService } from '../test/test.service';
 export class QuestionsService {
     private readonly logger = new Logger(QuestionsService.name);
 
+    // Cache keys
+    private readonly CACHE_KEYS = {
+        QUESTION_BY_ID: (id: number) => `question:${id}`,
+        QUESTIONS_BY_TEST: (testId: number, filters: string) =>
+            `questions:test:${testId}:${filters}`,
+        QUESTION_STATS: (testId: number) => `question:stats:${testId}`,
+        TEST_QUESTIONS_LIST: (filters: string) => `questions:list:${filters}`,
+    };
+
+    // Cache TTL in seconds
+    private readonly CACHE_TTL = {
+        QUESTION: 300, // 5 minutes
+        QUESTION_LIST: 180, // 3 minutes
+        STATS: 600, // 10 minutes
+    };
+
     constructor(
         @InjectRepository(Question)
         private readonly questionRepository: Repository<Question>,
@@ -29,7 +49,48 @@ export class QuestionsService {
         private readonly testRepository: Repository<Test>,
         private readonly testService: TestService,
         private readonly dataSource: DataSource,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
+
+    /**
+     * Cache helper methods
+     */
+    private async invalidateQuestionCache(
+        questionId: number,
+        testId?: number,
+    ): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.QUESTION_BY_ID(questionId)];
+
+        if (testId) {
+            // Invalidate all test-related caches - we can't predict all filter combinations
+            const pattern = `questions:test:${testId}:*`;
+            keysToDelete.push(this.CACHE_KEYS.QUESTION_STATS(testId));
+            // Note: In production, you might want to use a more sophisticated cache invalidation strategy
+        }
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private async invalidateTestQuestionsCache(testId: number): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.QUESTION_STATS(testId)];
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private generateCacheKeyForTestQuestions(
+        testId: number,
+        filters?: QuestionFilterDto,
+    ): string {
+        const filterKey = JSON.stringify({
+            questionType: filters?.questionType,
+            minPoints: filters?.minPoints,
+            maxPoints: filters?.maxPoints,
+            createdFrom: filters?.createdFrom,
+            createdTo: filters?.createdTo,
+            page: filters?.page,
+            pageSize: filters?.pageSize,
+        });
+        return this.CACHE_KEYS.QUESTIONS_BY_TEST(testId, filterKey);
+    }
 
     /**
      * Retry database operations with exponential backoff
@@ -67,7 +128,7 @@ export class QuestionsService {
     async create(
         createQuestionDto: CreateQuestionDto,
         scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // Validate test access
             await this.validateTestAccess(
@@ -119,9 +180,16 @@ export class QuestionsService {
                 orgId: test.orgId,
                 branchId: test.branchId,
             });
-            const savedQuestion = await this.questionRepository.save(question);
+            await this.questionRepository.save(question);
 
-            return this.mapToResponseDto(savedQuestion);
+            // Invalidate caches
+            await this.invalidateTestQuestionsCache(createQuestionDto.testId);
+
+            return {
+                message: 'Question created successfully',
+                status: 'success',
+                code: 201,
+            };
         });
     }
 
@@ -131,14 +199,15 @@ export class QuestionsService {
     async createBulk(
         bulkCreateDto: BulkCreateQuestionsDto,
         scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto[]> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
             await queryRunner.startTransaction();
 
             try {
-                const questions: QuestionResponseDto[] = [];
+                const testIds = new Set<number>();
+                const createdQuestions: Question[] = [];
 
                 for (const questionDto of bulkCreateDto.questions) {
                     // Validate test access for each question
@@ -151,11 +220,24 @@ export class QuestionsService {
                         questionDto,
                         queryRunner,
                     );
-                    questions.push(this.mapToResponseDto(question));
+                    createdQuestions.push(question);
+                    testIds.add(questionDto.testId);
                 }
 
                 await queryRunner.commitTransaction();
-                return questions;
+
+                // Invalidate caches for all affected tests
+                await Promise.all(
+                    Array.from(testIds).map(testId =>
+                        this.invalidateTestQuestionsCache(testId),
+                    ),
+                );
+
+                return {
+                    message: `${createdQuestions.length} questions created successfully`,
+                    status: 'success',
+                    code: 201,
+                };
             } catch (error) {
                 await queryRunner.rollbackTransaction();
                 throw error;
@@ -174,6 +256,18 @@ export class QuestionsService {
         filters?: QuestionFilterDto,
     ): Promise<QuestionListResponseDto> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.generateCacheKeyForTestQuestions(
+                testId,
+                filters,
+            );
+            const cachedResult =
+                await this.cacheManager.get<QuestionListResponseDto>(cacheKey);
+
+            if (cachedResult) {
+                return cachedResult;
+            }
+
             // Validate test access if userId provided
             if (userId) {
                 await this.validateTestAccess(testId, userId);
@@ -230,7 +324,7 @@ export class QuestionsService {
                 .where('question.testId = :testId', { testId })
                 .getRawOne();
 
-            return {
+            const result = {
                 questions: questions.map(q => this.mapToResponseDto(q)),
                 total,
                 page,
@@ -238,6 +332,15 @@ export class QuestionsService {
                 totalPages: Math.ceil(total / pageSize),
                 totalPoints: parseInt(totalPoints?.total || '0'),
             };
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.QUESTION_LIST * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -246,6 +349,15 @@ export class QuestionsService {
      */
     async findOne(id: number, userId?: string): Promise<QuestionResponseDto> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.QUESTION_BY_ID(id);
+            const cachedQuestion =
+                await this.cacheManager.get<QuestionResponseDto>(cacheKey);
+
+            if (cachedQuestion) {
+                return cachedQuestion;
+            }
+
             const question = await this.questionRepository.findOne({
                 where: { questionId: id },
                 relations: [
@@ -267,7 +379,16 @@ export class QuestionsService {
                 await this.validateTestAccess(question.testId, userId);
             }
 
-            return this.mapToResponseDto(question);
+            const result = this.mapToResponseDto(question);
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.QUESTION * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -278,7 +399,7 @@ export class QuestionsService {
         id: number,
         updateQuestionDto: UpdateQuestionDto,
         userId: string,
-    ): Promise<QuestionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const question = await this.questionRepository.findOne({
                 where: { questionId: id },
@@ -312,10 +433,16 @@ export class QuestionsService {
             }
 
             Object.assign(question, updateQuestionDto);
-            const updatedQuestion =
-                await this.questionRepository.save(question);
+            await this.questionRepository.save(question);
 
-            return this.mapToResponseDto(updatedQuestion);
+            // Invalidate caches
+            await this.invalidateQuestionCache(id, question.testId);
+
+            return {
+                message: 'Question updated successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
@@ -326,7 +453,7 @@ export class QuestionsService {
         testId: number,
         reorderData: { questionId: number; newOrderIndex: number }[],
         userId: string,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // Validate test access
             await this.validateTestAccess(testId, userId);
@@ -345,6 +472,15 @@ export class QuestionsService {
                 }
 
                 await queryRunner.commitTransaction();
+
+                // Invalidate caches
+                await this.invalidateTestQuestionsCache(testId);
+
+                return {
+                    message: 'Questions reordered successfully',
+                    status: 'success',
+                    code: 200,
+                };
             } catch (error) {
                 await queryRunner.rollbackTransaction();
                 throw error;
@@ -357,7 +493,10 @@ export class QuestionsService {
     /**
      * Delete a question
      */
-    async remove(id: number, userId: string): Promise<void> {
+    async remove(
+        id: number,
+        userId: string,
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const question = await this.questionRepository.findOne({
                 where: { questionId: id },
@@ -377,7 +516,17 @@ export class QuestionsService {
             //     throw new BadRequestException('Cannot delete question that has answers');
             // }
 
+            const testId = question.testId;
             await this.questionRepository.remove(question);
+
+            // Invalidate caches
+            await this.invalidateQuestionCache(id, testId);
+
+            return {
+                message: 'Question deleted successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 

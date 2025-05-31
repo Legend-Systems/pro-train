@@ -3,9 +3,12 @@ import {
     NotFoundException,
     ForbiddenException,
     Logger,
+    Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { CreateQuestionOptionDto } from './dto/create-questions_option.dto';
 import { UpdateQuestionOptionDto } from './dto/update-questions_option.dto';
 import { QuestionOptionResponseDto } from './dto/question-option-response.dto';
@@ -15,10 +18,29 @@ import { QuestionOption } from './entities/questions_option.entity';
 import { Question } from '../questions/entities/question.entity';
 import { QuestionsService } from '../questions/questions.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { StandardOperationResponse } from '../user/dto/common-response.dto';
 
 @Injectable()
 export class QuestionsOptionsService {
     private readonly logger = new Logger(QuestionsOptionsService.name);
+
+    // Cache keys
+    private readonly CACHE_KEYS = {
+        OPTION_BY_ID: (id: number) => `question-option:${id}`,
+        OPTIONS_BY_QUESTION: (questionId: number) =>
+            `question-options:question:${questionId}`,
+        QUESTION_OPTIONS_LIST: (filters: string) =>
+            `question-options:list:${filters}`,
+        OPTION_STATS: (questionId: number) =>
+            `question-option:stats:${questionId}`,
+    };
+
+    // Cache TTL in seconds
+    private readonly CACHE_TTL = {
+        OPTION: 300, // 5 minutes
+        OPTION_LIST: 180, // 3 minutes
+        STATS: 600, // 10 minutes
+    };
 
     constructor(
         @InjectRepository(QuestionOption)
@@ -27,7 +49,36 @@ export class QuestionsOptionsService {
         private readonly questionRepository: Repository<Question>,
         private readonly questionsService: QuestionsService,
         private readonly dataSource: DataSource,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
+
+    /**
+     * Cache helper methods
+     */
+    private async invalidateOptionCache(
+        optionId: number,
+        questionId?: number,
+    ): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.OPTION_BY_ID(optionId)];
+
+        if (questionId) {
+            keysToDelete.push(this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId));
+            keysToDelete.push(this.CACHE_KEYS.OPTION_STATS(questionId));
+        }
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private async invalidateQuestionOptionsCache(
+        questionId: number,
+    ): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
+            this.CACHE_KEYS.OPTION_STATS(questionId),
+        ];
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
 
     /**
      * Retry database operations with exponential backoff
@@ -66,7 +117,7 @@ export class QuestionsOptionsService {
         createQuestionOptionDto: CreateQuestionOptionDto,
         scope: OrgBranchScope,
         userId: string,
-    ): Promise<QuestionOptionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // Validate question access with scope
             await this.validateQuestionAccessWithScope(
@@ -78,10 +129,18 @@ export class QuestionsOptionsService {
             const option = this.questionOptionRepository.create(
                 createQuestionOptionDto,
             );
-            const savedOption =
-                await this.questionOptionRepository.save(option);
+            await this.questionOptionRepository.save(option);
 
-            return this.mapToResponseDto(savedOption);
+            // Invalidate caches
+            await this.invalidateQuestionOptionsCache(
+                createQuestionOptionDto.questionId,
+            );
+
+            return {
+                message: 'Question option created successfully',
+                status: 'success',
+                code: 201,
+            };
         });
     }
 
@@ -92,7 +151,7 @@ export class QuestionsOptionsService {
         bulkCreateDto: BulkCreateOptionsDto,
         scope: OrgBranchScope,
         userId: string,
-    ): Promise<QuestionOptionResponseDto[]> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // Validate question access with scope
             await this.validateQuestionAccessWithScope(
@@ -106,8 +165,6 @@ export class QuestionsOptionsService {
             await queryRunner.startTransaction();
 
             try {
-                const options: QuestionOptionResponseDto[] = [];
-
                 for (const optionData of bulkCreateDto.options) {
                     const optionDto: CreateQuestionOptionDto = {
                         questionId: bulkCreateDto.questionId,
@@ -119,12 +176,21 @@ export class QuestionsOptionsService {
                         QuestionOption,
                         optionDto,
                     );
-                    const savedOption = await queryRunner.manager.save(option);
-                    options.push(this.mapToResponseDto(savedOption));
+                    await queryRunner.manager.save(option);
                 }
 
                 await queryRunner.commitTransaction();
-                return options;
+
+                // Invalidate caches
+                await this.invalidateQuestionOptionsCache(
+                    bulkCreateDto.questionId,
+                );
+
+                return {
+                    message: 'Question options created successfully in bulk',
+                    status: 'success',
+                    code: 201,
+                };
             } catch (error) {
                 await queryRunner.rollbackTransaction();
                 throw error;
@@ -143,6 +209,17 @@ export class QuestionsOptionsService {
         userId?: string,
     ): Promise<QuestionOptionListResponseDto> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId);
+            const cachedResult =
+                await this.cacheManager.get<QuestionOptionListResponseDto>(
+                    cacheKey,
+                );
+
+            if (cachedResult) {
+                return cachedResult;
+            }
+
             // Validate question access with scope
             await this.validateQuestionAccessWithScope(
                 questionId,
@@ -163,7 +240,7 @@ export class QuestionsOptionsService {
 
             const question = options.length > 0 ? options[0].question : null;
 
-            return {
+            const result = {
                 options: options.map(option => this.mapToResponseDto(option)),
                 total,
                 correctCount,
@@ -176,6 +253,15 @@ export class QuestionsOptionsService {
                       }
                     : undefined,
             };
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.OPTION_LIST * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -188,6 +274,17 @@ export class QuestionsOptionsService {
         userId?: string,
     ): Promise<QuestionOptionResponseDto> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.OPTION_BY_ID(id);
+            const cachedOption =
+                await this.cacheManager.get<QuestionOptionResponseDto>(
+                    cacheKey,
+                );
+
+            if (cachedOption) {
+                return cachedOption;
+            }
+
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
                 relations: ['question'],
@@ -206,7 +303,16 @@ export class QuestionsOptionsService {
                 userId,
             );
 
-            return this.mapToResponseDto(option);
+            const result = this.mapToResponseDto(option);
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.OPTION * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -218,7 +324,7 @@ export class QuestionsOptionsService {
         updateQuestionOptionDto: UpdateQuestionOptionDto,
         scope: OrgBranchScope,
         userId: string,
-    ): Promise<QuestionOptionResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
@@ -239,10 +345,16 @@ export class QuestionsOptionsService {
             );
 
             Object.assign(option, updateQuestionOptionDto);
-            const updatedOption =
-                await this.questionOptionRepository.save(option);
+            await this.questionOptionRepository.save(option);
 
-            return this.mapToResponseDto(updatedOption);
+            // Invalidate caches
+            await this.invalidateOptionCache(id, option.questionId);
+
+            return {
+                message: 'Question option updated successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
@@ -253,7 +365,7 @@ export class QuestionsOptionsService {
         id: number,
         scope: OrgBranchScope,
         userId: string,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
@@ -279,7 +391,17 @@ export class QuestionsOptionsService {
             //     throw new BadRequestException('Cannot delete option that has answers');
             // }
 
+            const questionId = option.questionId;
             await this.questionOptionRepository.remove(option);
+
+            // Invalidate caches
+            await this.invalidateOptionCache(id, questionId);
+
+            return {
+                message: 'Question option deleted successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 

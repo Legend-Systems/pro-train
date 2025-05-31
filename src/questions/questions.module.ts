@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { QuestionsService } from './questions.service';
 import { QuestionsController } from './questions.controller';
 import { Question } from './entities/question.entity';
@@ -9,6 +10,10 @@ import { TestModule } from '../test/test.module';
 @Module({
     imports: [
         TypeOrmModule.forFeature([Question, Test]),
+        CacheModule.register({
+            ttl: 300, // 5 minutes default TTL
+            max: 1000, // Maximum number of items in cache
+        }),
         forwardRef(() => TestModule),
     ],
     controllers: [QuestionsController],
