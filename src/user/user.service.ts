@@ -73,6 +73,15 @@ export class UserService {
         });
     }
 
+    async findByEmailWithFullDetails(email: string): Promise<User | null> {
+        return this.retryOperation(async () => {
+            return await this.userRepository.findOne({
+                where: { email },
+                relations: ['orgId', 'branchId'],
+            });
+        });
+    }
+
     async findById(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
             return await this.userRepository.findOne({
@@ -154,5 +163,35 @@ export class UserService {
         // Update password
         await this.userRepository.update(id, { password: hashedNewPassword });
         return true;
+    }
+
+    /**
+     * Assign organization and branch to a user
+     */
+    async assignOrgAndBranch(
+        userId: string,
+        orgId?: string,
+        branchId?: string,
+    ): Promise<User> {
+        return this.retryOperation(async () => {
+            const updateData: Record<string, any> = {};
+
+            if (orgId) {
+                updateData['orgId'] = { id: orgId };
+            }
+
+            if (branchId) {
+                updateData['branchId'] = { id: branchId };
+            }
+
+            await this.userRepository.update(userId, updateData);
+
+            const user = await this.findOne(userId);
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
+            return user;
+        });
     }
 }

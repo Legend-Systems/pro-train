@@ -97,8 +97,8 @@ export class AuthService {
     ): Promise<StandardApiResponse<SessionResponseDto>> {
         const { email, password } = signInDto;
 
-        // Find user by email
-        const user = await this.userService.findByEmail(email);
+        // Find user by email with full org/branch details
+        const user = await this.userService.findByEmailWithFullDetails(email);
         if (!user) {
             throw new UnauthorizedException('Invalid credentials');
         }
@@ -147,6 +147,23 @@ export class AuthService {
                 expiresIn: tokenPair.expiresIn,
                 user: userResponse,
                 leaderboard: leaderboardData,
+                organization: user.orgId
+                    ? {
+                          id: user.orgId.id,
+                          name: user.orgId.name,
+                          avatar: user.orgId.logoUrl,
+                      }
+                    : undefined,
+                branch: user.branchId
+                    ? {
+                          id: user.branchId.id,
+                          name: user.branchId.name,
+                          email: user.branchId.email,
+                          address: user.branchId.address,
+                          contactNumber: user.branchId.contactNumber,
+                          managerName: user.branchId.managerName,
+                      }
+                    : undefined,
             },
             message: 'User signed in successfully',
         };
@@ -310,7 +327,7 @@ export class AuthService {
     /**
      * Get token information for authenticated user
      */
-    getTokenInfo(user: {
+    async getTokenInfo(user: {
         id: string;
         email: string;
         firstName: string;
@@ -320,25 +337,52 @@ export class AuthService {
         branchId?: string;
         createdAt: Date;
         updatedAt: Date;
-    }): StandardApiResponse<any> {
+    }): Promise<StandardApiResponse<any>> {
+        // Fetch user with full org/branch details
+        const fullUser = await this.userService.findById(user.id);
+
+        if (!fullUser) {
+            return {
+                success: false,
+                message: 'User not found',
+            };
+        }
+
         return {
             success: true,
             data: {
                 user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    avatar: user.avatar,
-                    orgId: user.orgId,
-                    branchId: user.branchId,
-                    createdAt: user.createdAt,
-                    updatedAt: user.updatedAt,
+                    id: fullUser.id,
+                    email: fullUser.email,
+                    firstName: fullUser.firstName,
+                    lastName: fullUser.lastName,
+                    avatar: fullUser.avatar,
+                    orgId: fullUser.orgId?.id,
+                    branchId: fullUser.branchId?.id,
+                    createdAt: fullUser.createdAt,
+                    updatedAt: fullUser.updatedAt,
                 },
                 scope: {
-                    orgId: user.orgId,
-                    branchId: user.branchId,
+                    orgId: fullUser.orgId?.id,
+                    branchId: fullUser.branchId?.id,
                 },
+                organization: fullUser.orgId
+                    ? {
+                          id: fullUser.orgId.id,
+                          name: fullUser.orgId.name,
+                          avatar: fullUser.orgId.logoUrl,
+                      }
+                    : undefined,
+                branch: fullUser.branchId
+                    ? {
+                          id: fullUser.branchId.id,
+                          name: fullUser.branchId.name,
+                          email: fullUser.branchId.email,
+                          address: fullUser.branchId.address,
+                          contactNumber: fullUser.branchId.contactNumber,
+                          managerName: fullUser.branchId.managerName,
+                      }
+                    : undefined,
             },
             message: 'Token information retrieved successfully',
         };

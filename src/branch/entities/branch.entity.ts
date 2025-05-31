@@ -52,6 +52,15 @@ export class Branch {
     @IsString({ message: 'Address must be a string' })
     address?: string;
 
+    @Column({ nullable: false, unique: true })
+    @ApiProperty({
+        description: 'Branch email address',
+        example: 'downtown@acmecorp.com',
+        required: false,
+    })
+    @IsEmail({}, { message: 'Email must be a valid email address' })
+    email?: string;
+
     @Column({ nullable: true })
     @ApiProperty({
         description: 'Branch contact phone number',
@@ -61,16 +70,6 @@ export class Branch {
     @IsOptional()
     @IsString({ message: 'Contact number must be a string' })
     contactNumber?: string;
-
-    @Column({ nullable: true })
-    @ApiProperty({
-        description: 'Branch email address',
-        example: 'downtown@acmecorp.com',
-        required: false,
-    })
-    @IsOptional()
-    @IsEmail({}, { message: 'Email must be a valid email address' })
-    email?: string;
 
     @Column({ default: true })
     @ApiProperty({

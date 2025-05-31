@@ -2,6 +2,69 @@ import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../entities/user.entity';
 import { UserStatsResponseDto } from '../../leaderboard/dto/user-stats-response.dto';
 
+export class OrgInfo {
+    @ApiProperty({
+        description: 'Organization unique identifier',
+        example: 'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    })
+    id: string;
+
+    @ApiProperty({
+        description: 'Organization name',
+        example: 'Acme Corporation',
+    })
+    name: string;
+
+    @ApiProperty({
+        description: 'Organization logo URL',
+        example: 'https://cdn.example.com/logos/acme-corp.png',
+        required: false,
+    })
+    avatar?: string;
+}
+
+export class BranchInfo {
+    @ApiProperty({
+        description: 'Branch unique identifier',
+        example: 'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+    })
+    id: string;
+
+    @ApiProperty({
+        description: 'Branch name',
+        example: 'Downtown Branch',
+    })
+    name: string;
+
+    @ApiProperty({
+        description: 'Branch email address',
+        example: 'downtown@acmecorp.com',
+        required: false,
+    })
+    email?: string;
+
+    @ApiProperty({
+        description: 'Branch physical address',
+        example: '123 Main Street, Downtown, City 12345',
+        required: false,
+    })
+    address?: string;
+
+    @ApiProperty({
+        description: 'Branch contact phone number',
+        example: '+1-555-123-4567',
+        required: false,
+    })
+    contactNumber?: string;
+
+    @ApiProperty({
+        description: 'Branch manager name',
+        example: 'John Smith',
+        required: false,
+    })
+    managerName?: string;
+}
+
 export class UserResponseDto {
     @ApiProperty({
         description: 'User unique identifier',
@@ -88,6 +151,20 @@ export class SessionResponseDto {
         required: false,
     })
     leaderboard?: UserStatsResponseDto;
+
+    @ApiProperty({
+        description: 'Organization information',
+        type: OrgInfo,
+        required: false,
+    })
+    organization?: OrgInfo;
+
+    @ApiProperty({
+        description: 'Branch information',
+        type: BranchInfo,
+        required: false,
+    })
+    branch?: BranchInfo;
 }
 
 export class StandardApiResponse<T = any> {

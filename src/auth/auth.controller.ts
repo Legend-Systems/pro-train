@@ -1150,7 +1150,9 @@ export class AuthController {
         },
     })
     @ApiBearerAuth()
-    getTokenInfo(@Request() req: { user: any }): StandardApiResponse<any> {
+    async getTokenInfo(
+        @Request() req: { user: any },
+    ): Promise<StandardApiResponse<any>> {
         this.logger.log('Token information retrieval request received');
         return this.authService.getTokenInfo(req.user);
     }

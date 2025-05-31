@@ -9,6 +9,7 @@ import {
     Logger,
     BadRequestException,
     ConflictException,
+    Patch,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -25,6 +26,7 @@ import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { StandardApiResponse } from './dto/common-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { AssignOrgBranchDto } from './dto/assign-org-branch.dto';
 
 @ApiTags('👤 User & Profile Management')
 @Controller('user')
@@ -584,6 +586,151 @@ export class UserController {
         } catch (error) {
             this.logger.error(
                 `Error changing password for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch('assign-organization')
+    @ApiOperation({
+        summary: '🏢 Assign Organization and Branch to User',
+        description: `
+      **Assigns an organization and branch to a user**
+      
+      This endpoint allows administrators to assign an organization and branch to a user.
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Only administrators can assign organizations
+      
+      **Use Cases:**
+      - User assignment to a new organization
+      - User assignment to a new branch
+    `,
+        operationId: 'assignOrganizationToUser',
+    })
+    @ApiBody({
+        type: AssignOrgBranchDto,
+        description: 'Organization and branch assignment data',
+        examples: {
+            'assign-organization': {
+                summary: '🏢 Assign Organization and Branch',
+                description: 'Assign an organization and branch to a user',
+                value: {
+                    orgId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                    branchId: 'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Organization and branch assigned successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Organization and branch assigned successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Updated user profile data',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                            description: 'User unique identifier',
+                        },
+                        organization: {
+                            type: 'string',
+                            example: 'Example Organization',
+                            description: 'Assigned organization',
+                        },
+                        branch: {
+                            type: 'string',
+                            example: 'Example Branch',
+                            description: 'Assigned branch',
+                        },
+                        updatedAt: {
+                            type: 'string',
+                            example: '2024-01-15T10:45:30.567Z',
+                            description: 'Profile update timestamp',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid input data',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'string',
+                    example: 'Invalid input data',
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    async assignOrganization(
+        @Request() req: AuthenticatedRequest,
+        @Body() assignOrgBranchDto: AssignOrgBranchDto,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(`Assigning organization to user: ${req.user.id}`);
+
+            const updatedUser = await this.userService.assignOrgAndBranch(
+                req.user.id,
+                assignOrgBranchDto.orgId,
+                assignOrgBranchDto.branchId,
+            );
+
+            if (!updatedUser) {
+                this.logger.error(
+                    `Failed to assign organization to user: ${req.user.id}`,
+                );
+                return {
+                    success: false,
+                    message: 'Failed to assign organization',
+                    data: null,
+                };
+            }
+
+            this.logger.log(
+                `Organization assigned successfully to user: ${req.user.id}`,
+            );
+
+            return {
+                success: true,
+                message: 'Organization assigned successfully',
+                data: updatedUser,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error assigning organization to user ${req.user.id}:`,
                 error,
             );
             throw error;

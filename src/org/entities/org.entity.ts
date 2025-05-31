@@ -76,6 +76,14 @@ export class Organization {
     @IsUrl({}, { message: 'Website must be a valid URL' })
     website?: string;
 
+    @Column({ nullable: false, unique: true })
+    @ApiProperty({
+        description: 'Organization email',
+        example: 'info@acmecorp.com',
+        required: false,
+    })
+    email?: string;
+
     @OneToMany(() => Branch, branch => branch.organization)
     @ApiProperty({
         description: 'Organization branches',
