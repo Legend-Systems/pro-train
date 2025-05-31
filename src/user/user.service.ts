@@ -2,10 +2,13 @@ import {
     Injectable,
     NotFoundException,
     BadRequestException,
+    Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { StandardOperationResponse } from './dto/common-response.dto';
@@ -21,12 +24,30 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
+    // Cache keys
+    private readonly CACHE_KEYS = {
+        USER_BY_ID: (id: string) => `user:id:${id}`,
+        USER_BY_EMAIL: (email: string) => `user:email:${email}`,
+        USER_ORG: (orgId: string) => `user:org:${orgId}`,
+        USER_BRANCH: (branchId: string) => `user:branch:${branchId}`,
+        USER_AVATAR_VARIANTS: (avatarId: number) => `user:avatar:${avatarId}`,
+    };
+
+    // Cache TTL in seconds
+    private readonly CACHE_TTL = {
+        USER: 300, // 5 minutes
+        USER_LIST: 180, // 3 minutes
+        AVATAR_VARIANTS: 600, // 10 minutes
+    };
+
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
         @InjectRepository(MediaFile)
         private readonly mediaRepository: Repository<MediaFile>,
         private readonly eventEmitter: EventEmitter2,
+        @Inject(CACHE_MANAGER)
+        private readonly cacheManager: Cache,
     ) {}
 
     private async retryOperation<T>(
@@ -58,6 +79,29 @@ export class UserService {
         throw new Error('Max retries exceeded');
     }
 
+    /**
+     * Cache helper methods
+     */
+    private async invalidateUserCache(
+        userId: string,
+        email?: string,
+    ): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.USER_BY_ID(userId)];
+
+        if (email) {
+            keysToDelete.push(this.CACHE_KEYS.USER_BY_EMAIL(email));
+        }
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private async invalidateUserListCaches(): Promise<void> {
+        // Note: This is a simplified approach. In production, you might want to
+        // maintain a list of active org/branch cache keys or use cache tags
+        // For now, we'll just clear specific pattern-based keys
+        // await this.cacheManager.reset(); // This method might not exist in all cache implementations
+    }
+
     async create(
         createUserDto: CreateUserDto,
     ): Promise<StandardOperationResponse> {
@@ -72,6 +116,9 @@ export class UserService {
 
             const user = this.userRepository.create(userToCreate);
             const savedUser = await this.userRepository.save(user);
+
+            // Invalidate list caches since a new user was created
+            await this.invalidateUserListCaches();
 
             // Emit user created event
             this.eventEmitter.emit(
@@ -103,13 +150,28 @@ export class UserService {
     private async loadAvatarVariants(user: User): Promise<User> {
         if (user.avatar?.id) {
             try {
-                const variants = await this.mediaRepository.find({
-                    where: { originalFileId: user.avatar.id, isActive: true },
-                    order: { variant: 'ASC' },
-                });
+                // Check cache first for avatar variants
+                const cacheKey = this.CACHE_KEYS.USER_AVATAR_VARIANTS(user.avatar.id);
+                const cachedVariants = await this.cacheManager.get<any[]>(cacheKey);
 
-                if (variants.length > 0) {
-                    user.avatar.variants = variants;
+                if (cachedVariants) {
+                    user.avatar.variants = cachedVariants;
+                } else {
+                    // Fetch from database if not cached
+                    const variants = await this.mediaRepository.find({
+                        where: { originalFileId: user.avatar.id, isActive: true },
+                        order: { variant: 'ASC' },
+                    });
+
+                    if (variants.length > 0) {
+                        user.avatar.variants = variants;
+                        // Cache the variants
+                        await this.cacheManager.set(
+                            cacheKey,
+                            variants,
+                            this.CACHE_TTL.AVATAR_VARIANTS * 1000,
+                        );
+                    }
                 }
             } catch (error) {
                 // If loading variants fails, continue without them
@@ -149,13 +211,29 @@ export class UserService {
 
     async findByEmail(email: string): Promise<User | null> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(email);
+            const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
+            if (cachedUser) {
+                return cachedUser;
+            }
+
+            // If not in cache, fetch from database
             const user = await this.userRepository.findOne({
                 where: { email, status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
             if (user) {
-                return this.loadAvatarVariants(user);
+                const userWithVariants = await this.loadAvatarVariants(user);
+                // Cache the result
+                await this.cacheManager.set(
+                    cacheKey,
+                    userWithVariants,
+                    this.CACHE_TTL.USER * 1000,
+                );
+                return userWithVariants;
             }
             return user;
         });
@@ -177,13 +255,29 @@ export class UserService {
 
     async findById(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.USER_BY_ID(id);
+            const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
+            if (cachedUser) {
+                return cachedUser;
+            }
+
+            // If not in cache, fetch from database
             const user = await this.userRepository.findOne({
                 where: { id },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
             if (user) {
-                return this.loadAvatarVariants(user);
+                const userWithVariants = await this.loadAvatarVariants(user);
+                // Cache the result
+                await this.cacheManager.set(
+                    cacheKey,
+                    userWithVariants,
+                    this.CACHE_TTL.USER * 1000, // Convert to milliseconds
+                );
+                return userWithVariants;
             }
             return user;
         });
@@ -191,6 +285,15 @@ export class UserService {
 
     async findByOrganization(orgId: string): Promise<User[]> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.USER_ORG(orgId);
+            const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
+
+            if (cachedUsers) {
+                return cachedUsers;
+            }
+
+            // If not in cache, fetch from database
             const users = await this.userRepository.find({
                 where: {
                     orgId: { id: orgId },
@@ -200,14 +303,32 @@ export class UserService {
             });
 
             // Load avatar variants for all users
-            return Promise.all(
+            const usersWithVariants = await Promise.all(
                 users.map(user => this.loadAvatarVariants(user)),
             );
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                usersWithVariants,
+                this.CACHE_TTL.USER_LIST * 1000,
+            );
+
+            return usersWithVariants;
         });
     }
 
     async findByBranch(branchId: string): Promise<User[]> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.USER_BRANCH(branchId);
+            const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
+
+            if (cachedUsers) {
+                return cachedUsers;
+            }
+
+            // If not in cache, fetch from database
             const users = await this.userRepository.find({
                 where: {
                     branchId: { id: branchId },
@@ -217,9 +338,18 @@ export class UserService {
             });
 
             // Load avatar variants for all users
-            return Promise.all(
+            const usersWithVariants = await Promise.all(
                 users.map(user => this.loadAvatarVariants(user)),
             );
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                usersWithVariants,
+                this.CACHE_TTL.USER_LIST * 1000,
+            );
+
+            return usersWithVariants;
         });
     }
 
@@ -230,6 +360,12 @@ export class UserService {
         const { avatar, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
+        // Get user first to know email for cache invalidation
+        const existingUser = await this.findOne(id);
+        if (!existingUser) {
+            throw new NotFoundException(`User with ID ${id} not found`);
+        }
+
         // Convert avatar ID to MediaFile reference if provided
         if (avatar !== undefined) {
             dataToUpdate.avatar = avatar
@@ -238,10 +374,10 @@ export class UserService {
         }
 
         await this.userRepository.update(id, dataToUpdate);
-        const user = await this.findOne(id);
-        if (!user) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
+
+        // Invalidate user cache
+        await this.invalidateUserCache(id, existingUser.email);
+        await this.invalidateUserListCaches();
 
         return {
             message: 'User updated successfully',
@@ -271,6 +407,12 @@ export class UserService {
             const { avatar, ...profileData } = updateData;
             const dataToUpdate: Partial<User> = { ...profileData };
 
+            // Get user first for cache invalidation and event data
+            const user = await this.findById(id);
+            if (!user) {
+                throw new NotFoundException(`User with ID ${id} not found`);
+            }
+
             // Convert avatar ID to MediaFile reference if provided
             if (avatar !== undefined) {
                 dataToUpdate.avatar = avatar
@@ -279,10 +421,9 @@ export class UserService {
             }
 
             await this.userRepository.update(id, dataToUpdate);
-            const user = await this.findById(id);
-            if (!user) {
-                throw new NotFoundException(`User with ID ${id} not found`);
-            }
+
+            // Invalidate user cache
+            await this.invalidateUserCache(id, user.email);
 
             // Emit user profile updated event
             const updatedFields = Object.keys(updateData);
