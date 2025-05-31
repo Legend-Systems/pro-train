@@ -32,6 +32,7 @@ import { CreateTrainingProgressDto } from './dto/create-training_progress.dto';
 import { UpdateTrainingProgressDto } from './dto/update-training_progress.dto';
 import { TrainingProgressResponseDto } from './dto/training-progress-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('📈 Training Progress & Learning Analytics')
 @Controller('training-progress')
@@ -187,6 +188,8 @@ export class TrainingProgressController {
         @Param('userId') userId: string,
         @Query('courseId', new ParseIntPipe({ optional: true }))
         courseId?: number,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        @OrgBranchScope() _scope?: OrgBranchScope,
     ): Promise<TrainingProgressResponseDto[]> {
         this.logger.log(
             `Getting progress for user: ${userId}, course: ${courseId || 'all'}`,
@@ -315,6 +318,7 @@ export class TrainingProgressController {
             testId?: number;
             updateData?: Partial<CreateTrainingProgressDto>;
         },
+        @OrgBranchScope() _scope: OrgBranchScope,
     ): Promise<TrainingProgressResponseDto> {
         this.logger.log(
             `Updating progress for user: ${body.userId}, course: ${body.courseId}`,
@@ -385,6 +389,7 @@ export class TrainingProgressController {
     async getCourseProgress(
         @Param('courseId', ParseIntPipe) courseId: number,
         @Query('userId') userId?: string,
+        @OrgBranchScope() _scope?: OrgBranchScope,
     ): Promise<TrainingProgressResponseDto[]> {
         this.logger.log(
             `Getting course progress for course: ${courseId}, user: ${userId || 'all'}`,
@@ -490,6 +495,7 @@ export class TrainingProgressController {
     async calculateCompletion(
         @Param('userId') userId: string,
         @Param('courseId', ParseIntPipe) courseId: number,
+        @OrgBranchScope() _scope: OrgBranchScope,
     ): Promise<{ overallCompletion: number; testCompletions: any[] }> {
         this.logger.log(
             `Calculating completion for user: ${userId}, course: ${courseId}`,
@@ -595,6 +601,7 @@ export class TrainingProgressController {
         @Param('userId') userId: string,
         @Query('courseId', new ParseIntPipe({ optional: true }))
         courseId?: number,
+        @OrgBranchScope() _scope?: OrgBranchScope,
     ): Promise<{
         totalTimeSpent: number;
         totalQuestionsCompleted: number;
@@ -662,6 +669,7 @@ export class TrainingProgressController {
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() _scope: OrgBranchScope,
     ): Promise<TrainingProgressResponseDto> {
         this.logger.log(`Getting progress record: ${id}`);
         return this.trainingProgressService.findOne(id);
@@ -746,6 +754,7 @@ export class TrainingProgressController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateTrainingProgressDto: UpdateTrainingProgressDto,
+        @OrgBranchScope() _scope: OrgBranchScope,
     ): Promise<TrainingProgressResponseDto> {
         this.logger.log(`Updating progress record: ${id}`);
         return this.trainingProgressService.update(
@@ -816,7 +825,10 @@ export class TrainingProgressController {
         description:
             '🚷 Forbidden - Insufficient permissions to delete this record',
     })
-    async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    async remove(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() _scope: OrgBranchScope,
+    ): Promise<void> {
         this.logger.log(`Deleting progress record: ${id}`);
         return this.trainingProgressService.remove(id);
     }

@@ -8,6 +8,7 @@ import {
     ParseUUIDPipe,
     Query,
     Logger,
+    Req,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -21,6 +22,8 @@ import {
     ApiSecurity,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { CourseReportsService } from './services/course-reports.service';
 import { UserReportsService } from './services/user-reports.service';
 import { TestReportsService } from './services/test-reports.service';
@@ -255,6 +258,8 @@ export class ReportsController {
     })
     async getCourseAnalytics(
         @Param('courseId', ParseIntPipe) courseId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse<CourseAnalyticsResponseDto>> {
         try {
             this.logger.log(
@@ -262,7 +267,7 @@ export class ReportsController {
             );
 
             const analytics =
-                await this.courseReportsService.getCourseAnalytics(courseId);
+                await this.courseReportsService.getCourseAnalytics(courseId, scope, req.user.id);
 
             this.logger.log(
                 `Course analytics retrieved successfully for course: ${courseId}`,
@@ -709,6 +714,8 @@ export class ReportsController {
     })
     async getUserAnalytics(
         @Param('userId', ParseUUIDPipe) userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse<UserAnalyticsResponseDto>> {
         try {
             this.logger.log(`Retrieving user analytics for user: ${userId}`);
@@ -971,6 +978,8 @@ export class ReportsController {
     })
     async getTestAnalytics(
         @Param('testId', ParseIntPipe) testId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse<TestAnalyticsResponseDto>> {
         try {
             this.logger.log(`Retrieving test analytics for test: ${testId}`);

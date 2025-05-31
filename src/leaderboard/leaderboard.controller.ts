@@ -27,8 +27,7 @@ import {
 import { LeaderboardService } from './leaderboard.service';
 import { LeaderboardResponseDto } from './dto/leaderboard-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { GetUser } from '../auth/decorators/get-user.decorator';
-import { User } from '../user/entities/user.entity';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('🏆 Leaderboards & Competition Rankings')
 @Controller('leaderboards')
@@ -217,22 +216,24 @@ export class LeaderboardController {
         @Param('courseId', ParseIntPipe) courseId: number,
         @Query('page') page: number = 1,
         @Query('limit') limit: number = 10,
+        @OrgBranchScope() scope: OrgBranchScope,
     ) {
         this.logger.log(
-            `Getting leaderboard for course: ${courseId}, page: ${page}`,
+            `Getting leaderboard for course: ${courseId}, page: ${page}, limit: ${limit}, user: ${scope.userId}`,
         );
 
         if (!courseId || courseId <= 0) {
             throw new BadRequestException('Invalid course ID');
         }
 
-        const pageNum = Math.max(1, Number(page) || 1);
-        const limitNum = Math.min(100, Math.max(1, Number(limit) || 10));
+        if (limit > 100) {
+            limit = 100;
+        }
 
         return this.leaderboardService.getCourseLeaderboard(
             courseId,
-            pageNum,
-            limitNum,
+            page,
+            limit,
         );
     }
 
@@ -368,17 +369,17 @@ export class LeaderboardController {
     })
     async getUserRank(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<LeaderboardResponseDto | null> {
         this.logger.log(
-            `Getting rank for user: ${user.id} in course: ${courseId}`,
+            `Getting user rank for course: ${courseId}, user: ${scope.userId}`,
         );
 
         if (!courseId || courseId <= 0) {
             throw new BadRequestException('Invalid course ID');
         }
 
-        return this.leaderboardService.getUserRank(courseId, user.id);
+        return this.leaderboardService.getUserRank(courseId, scope.userId);
     }
 
     @Post('refresh/:courseId')
@@ -486,10 +487,10 @@ export class LeaderboardController {
     })
     async refreshLeaderboard(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<{ message: string }> {
         this.logger.log(
-            `Refreshing leaderboard for course: ${courseId} by user: ${user.id}`,
+            `Refreshing leaderboard for course: ${courseId} by user: ${scope.userId}`,
         );
 
         if (!courseId || courseId <= 0) {
@@ -497,7 +498,6 @@ export class LeaderboardController {
         }
 
         await this.leaderboardService.updateLeaderboard(courseId);
-
         return { message: 'Leaderboard refreshed successfully' };
     }
 }

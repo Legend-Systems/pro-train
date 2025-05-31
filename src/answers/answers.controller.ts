@@ -6,7 +6,6 @@ import {
     Put,
     Param,
     UseGuards,
-    Req,
     HttpStatus,
     ParseIntPipe,
 } from '@nestjs/common';
@@ -25,7 +24,7 @@ import { MarkAnswerDto } from './dto/mark-answer.dto';
 import { BulkAnswersDto } from './dto/bulk-answers.dto';
 import { AnswerResponseDto } from './dto/answer-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('✍️ Answers')
 @Controller('answers')
@@ -111,9 +110,9 @@ export class AnswersController {
     })
     async create(
         @Body() createAnswerDto: CreateAnswerDto,
-        @Req() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto> {
-        return this.answersService.create(createAnswerDto, req.user.id);
+        return this.answersService.create(createAnswerDto, scope.userId);
     }
 
     @Post('bulk')
@@ -154,9 +153,9 @@ export class AnswersController {
     })
     async bulkCreate(
         @Body() bulkAnswersDto: BulkAnswersDto,
-        @Req() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto[]> {
-        return this.answersService.bulkCreate(bulkAnswersDto, req.user.id);
+        return this.answersService.bulkCreate(bulkAnswersDto, scope.userId);
     }
 
     @Get('attempt/:attemptId')
@@ -207,9 +206,9 @@ export class AnswersController {
     })
     async getAnswersForAttempt(
         @Param('attemptId', ParseIntPipe) attemptId: number,
-        @Req() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto[]> {
-        return this.answersService.findByAttempt(attemptId, req.user.id);
+        return this.answersService.findByAttempt(attemptId, scope.userId);
     }
 
     @Put(':id')
@@ -281,9 +280,9 @@ export class AnswersController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateAnswerDto: UpdateAnswerDto,
-        @Req() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto> {
-        return this.answersService.update(id, updateAnswerDto, req.user.id);
+        return this.answersService.update(id, updateAnswerDto, scope.userId);
     }
 
     @Post(':id/mark')
@@ -339,9 +338,9 @@ export class AnswersController {
     async markAnswer(
         @Param('id', ParseIntPipe) id: number,
         @Body() markAnswerDto: MarkAnswerDto,
-        @Req() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto> {
-        return this.answersService.markAnswer(id, markAnswerDto, req.user.id);
+        return this.answersService.markAnswer(id, markAnswerDto, scope.userId);
     }
 
     @Post('auto-mark/:attemptId')

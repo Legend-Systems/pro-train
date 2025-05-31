@@ -7,6 +7,7 @@ import { Course } from '../../course/entities/course.entity';
 import { Test } from '../../test/entities/test.entity';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
 import { User } from '../../user/entities/user.entity';
+import { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
 import {
     CourseAnalyticsResponseDto,
     CourseStatsDto,
@@ -30,8 +31,13 @@ export class CourseReportsService {
 
     async getCourseAnalytics(
         courseId: number,
+        scope?: OrgBranchScope,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        userId?: string,
     ): Promise<CourseAnalyticsResponseDto> {
-        const cacheKey = `course_analytics_${courseId}`;
+        // TODO: Implement org/branch scoping validation here in the future
+        // For now, we'll use the courseId as provided
+        const cacheKey = `course_analytics_${courseId}_${scope?.orgId || 'global'}_${scope?.branchId || 'global'}`;
 
         // Try to get from cache first
         const cachedData =
@@ -81,7 +87,7 @@ export class CourseReportsService {
             .where('t.courseId = :courseId', { courseId })
             .select('COUNT(DISTINCT ta.userId)', 'count')
             .getRawOne()
-            .then(result => parseInt(result.count) || 0);
+            .then((result: { count: string } | undefined) => parseInt(result?.count || '0') || 0);
 
         // Get completion rate (students who completed all tests vs total enrolled)
         const totalTests = course.tests?.length || 0;

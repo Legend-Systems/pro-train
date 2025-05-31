@@ -31,8 +31,7 @@ import { ResultAnalyticsDto } from './dto/result-analytics.dto';
 import { ResultListResponseDto } from './dto/result-list-response.dto';
 import { ResultDetailDto } from './dto/result-detail.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { GetUser } from '../auth/decorators/get-user.decorator';
-import { User } from '../user/entities/user.entity';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('📊 Results & Performance Analytics')
 @Controller('results')
@@ -174,10 +173,10 @@ export class ResultsController {
     })
     async createFromAttempt(
         @Param('attemptId', ParseIntPipe) attemptId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultResponseDto> {
         this.logger.log(
-            `Creating result from attempt: ${attemptId} by user: ${user.id}`,
+            `Creating result from attempt: ${attemptId} by user: ${scope.userId}`,
         );
 
         if (!attemptId || attemptId <= 0) {
@@ -326,11 +325,11 @@ export class ResultsController {
         description: '🚫 Unauthorized - Invalid or missing JWT token',
     })
     async getMyResults(
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Query() filterDto: ResultFilterDto,
     ) {
-        this.logger.log(`Getting results for user: ${user.id}`);
-        return this.resultsService.findUserResults(user.id, filterDto);
+        this.logger.log(`Getting results for user: ${scope.userId}`);
+        return this.resultsService.findUserResults(scope.userId, filterDto);
     }
 
     @Get('test/:testId')
@@ -402,18 +401,22 @@ export class ResultsController {
     })
     async getTestResults(
         @Param('testId', ParseIntPipe) testId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Query() filterDto: ResultFilterDto,
     ) {
         this.logger.log(
-            `Getting test results for test: ${testId} by user: ${user.id}`,
+            `Getting test results for test: ${testId} by user: ${scope.userId}`,
         );
 
         if (!testId || testId <= 0) {
             throw new BadRequestException('Invalid test ID');
         }
 
-        return this.resultsService.findTestResults(testId, user.id, filterDto);
+        return this.resultsService.findTestResults(
+            testId,
+            scope.userId,
+            filterDto,
+        );
     }
 
     @Get('course/:courseId')
@@ -475,11 +478,11 @@ export class ResultsController {
     })
     async getCourseResults(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Query() filterDto: ResultFilterDto,
     ) {
         this.logger.log(
-            `Getting course results for course: ${courseId} by user: ${user.id}`,
+            `Getting course results for course: ${courseId} by user: ${scope.userId}`,
         );
 
         if (!courseId || courseId <= 0) {
@@ -488,7 +491,7 @@ export class ResultsController {
 
         return this.resultsService.findCourseResults(
             courseId,
-            user.id,
+            scope.userId,
             filterDto,
         );
     }
@@ -580,12 +583,12 @@ export class ResultsController {
     })
     async getTestAnalytics(
         @Param('testId', ParseIntPipe) testId: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultAnalyticsDto> {
         this.logger.log(
-            `Getting analytics for test: ${testId} by user: ${user.id}`,
+            `Getting analytics for test: ${testId} by user: ${scope.userId}`,
         );
-        return this.resultsService.getTestAnalytics(testId, user.id);
+        return this.resultsService.getTestAnalytics(testId, scope.userId);
     }
 
     @Get(':id')
@@ -650,10 +653,10 @@ export class ResultsController {
     })
     async getResult(
         @Param('id', ParseIntPipe) id: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultResponseDto> {
-        this.logger.log(`Getting result: ${id} for user: ${user.id}`);
-        return this.resultsService.findOne(id, user.id);
+        this.logger.log(`Getting result: ${id} for user: ${scope.userId}`);
+        return this.resultsService.findOne(id, scope.userId);
     }
 
     @Post(':id/recalculate')
@@ -739,9 +742,9 @@ export class ResultsController {
     })
     async recalculateResult(
         @Param('id', ParseIntPipe) id: number,
-        @GetUser() user: User,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultResponseDto> {
-        this.logger.log(`Recalculating result: ${id} by user: ${user.id}`);
-        return this.resultsService.recalculateResult(id, user.id);
+        this.logger.log(`Recalculating result: ${id} by user: ${scope.userId}`);
+        return this.resultsService.recalculateResult(id, scope.userId);
     }
 }
