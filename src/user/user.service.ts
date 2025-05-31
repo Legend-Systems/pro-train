@@ -66,9 +66,6 @@ export class UserService {
                         error.message.includes('connect ETIMEDOUT'));
 
                 if (isConnectionError && attempt < maxRetries) {
-                    console.log(
-                        `Database connection error on attempt ${attempt}, retrying in ${delay}ms...`,
-                    );
                     await new Promise(resolve => setTimeout(resolve, delay));
                     delay *= 2; // Exponential backoff
                     continue;
@@ -151,15 +148,21 @@ export class UserService {
         if (user.avatar?.id) {
             try {
                 // Check cache first for avatar variants
-                const cacheKey = this.CACHE_KEYS.USER_AVATAR_VARIANTS(user.avatar.id);
-                const cachedVariants = await this.cacheManager.get<any[]>(cacheKey);
+                const cacheKey = this.CACHE_KEYS.USER_AVATAR_VARIANTS(
+                    user.avatar.id,
+                );
+                const cachedVariants =
+                    await this.cacheManager.get<any[]>(cacheKey);
 
                 if (cachedVariants) {
                     user.avatar.variants = cachedVariants;
                 } else {
                     // Fetch from database if not cached
                     const variants = await this.mediaRepository.find({
-                        where: { originalFileId: user.avatar.id, isActive: true },
+                        where: {
+                            originalFileId: user.avatar.id,
+                            isActive: true,
+                        },
                         order: { variant: 'ASC' },
                     });
 
@@ -174,7 +177,6 @@ export class UserService {
                     }
                 }
             } catch (error) {
-                // If loading variants fails, continue without them
                 console.warn('Failed to load avatar variants:', error);
             }
         }
