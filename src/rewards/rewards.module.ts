@@ -3,7 +3,7 @@ import { RewardsService } from './rewards.service';
 import { RewardsController } from './rewards.controller';
 
 @Module({
-  controllers: [RewardsController],
-  providers: [RewardsService],
+    controllers: [RewardsController],
+    providers: [RewardsService],
 })
 export class RewardsModule {}

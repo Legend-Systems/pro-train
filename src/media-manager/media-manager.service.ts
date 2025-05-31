@@ -159,10 +159,13 @@ export class MediaManagerService {
             // Upload original file to GCS
             const originalFile = await this.uploadToGCS(file, filename);
 
+            // Extract variants from uploadDto to avoid type conflicts
+            const { variants, ...uploadDataForDb } = uploadDto;
+
             // Save to database
             const savedFile = await this.saveToDatabase({
                 ...originalFile,
-                ...uploadDto,
+                ...uploadDataForDb,
                 type: mediaType,
                 variant: ImageVariant.ORIGINAL,
                 uploadedBy: scope.userId,
@@ -181,13 +184,13 @@ export class MediaManagerService {
                 mediaType === MediaType.IMAGE &&
                 uploadDto.generateThumbnails !== false
             ) {
-                const variants = await this.generateImageVariants(
+                const imageVariants = await this.generateImageVariants(
                     file,
                     savedFile,
-                    uploadDto.variants || [ImageVariant.THUMBNAIL],
+                    variants || [ImageVariant.THUMBNAIL],
                     scope,
                 );
-                response.variants = variants;
+                response.variants = imageVariants;
             }
 
             this.logger.log(`File uploaded successfully: ${savedFile.id}`);

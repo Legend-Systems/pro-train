@@ -104,31 +104,100 @@ export class MediaManagerController {
     })
     @ApiConsumes('multipart/form-data')
     @ApiBody({
-        description: 'File upload with metadata',
+        type: UploadFileDto,
+        description:
+            'File upload with comprehensive metadata and processing options',
+        examples: {
+            'image-with-thumbnails': {
+                summary: '🖼️ Image Upload with Thumbnails',
+                description:
+                    'Upload an image file with automatic thumbnail generation',
+                value: {
+                    file: '[binary image data]',
+                    altText:
+                        'Computer Science course introduction showing programming fundamentals',
+                    description:
+                        'Comprehensive introduction image for CS101 course covering basic programming concepts',
+                    generateThumbnails: true,
+                    variants: ['thumbnail', 'medium'],
+                },
+            },
+            'document-upload': {
+                summary: '📄 Document Upload',
+                description: 'Upload a PDF document for course materials',
+                value: {
+                    file: '[binary PDF data]',
+                    description:
+                        'Course syllabus and curriculum overview for Computer Science fundamentals',
+                    type: 'document',
+                    generateThumbnails: false,
+                },
+            },
+            'video-content': {
+                summary: '🎥 Video Upload',
+                description: 'Upload video content for online learning',
+                value: {
+                    file: '[binary video data]',
+                    altText:
+                        'Course lecture video on advanced programming concepts',
+                    description:
+                        'Detailed lecture covering object-oriented programming principles and best practices',
+                    type: 'video',
+                    generateThumbnails: false,
+                },
+            },
+            'profile-picture': {
+                summary: '👤 Profile Picture Upload',
+                description: 'Upload user profile picture with variants',
+                value: {
+                    file: '[binary image data]',
+                    altText: 'User profile picture',
+                    description: 'Professional headshot for user profile',
+                    generateThumbnails: true,
+                    variants: ['thumbnail', 'medium', 'large'],
+                },
+            },
+        },
         schema: {
             type: 'object',
             properties: {
                 file: {
                     type: 'string',
                     format: 'binary',
-                    description: 'File to upload (max 50MB)',
+                    description:
+                        'File to upload (max 50MB). Supports images, documents, videos, and audio files.',
                 },
                 altText: {
                     type: 'string',
-                    description: 'Alternative text for images (accessibility)',
-                    example: 'Course introduction illustration',
+                    description:
+                        'Alternative text for images to improve accessibility and SEO compliance',
+                    example:
+                        'Computer Science course introduction showing programming fundamentals',
                     maxLength: 255,
+                    minLength: 3,
                 },
                 description: {
                     type: 'string',
-                    description: 'File description or caption',
-                    example: 'Introduction image for Computer Science course',
+                    description:
+                        'Detailed description for content management and search optimization',
+                    example:
+                        'Comprehensive introduction image for CS101 course covering basic programming concepts',
                     maxLength: 1000,
+                    minLength: 5,
+                },
+                type: {
+                    type: 'string',
+                    enum: ['image', 'document', 'video', 'audio', 'other'],
+                    description:
+                        'Media type classification (auto-detected if not specified)',
+                    example: 'image',
                 },
                 generateThumbnails: {
                     type: 'boolean',
-                    description: 'Generate thumbnails for images',
+                    description:
+                        'Enable automatic thumbnail generation for images',
                     default: true,
+                    example: true,
                 },
                 variants: {
                     type: 'array',
@@ -136,7 +205,8 @@ export class MediaManagerController {
                         type: 'string',
                         enum: ['thumbnail', 'medium', 'large'],
                     },
-                    description: 'Image variants to generate',
+                    description:
+                        'Specific image variants to generate for different display contexts',
                     example: ['thumbnail', 'medium'],
                 },
             },
@@ -145,8 +215,92 @@ export class MediaManagerController {
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
-        description: '✅ File uploaded successfully',
-        type: UploadResponseDto,
+        description: '✅ File uploaded successfully with variants generated',
+        schema: {
+            type: 'object',
+            properties: {
+                file: {
+                    type: 'object',
+                    description: 'Main uploaded file information',
+                    properties: {
+                        id: { type: 'number', example: 1 },
+                        originalName: {
+                            type: 'string',
+                            example: 'course-introduction.jpg',
+                        },
+                        filename: {
+                            type: 'string',
+                            example:
+                                'media/org-123/2024/01/15/a1b2c3d4-course-introduction.jpg',
+                        },
+                        url: {
+                            type: 'string',
+                            example:
+                                'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction.jpg',
+                        },
+                        mimeType: { type: 'string', example: 'image/jpeg' },
+                        size: { type: 'number', example: 2048576 },
+                        type: { type: 'string', example: 'image' },
+                        variant: { type: 'string', example: 'original' },
+                        width: { type: 'number', example: 1920 },
+                        height: { type: 'number', example: 1080 },
+                        altText: {
+                            type: 'string',
+                            example: 'Computer Science course introduction',
+                        },
+                        description: {
+                            type: 'string',
+                            example: 'Introduction image for CS fundamentals',
+                        },
+                        uploadedBy: {
+                            type: 'string',
+                            example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                        },
+                        createdAt: {
+                            type: 'string',
+                            example: '2024-01-15T10:30:45.123Z',
+                        },
+                    },
+                },
+                variants: {
+                    type: 'array',
+                    description: 'Generated image variants',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'number', example: 2 },
+                            variant: { type: 'string', example: 'thumbnail' },
+                            width: { type: 'number', example: 150 },
+                            height: { type: 'number', example: 150 },
+                            size: { type: 'number', example: 15000 },
+                            url: {
+                                type: 'string',
+                                example:
+                                    'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
+                            },
+                        },
+                    },
+                    example: [
+                        {
+                            id: 2,
+                            variant: 'thumbnail',
+                            width: 150,
+                            height: 150,
+                            size: 15000,
+                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
+                        },
+                        {
+                            id: 3,
+                            variant: 'medium',
+                            width: 500,
+                            height: 500,
+                            size: 85000,
+                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-medium.jpg',
+                        },
+                    ],
+                },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,

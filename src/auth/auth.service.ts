@@ -34,6 +34,10 @@ import {
 } from '../communications/services/email-queue.service';
 import { EmailType } from '../communications/entities/communication.entity';
 import { ConfigService } from '@nestjs/config';
+import {
+    ImageVariant,
+    MediaFile,
+} from '../media-manager/entities/media-manager.entity';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +51,45 @@ export class AuthService {
         private readonly emailQueueService: EmailQueueService,
         private readonly configService: ConfigService,
     ) {}
+
+    /**
+     * Transform MediaFile avatar to response format with variants
+     */
+    private transformAvatarForResponse(avatar?: MediaFile):
+        | {
+              id: number;
+              originalName?: string;
+              url?: string;
+              thumbnail?: string;
+              medium?: string;
+              original?: string;
+          }
+        | undefined {
+        if (!avatar) return undefined;
+
+        // Base response with original file data
+        const response = {
+            id: avatar.id,
+            originalName: avatar.originalName,
+            url: avatar.url,
+            original: avatar.url,
+            thumbnail: avatar.url, // fallback to original if no thumbnail
+            medium: avatar.url, // fallback to original if no medium
+        };
+
+        // If variants are loaded, use them to populate specific URLs
+        if (avatar.variants && avatar.variants.length > 0) {
+            avatar.variants.forEach(variant => {
+                if (variant.variant === ImageVariant.THUMBNAIL) {
+                    response.thumbnail = variant.url;
+                } else if (variant.variant === ImageVariant.MEDIUM) {
+                    response.medium = variant.url;
+                }
+            });
+        }
+
+        return response;
+    }
 
     async signUp(
         createUserDto: CreateUserDto,
@@ -67,7 +110,11 @@ export class AuthService {
         }
 
         // Validate invitation token if provided
-        let invitationData: any = null;
+        let invitationData: {
+            organizationId?: string;
+            branchId?: string;
+            email?: string;
+        } | null = null;
         if (invitationToken) {
             const tokenValidation =
                 this.tokenManagerService.validateInvitationToken(
@@ -86,7 +133,11 @@ export class AuthService {
                 );
             }
 
-            invitationData = tokenValidation.data;
+            invitationData = tokenValidation.data as {
+                organizationId?: string;
+                branchId?: string;
+                email?: string;
+            };
         }
 
         // Hash password
@@ -135,7 +186,7 @@ export class AuthService {
             email: updatedUser.email,
             firstName: updatedUser.firstName,
             lastName: updatedUser.lastName,
-            avatar: updatedUser.avatar,
+            avatar: this.transformAvatarForResponse(updatedUser.avatar),
             role: updatedUser.role,
             createdAt: updatedUser.createdAt,
             updatedAt: updatedUser.updatedAt,
@@ -209,7 +260,7 @@ export class AuthService {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            avatar: user.avatar,
+            avatar: this.transformAvatarForResponse(user.avatar),
             role: user.role,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
@@ -499,7 +550,7 @@ export class AuthService {
                     email: fullUser.email,
                     firstName: fullUser.firstName,
                     lastName: fullUser.lastName,
-                    avatar: fullUser.avatar,
+                    avatar: this.transformAvatarForResponse(fullUser.avatar),
                     orgId: fullUser.orgId?.id,
                     branchId: fullUser.branchId?.id,
                     createdAt: fullUser.createdAt,
@@ -744,9 +795,9 @@ export class AuthService {
     /**
      * Validate invitation token
      */
-    async validateInvitation(
+    validateInvitation(
         validateInvitationDto: ValidateInvitationDto,
-    ): Promise<StandardApiResponse<any>> {
+    ): StandardApiResponse<any> {
         const { token } = validateInvitationDto;
 
         const tokenValidation =

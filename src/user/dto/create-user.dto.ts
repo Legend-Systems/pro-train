@@ -4,6 +4,7 @@ import {
     MinLength,
     IsOptional,
     Matches,
+    IsNumber,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -75,16 +76,18 @@ export class CreateUserDto {
 
     @ApiProperty({
         description:
-            'Profile picture URL for user avatar display across the application',
-        example: 'https://cdn.example.com/profiles/john-doe-avatar.jpg',
+            'Profile picture ID from media library for user avatar display across the application',
+        example: 1,
         required: false,
-        type: String,
-        title: 'Avatar URL',
-        format: 'url',
+        type: Number,
+        title: 'Avatar Media ID',
     })
     @IsOptional()
-    @IsString({ message: 'Avatar must be a valid URL string' })
-    avatar?: string;
+    @IsNumber(
+        { allowNaN: false, allowInfinity: false },
+        { message: 'Avatar must be a valid media file ID' },
+    )
+    avatar?: number;
 
     @ApiProperty({
         description:

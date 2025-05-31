@@ -3,18 +3,18 @@ import { RewardsController } from './rewards.controller';
 import { RewardsService } from './rewards.service';
 
 describe('RewardsController', () => {
-  let controller: RewardsController;
+    let controller: RewardsController;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [RewardsController],
-      providers: [RewardsService],
-    }).compile();
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [RewardsController],
+            providers: [RewardsService],
+        }).compile();
 
-    controller = module.get<RewardsController>(RewardsController);
-  });
+        controller = module.get<RewardsController>(RewardsController);
+    });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
+    it('should be defined', () => {
+        expect(controller).toBeDefined();
+    });
 });

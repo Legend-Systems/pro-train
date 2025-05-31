@@ -91,11 +91,28 @@ export class UserResponseDto {
     lastName: string;
 
     @ApiProperty({
-        description: 'User avatar URL',
-        example: 'https://example.com/avatar.jpg',
+        description:
+            'User avatar image with variants (thumbnail, medium, original)',
+        example: {
+            id: 1,
+            originalName: 'avatar.jpg',
+            url: 'https://storage.googleapis.com/bucket/media/2024/01/15/uuid-avatar.jpg',
+            thumbnail:
+                'https://storage.googleapis.com/bucket/media/2024/01/15/thumbnail-uuid-avatar.jpg',
+            medium: 'https://storage.googleapis.com/bucket/media/2024/01/15/medium-uuid-avatar.jpg',
+            original:
+                'https://storage.googleapis.com/bucket/media/2024/01/15/original-uuid-avatar.jpg',
+        },
         required: false,
     })
-    avatar?: string;
+    avatar?: {
+        id: number;
+        originalName?: string;
+        url?: string;
+        thumbnail?: string;
+        medium?: string;
+        original?: string;
+    };
 
     @ApiProperty({
         description: 'User role in the system',

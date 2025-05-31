@@ -2,136 +2,227 @@ import { ApiProperty } from '@nestjs/swagger';
 import { User } from '../../user/entities/user.entity';
 import { MediaType, ImageVariant } from '../entities/media-manager.entity';
 
+/**
+ * Response DTO representing a complete media file with all associated metadata and processing information
+ * Used in all API responses that return file data, including upload confirmations and file listings
+ */
 export class MediaFileResponseDto {
     @ApiProperty({
-        description: 'Media file unique identifier',
+        description: 'Unique identifier for the media file in the database',
         example: 1,
+        type: Number,
+        title: 'File ID',
+        minimum: 1,
     })
     id: number;
 
     @ApiProperty({
-        description: 'Original filename as uploaded',
-        example: 'course-image.jpg',
+        description:
+            'Original filename as uploaded by the user, preserved for reference and display purposes',
+        example: 'course-introduction-image.jpg',
+        type: String,
+        title: 'Original Filename',
+        maxLength: 255,
     })
     originalName: string;
 
     @ApiProperty({
-        description: 'Stored filename in GCS',
-        example: 'media/2024/01/15/uuid-course-image.jpg',
+        description:
+            'Processed filename stored in Google Cloud Storage with organization, date, and UUID for uniqueness',
+        example:
+            'media/org-123/branch-456/2024/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
+        type: String,
+        title: 'Stored Filename',
+        maxLength: 500,
     })
     filename: string;
 
     @ApiProperty({
-        description: 'Full GCS URL for the file',
+        description:
+            'Full public URL for direct access to the file in Google Cloud Storage',
         example:
-            'https://storage.googleapis.com/bucket-name/media/2024/01/15/uuid-course-image.jpg',
+            'https://storage.googleapis.com/crmapplications/media/org-123/branch-456/2024/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
+        type: String,
+        title: 'File URL',
+        format: 'url',
     })
     url: string;
 
     @ApiProperty({
-        description: 'MIME type of the file',
+        description:
+            'MIME type of the file for proper browser handling and content type detection',
         example: 'image/jpeg',
+        type: String,
+        title: 'MIME Type',
+        pattern:
+            '^[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_.]*$',
     })
     mimeType: string;
 
     @ApiProperty({
-        description: 'File size in bytes',
+        description:
+            'File size in bytes for storage tracking and download estimates',
         example: 2048576,
+        type: Number,
+        title: 'File Size (bytes)',
+        minimum: 0,
+        maximum: 52428800, // 50MB
     })
     size: number;
 
     @ApiProperty({
-        description: 'Type of media file',
+        description:
+            'Categorized media type for organization and processing logic',
         enum: MediaType,
         example: MediaType.IMAGE,
+        type: String,
+        title: 'Media Type',
+        enumName: 'MediaType',
     })
     type: MediaType;
 
     @ApiProperty({
-        description: 'Image variant (for images only)',
+        description:
+            'Specific variant of the image for different display contexts and sizes',
         enum: ImageVariant,
         example: ImageVariant.ORIGINAL,
         required: false,
+        type: String,
+        title: 'Image Variant',
+        enumName: 'ImageVariant',
     })
     variant?: ImageVariant;
 
     @ApiProperty({
-        description: 'Reference to original file (for thumbnails/variants)',
+        description:
+            'Reference to the original file ID for image variants and thumbnails',
         example: 1,
         required: false,
+        type: Number,
+        title: 'Original File Reference',
+        minimum: 1,
     })
     originalFileId?: number;
 
     @ApiProperty({
-        description: 'Image width in pixels (for images)',
+        description:
+            'Image width in pixels for layout planning and responsive design',
         example: 1920,
         required: false,
+        type: Number,
+        title: 'Image Width (px)',
+        minimum: 1,
+        maximum: 10000,
     })
     width?: number;
 
     @ApiProperty({
-        description: 'Image height in pixels (for images)',
+        description:
+            'Image height in pixels for layout planning and responsive design',
         example: 1080,
         required: false,
+        type: Number,
+        title: 'Image Height (px)',
+        minimum: 1,
+        maximum: 10000,
     })
     height?: number;
 
     @ApiProperty({
-        description: 'Whether the file is active/available',
+        description:
+            'Indicates if the file is active and available for access (soft delete mechanism)',
         example: true,
+        type: Boolean,
+        title: 'Active Status',
+        default: true,
     })
     isActive: boolean;
 
     @ApiProperty({
-        description: 'Alt text for images (accessibility)',
-        example: 'Course introduction illustration',
+        description:
+            'Alternative text for images to improve accessibility compliance and SEO',
+        example:
+            'Computer Science course introduction showing programming concepts and student collaboration',
         required: false,
+        type: String,
+        title: 'Alt Text',
+        maxLength: 255,
     })
     altText?: string;
 
     @ApiProperty({
-        description: 'File description or caption',
-        example: 'Introduction image for Computer Science course',
+        description:
+            'Detailed description or caption for the file, used in content management and search',
+        example:
+            'Introduction image for Computer Science fundamentals course showing key programming concepts',
         required: false,
+        type: String,
+        title: 'File Description',
+        maxLength: 1000,
     })
     description?: string;
 
     @ApiProperty({
-        description: 'Additional metadata for the file',
-        example: { exif: {}, processing: {} },
+        description:
+            'Additional metadata including EXIF data, processing information, and custom properties',
+        example: {
+            exif: { camera: 'Canon EOS R5', iso: 100 },
+            processing: { quality: 85, format: 'jpeg' },
+            custom: { tags: ['course', 'education'] },
+        },
         required: false,
+        type: Object,
+        title: 'File Metadata',
     })
     metadata?: Record<string, any>;
 
     @ApiProperty({
-        description: 'ID of the user who uploaded this file',
+        description:
+            'UUID of the user who uploaded this file for ownership tracking and permissions',
         example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        type: String,
+        title: 'Uploader ID',
+        format: 'uuid',
+        minLength: 36,
+        maxLength: 36,
     })
     uploadedBy: string;
 
     @ApiProperty({
-        description: 'File upload timestamp',
+        description:
+            'Timestamp when the file was originally uploaded to the system',
         example: '2024-01-01T00:00:00.000Z',
+        type: String,
+        title: 'Upload Date',
+        format: 'date-time',
     })
     createdAt: Date;
 
     @ApiProperty({
-        description: 'File last update timestamp',
+        description: 'Timestamp when the file metadata was last updated',
         example: '2024-01-15T10:30:45.123Z',
+        type: String,
+        title: 'Last Updated',
+        format: 'date-time',
     })
     updatedAt: Date;
 
     @ApiProperty({
-        description: 'User who uploaded the file',
+        description:
+            'Complete user profile information of the person who uploaded this file',
         type: () => User,
         required: false,
+        title: 'Uploader Details',
     })
     uploader?: User;
 
     @ApiProperty({
-        description: 'Available variants for this image',
+        description:
+            'All available image variants (thumbnails, different sizes) generated from the original image',
         type: [MediaFileResponseDto],
         required: false,
+        title: 'Image Variants',
+        isArray: true,
     })
     variants?: MediaFileResponseDto[];
 }
@@ -168,17 +259,26 @@ export class MediaFileListResponseDto {
     totalPages: number;
 }
 
+/**
+ * Response DTO for successful file upload containing the main file and any generated variants
+ * Used as the primary response for single file upload operations
+ */
 export class UploadResponseDto {
     @ApiProperty({
-        description: 'Main uploaded file',
+        description:
+            'The main uploaded file with complete metadata and processing information',
         type: MediaFileResponseDto,
+        title: 'Uploaded File',
     })
     file: MediaFileResponseDto;
 
     @ApiProperty({
-        description: 'Generated variants (thumbnails, etc.)',
+        description:
+            'Automatically generated image variants including thumbnails, medium, and large sizes',
         type: [MediaFileResponseDto],
         required: false,
+        title: 'Generated Variants',
+        isArray: true,
     })
     variants?: MediaFileResponseDto[];
 }

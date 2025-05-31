@@ -13,6 +13,7 @@ import {
 } from 'typeorm';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { MediaFile } from '../../media-manager/entities/media-manager.entity';
 
 export enum UserRole {
     BRANDON = 'brandon',
@@ -74,14 +75,13 @@ export class User {
     @IsString()
     lastName: string;
 
-    @Column({ nullable: true })
+    @ManyToOne(() => MediaFile, { nullable: true })
     @ApiProperty({
-        description: 'User avatar URL',
-        example: 'https://example.com/avatar.jpg',
+        description: 'User avatar image from media library',
+        type: () => MediaFile,
         required: false,
     })
-    @IsString()
-    avatar?: string;
+    avatar?: MediaFile;
 
     @Column({ nullable: true, default: UserRole.USER })
     @ApiProperty({

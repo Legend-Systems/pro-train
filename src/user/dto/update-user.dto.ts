@@ -1,4 +1,10 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+    IsEmail,
+    IsNumber,
+    IsOptional,
+    IsString,
+    MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
@@ -46,14 +52,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     lastName?: string;
 
     @ApiProperty({
-        description: 'Updated avatar image URL for the user profile',
-        example: 'https://cdn.example.com/profiles/jane-smith-avatar.jpg',
+        description:
+            'Updated avatar image ID reference from media library for the user profile',
+        example: 1,
         required: false,
-        type: String,
-        title: 'Avatar URL',
-        format: 'url',
+        type: Number,
+        title: 'Avatar Media ID',
     })
     @IsOptional()
-    @IsString({ message: 'Avatar must be a valid URL string' })
-    avatar?: string;
+    @IsNumber(
+        { allowNaN: false, allowInfinity: false },
+        { message: 'Avatar must be a valid media file ID' },
+    )
+    avatar?: number;
 }

@@ -231,6 +231,9 @@ export class MediaFile {
     @ManyToOne(() => MediaFile, { nullable: true, onDelete: 'CASCADE' })
     originalFile?: MediaFile;
 
+    // Transient property for loaded variants (not persisted to database)
+    variants?: MediaFile[];
+
     constructor(partial: Partial<MediaFile>) {
         Object.assign(this, partial);
     }

@@ -5,6 +5,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserStatus } from './entities/user.entity';
+import { MediaFile } from '../media-manager/entities/media-manager.entity';
 import {
     UserCreatedEvent,
     UserProfileUpdatedEvent,
@@ -18,6 +19,8 @@ export class UserService {
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
+        @InjectRepository(MediaFile)
+        private readonly mediaRepository: Repository<MediaFile>,
         private readonly eventEmitter: EventEmitter2,
     ) {}
 
@@ -52,7 +55,15 @@ export class UserService {
 
     async create(createUserDto: CreateUserDto): Promise<User> {
         return this.retryOperation(async () => {
-            const user = this.userRepository.create(createUserDto);
+            const { avatar, ...userData } = createUserDto;
+            const userToCreate: Partial<User> = { ...userData };
+
+            // Convert avatar ID to MediaFile reference if provided
+            if (avatar) {
+                userToCreate.avatar = { id: avatar } as MediaFile;
+            }
+
+            const user = this.userRepository.create(userToCreate);
             const savedUser = await this.userRepository.save(user);
 
             // Emit user created event
@@ -67,7 +78,7 @@ export class UserService {
                     savedUser.orgId?.name,
                     savedUser.branchId?.id,
                     savedUser.branchId?.name,
-                    savedUser.avatar,
+                    savedUser.avatar?.id?.toString(),
                 ),
             );
 
@@ -75,71 +86,138 @@ export class UserService {
         });
     }
 
+    /**
+     * Load avatar variants for a user
+     */
+    private async loadAvatarVariants(user: User): Promise<User> {
+        if (user.avatar?.id) {
+            try {
+                const variants = await this.mediaRepository.find({
+                    where: { originalFileId: user.avatar.id, isActive: true },
+                    order: { variant: 'ASC' },
+                });
+
+                if (variants.length > 0) {
+                    user.avatar.variants = variants;
+                }
+            } catch (error) {
+                // If loading variants fails, continue without them
+                console.warn('Failed to load avatar variants:', error);
+            }
+        }
+        return user;
+    }
+
     async findAll(): Promise<User[]> {
         return this.retryOperation(async () => {
-            return await this.userRepository.find({
+            const users = await this.userRepository.find({
                 where: { status: UserStatus.ACTIVE },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            // Load avatar variants for all users
+            return Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
         });
     }
 
     async findOne(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({
+            const user = await this.userRepository.findOne({
                 where: { id, status: UserStatus.ACTIVE },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            if (user) {
+                return this.loadAvatarVariants(user);
+            }
+            return user;
         });
     }
 
     async findByEmail(email: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({
+            const user = await this.userRepository.findOne({
                 where: { email, status: UserStatus.ACTIVE },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            if (user) {
+                return this.loadAvatarVariants(user);
+            }
+            return user;
         });
     }
 
     async findByEmailWithFullDetails(email: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({
+            const user = await this.userRepository.findOne({
                 where: { email },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            if (user) {
+                return this.loadAvatarVariants(user);
+            }
+            return user;
         });
     }
 
     async findById(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({
+            const user = await this.userRepository.findOne({
                 where: { id },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            if (user) {
+                return this.loadAvatarVariants(user);
+            }
+            return user;
         });
     }
 
     async findByOrganization(orgId: string): Promise<User[]> {
         return this.retryOperation(async () => {
-            return await this.userRepository.find({
+            const users = await this.userRepository.find({
                 where: { orgId: { id: orgId } },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            // Load avatar variants for all users
+            return Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
         });
     }
 
     async findByBranch(branchId: string): Promise<User[]> {
         return this.retryOperation(async () => {
-            return await this.userRepository.find({
+            const users = await this.userRepository.find({
                 where: { branchId: { id: branchId } },
-                relations: ['orgId', 'branchId'],
+                relations: ['orgId', 'branchId', 'avatar'],
             });
+
+            // Load avatar variants for all users
+            return Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
         });
     }
 
     async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-        await this.userRepository.update(id, updateUserDto);
+        const { avatar, ...updateData } = updateUserDto;
+        const dataToUpdate: Partial<User> = { ...updateData };
+
+        // Convert avatar ID to MediaFile reference if provided
+        if (avatar !== undefined) {
+            dataToUpdate.avatar = avatar
+                ? ({ id: avatar } as MediaFile)
+                : undefined;
+        }
+
+        await this.userRepository.update(id, dataToUpdate);
         const user = await this.findOne(id);
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`);
@@ -158,7 +236,17 @@ export class UserService {
         id: string,
         updateData: Partial<UpdateUserDto>,
     ): Promise<User> {
-        await this.userRepository.update(id, updateData);
+        const { avatar, ...profileData } = updateData;
+        const dataToUpdate: Partial<User> = { ...profileData };
+
+        // Convert avatar ID to MediaFile reference if provided
+        if (avatar !== undefined) {
+            dataToUpdate.avatar = avatar
+                ? ({ id: avatar } as MediaFile)
+                : undefined;
+        }
+
+        await this.userRepository.update(id, dataToUpdate);
         const user = await this.findById(id);
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`);
@@ -177,7 +265,7 @@ export class UserService {
                 user.orgId?.name,
                 user.branchId?.id,
                 user.branchId?.name,
-                user.avatar,
+                user.avatar?.id?.toString(),
                 updatedFields,
             ),
         );
@@ -267,7 +355,7 @@ export class UserService {
                     user.orgId?.name,
                     user.branchId?.id,
                     user.branchId?.name,
-                    user.avatar,
+                    user.avatar?.id?.toString(),
                     // TODO: Add assignedBy parameter when authentication context is available
                     undefined,
                 ),
