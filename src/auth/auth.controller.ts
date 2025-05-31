@@ -31,6 +31,7 @@ import { SendInvitationDto } from './dto/send-invitation.dto';
 import { ValidateInvitationDto } from './dto/validate-invitation.dto';
 import {
     SessionResponseDto,
+    SignUpResponseDto,
     StandardApiResponse,
 } from '../user/dto/session-response.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -54,9 +55,10 @@ export class AuthController {
       This endpoint handles user registration with the following features:
       - Strong password requirements enforcement
       - Email uniqueness validation
-      - Automatic email verification flow initiation
+      - Welcome email notification
       - Secure password hashing with bcrypt
       - Input sanitization and validation
+      - Organization/branch assignment from invitations
       
       **Security Features:**
       - Rate limiting: 3 attempts per minute per IP
@@ -64,21 +66,26 @@ export class AuthController {
       - Email format validation
       - Duplicate email prevention
       - SQL injection protection
+      - No tokens generated (security best practice)
       
       **Registration Flow:**
       1. User submits registration form
       2. System validates all input data
       3. Password is securely hashed
       4. User account is created
-      5. JWT tokens are generated
-      6. Email verification is sent (optional)
-      7. Session data is returned
+      5. Organization/branch assigned if invited
+      6. Welcome email notification is sent
+      7. User data returned (no tokens)
+      8. User must sign in separately for authentication
+      
+      **Next Steps After Registration:**
+      After successful registration, users must use the Sign In endpoint (/auth/signin) with their email and password to authenticate and receive access tokens.
       
       **Use Cases:**
       - New user onboarding
       - Account creation from landing pages
       - Mobile app registration
-      - API client registration
+      - Invitation-based registration
     `,
         operationId: 'registerUser',
     })
@@ -111,7 +118,7 @@ export class AuthController {
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
-        description: '✅ User successfully registered and authenticated',
+        description: '✅ User successfully registered - please sign in separately',
         schema: {
             type: 'object',
             properties: {
@@ -122,18 +129,18 @@ export class AuthController {
                 },
                 message: {
                     type: 'string',
-                    example: 'User registered successfully',
+                    example: 'Account created successfully. Please sign in with your credentials.',
                     description: 'Success confirmation message',
                 },
                 data: {
                     type: 'object',
-                    description: 'Session and user data for immediate login',
+                    description: 'User data and organization/branch information if applicable',
                     properties: {
                         user: {
                             type: 'object',
                             description: 'Registered user profile data',
                             properties: {
-                                id: {
+                                uid: {
                                     type: 'string',
                                     example:
                                         'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -144,41 +151,100 @@ export class AuthController {
                                     example: 'john.doe@example.com',
                                     description: 'User email address',
                                 },
-                                name: {
+                                firstName: {
                                     type: 'string',
-                                    example: 'John Doe',
-                                    description: 'User full name',
+                                    example: 'John',
+                                    description: 'User first name',
+                                },
+                                lastName: {
+                                    type: 'string',
+                                    example: 'Doe',
+                                    description: 'User last name',
+                                },
+                                avatar: {
+                                    type: 'string',
+                                    example: 'https://example.com/avatar.jpg',
+                                    description: 'User avatar URL',
+                                    nullable: true,
+                                },
+                                role: {
+                                    type: 'string',
+                                    example: 'user',
+                                    description: 'User role in the system',
                                 },
                                 createdAt: {
                                     type: 'string',
                                     example: '2024-01-15T10:30:00.000Z',
                                     description: 'Account creation timestamp',
                                 },
+                                updatedAt: {
+                                    type: 'string',
+                                    example: '2024-01-15T10:30:00.000Z',
+                                    description: 'Last update timestamp',
                             },
                         },
-                        tokens: {
+                        },
+                        organization: {
                             type: 'object',
-                            description: 'JWT authentication tokens',
+                            description: 'Organization information if user was invited to organization',
+                            nullable: true,
                             properties: {
-                                accessToken: {
+                                id: {
                                     type: 'string',
-                                    example:
-                                        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                                    description:
-                                        'JWT access token for API authentication',
+                                    example: 'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    description: 'Organization unique identifier',
                                 },
-                                refreshToken: {
+                                name: {
                                     type: 'string',
-                                    example:
-                                        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                                    description:
-                                        'JWT refresh token for token renewal',
+                                    example: 'Acme Corporation',
+                                    description: 'Organization name',
                                 },
-                                expiresIn: {
-                                    type: 'number',
-                                    example: 3600,
-                                    description:
-                                        'Access token expiration time in seconds',
+                                avatar: {
+                                    type: 'string',
+                                    example: 'https://cdn.example.com/logos/acme-corp.png',
+                                    description: 'Organization logo URL',
+                                    nullable: true,
+                                },
+                            },
+                        },
+                        branch: {
+                            type: 'object',
+                            description: 'Branch information if user was invited to specific branch',
+                            nullable: true,
+                            properties: {
+                                id: {
+                                    type: 'string',
+                                    example: 'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                                    description: 'Branch unique identifier',
+                                },
+                                name: {
+                                    type: 'string',
+                                    example: 'Downtown Branch',
+                                    description: 'Branch name',
+                                },
+                                email: {
+                                    type: 'string',
+                                    example: 'downtown@acmecorp.com',
+                                    description: 'Branch email address',
+                                    nullable: true,
+                                },
+                                address: {
+                                    type: 'string',
+                                    example: '123 Main Street, Downtown, City 12345',
+                                    description: 'Branch physical address',
+                                    nullable: true,
+                                },
+                                contactNumber: {
+                                    type: 'string',
+                                    example: '+1-555-123-4567',
+                                    description: 'Branch contact phone number',
+                                    nullable: true,
+                                },
+                                managerName: {
+                                    type: 'string',
+                                    example: 'John Smith',
+                                    description: 'Branch manager name',
+                                    nullable: true,
                                 },
                             },
                         },
@@ -224,7 +290,7 @@ export class AuthController {
     })
     async signUp(
         @Body() createUserDto: CreateUserDto,
-    ): Promise<StandardApiResponse<SessionResponseDto>> {
+    ): Promise<StandardApiResponse<SignUpResponseDto>> {
         this.logger.log(`Sign up attempt for email: ${createUserDto.email}`);
         return this.authService.signUp(createUserDto);
     }
@@ -244,6 +310,7 @@ export class AuthController {
       - Rate limiting to prevent brute force attacks
       - Login attempt monitoring and logging
       - Returns user leaderboard statistics and metrics
+      - Returns organization and branch information if applicable
       
       **Security Features:**
       - Rate limiting: 5 attempts per minute per IP
@@ -258,8 +325,9 @@ export class AuthController {
       3. Password is verified against hash
       4. JWT tokens are generated
       5. User leaderboard stats are fetched
-      6. Session data with metrics is returned
-      7. User is authenticated for protected endpoints
+      6. Organization and branch details are retrieved
+      7. Complete session data with metrics is returned
+      8. User is authenticated for protected endpoints
       
       **Using the Access Token:**
       After successful authentication, use the returned access token in the Authorization header for protected endpoints:
@@ -309,6 +377,7 @@ export class AuthController {
       - API client authentication
       - Session restoration
       - Leaderboard data retrieval
+      - Organization and branch context retrieval
     `,
         operationId: 'authenticateUser',
     })
@@ -355,11 +424,28 @@ export class AuthController {
                     type: 'object',
                     description: 'Authentication session data',
                     properties: {
+                        accessToken: {
+                            type: 'string',
+                            example:
+                                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                            description: 'JWT access token for API calls',
+                        },
+                        refreshToken: {
+                            type: 'string',
+                            example:
+                                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                            description: 'JWT refresh token for session renewal',
+                        },
+                        expiresIn: {
+                            type: 'number',
+                            example: 3600,
+                            description: 'Token expiration in seconds',
+                        },
                         user: {
                             type: 'object',
                             description: 'Authenticated user profile',
                             properties: {
-                                id: {
+                                uid: {
                                     type: 'string',
                                     example:
                                         'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -370,40 +456,36 @@ export class AuthController {
                                     example: 'john.doe@example.com',
                                     description: 'User email address',
                                 },
-                                name: {
+                                firstName: {
                                     type: 'string',
-                                    example: 'John Doe',
-                                    description: 'User display name',
+                                    example: 'John',
+                                    description: 'User first name',
                                 },
-                                lastLoginAt: {
+                                lastName: {
+                                    type: 'string',
+                                    example: 'Doe',
+                                    description: 'User last name',
+                                },
+                                avatar: {
+                                    type: 'string',
+                                    example: 'https://example.com/avatar.jpg',
+                                    description: 'User avatar URL',
+                                    nullable: true,
+                                },
+                                role: {
+                                    type: 'string',
+                                    example: 'user',
+                                    description: 'User role in the system',
+                                },
+                                createdAt: {
                                     type: 'string',
                                     example: '2024-01-15T10:30:00.000Z',
-                                    description: 'Current login timestamp',
+                                    description: 'Account creation timestamp',
                                 },
-                            },
-                        },
-                        tokens: {
-                            type: 'object',
-                            description: 'JWT authentication tokens',
-                            properties: {
-                                accessToken: {
+                                updatedAt: {
                                     type: 'string',
-                                    example:
-                                        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                                    description:
-                                        'JWT access token for API calls',
-                                },
-                                refreshToken: {
-                                    type: 'string',
-                                    example:
-                                        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                                    description:
-                                        'JWT refresh token for session renewal',
-                                },
-                                expiresIn: {
-                                    type: 'number',
-                                    example: 3600,
-                                    description: 'Token expiration in seconds',
+                                    example: '2024-01-15T10:30:00.000Z',
+                                    description: 'Last update timestamp',
                                 },
                             },
                         },
@@ -452,6 +534,70 @@ export class AuthController {
                                         description:
                                             'Leaderboard entry details',
                                     },
+                                },
+                            },
+                        },
+                        organization: {
+                            type: 'object',
+                            description: 'Organization information if user belongs to an organization',
+                            nullable: true,
+                            properties: {
+                                id: {
+                                    type: 'string',
+                                    example: 'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    description: 'Organization unique identifier',
+                                },
+                                name: {
+                                    type: 'string',
+                                    example: 'Acme Corporation',
+                                    description: 'Organization name',
+                                },
+                                avatar: {
+                                    type: 'string',
+                                    example: 'https://cdn.example.com/logos/acme-corp.png',
+                                    description: 'Organization logo URL',
+                                    nullable: true,
+                                },
+                            },
+                        },
+                        branch: {
+                            type: 'object',
+                            description: 'Branch information if user belongs to a specific branch',
+                            nullable: true,
+                            properties: {
+                                id: {
+                                    type: 'string',
+                                    example: 'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                                    description: 'Branch unique identifier',
+                                },
+                                name: {
+                                    type: 'string',
+                                    example: 'Downtown Branch',
+                                    description: 'Branch name',
+                                },
+                                email: {
+                                    type: 'string',
+                                    example: 'downtown@acmecorp.com',
+                                    description: 'Branch email address',
+                                    nullable: true,
+                                },
+                                address: {
+                                    type: 'string',
+                                    example: '123 Main Street, Downtown, City 12345',
+                                    description: 'Branch physical address',
+                                    nullable: true,
+                                },
+                                contactNumber: {
+                                    type: 'string',
+                                    example: '+1-555-123-4567',
+                                    description: 'Branch contact phone number',
+                                    nullable: true,
+                                },
+                                managerName: {
+                                    type: 'string',
+                                    example: 'John Smith',
+                                    description: 'Branch manager name',
+                                    nullable: true,
                                 },
                             },
                         },

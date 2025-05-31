@@ -20,6 +20,7 @@ import { ValidateInvitationDto } from './dto/validate-invitation.dto';
 import { TokenManagerService } from './token-manager.service';
 import {
     SessionResponseDto,
+    SignUpResponseDto,
     StandardApiResponse,
 } from '../user/dto/session-response.dto';
 import { UserResponseDto } from '../user/dto/session-response.dto';
@@ -49,7 +50,7 @@ export class AuthService {
 
     async signUp(
         createUserDto: CreateUserDto,
-    ): Promise<StandardApiResponse<SessionResponseDto>> {
+    ): Promise<StandardApiResponse<SignUpResponseDto>> {
         const {
             email,
             password,
@@ -117,40 +118,53 @@ export class AuthService {
             this.tokenManagerService.revokeInvitationTokensByEmail(email);
         }
 
-        // Generate JWT tokens
-        const tokenPair = await this.tokenManagerService.generateTokenPair({
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            orgId: user.orgId?.id,
-            branchId: user.branchId?.id,
-        });
-
-        // Send welcome email
+        // Send welcome email notification (not tokens)
         await this.sendWelcomeEmail(user);
+
+        // Fetch updated user with org/branch details if assigned
+        const updatedUser =
+            await this.userService.findByEmailWithFullDetails(email);
+
+        if (!updatedUser) {
+            throw new Error('Failed to retrieve user after creation');
+        }
 
         // Return user without password
         const userResponse: UserResponseDto = {
-            uid: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            avatar: user.avatar,
-            role: user.role,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
+            uid: updatedUser.id,
+            email: updatedUser.email,
+            firstName: updatedUser.firstName,
+            lastName: updatedUser.lastName,
+            avatar: updatedUser.avatar,
+            role: updatedUser.role,
+            createdAt: updatedUser.createdAt,
+            updatedAt: updatedUser.updatedAt,
         };
 
         return {
             success: true,
             data: {
-                accessToken: tokenPair.accessToken,
-                refreshToken: tokenPair.refreshToken,
-                expiresIn: tokenPair.expiresIn,
                 user: userResponse,
+                organization: updatedUser.orgId
+                    ? {
+                          id: updatedUser.orgId.id,
+                          name: updatedUser.orgId.name,
+                          avatar: updatedUser.orgId.logoUrl,
+                      }
+                    : undefined,
+                branch: updatedUser.branchId
+                    ? {
+                          id: updatedUser.branchId.id,
+                          name: updatedUser.branchId.name,
+                          email: updatedUser.branchId.email,
+                          address: updatedUser.branchId.address,
+                          contactNumber: updatedUser.branchId.contactNumber,
+                          managerName: updatedUser.branchId.managerName,
+                      }
+                    : undefined,
             },
-            message: 'User registered successfully',
+            message:
+                'Account created successfully. Please sign in with your credentials.',
         };
     }
 

@@ -118,49 +118,74 @@ export class UserResponseDto {
     updatedAt: Date;
 }
 
-export class SessionResponseDto {
+// Simple response DTO for signup - just user data, no tokens
+export class SignUpResponseDto {
     @ApiProperty({
-        description: 'JWT access token',
-        example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-    })
-    accessToken: string;
-
-    @ApiProperty({
-        description: 'JWT refresh token',
-        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-        required: false,
-    })
-    refreshToken?: string;
-
-    @ApiProperty({
-        description: 'Token expiration time in seconds',
-        example: 3600,
-        required: false,
-    })
-    expiresIn?: number;
-
-    @ApiProperty({
-        description: 'User information',
+        description: 'Registered user information',
         type: UserResponseDto,
     })
     user: UserResponseDto;
 
     @ApiProperty({
-        description: 'User leaderboard statistics and metrics',
-        type: UserStatsResponseDto,
-        required: false,
-    })
-    leaderboard?: UserStatsResponseDto;
-
-    @ApiProperty({
-        description: 'Organization information',
+        description:
+            'Organization information if user was invited to organization',
         type: OrgInfo,
         required: false,
     })
     organization?: OrgInfo;
 
     @ApiProperty({
-        description: 'Branch information',
+        description:
+            'Branch information if user was invited to specific branch',
+        type: BranchInfo,
+        required: false,
+    })
+    branch?: BranchInfo;
+}
+
+// Enhanced response DTO for signin with tokens, leaderboard, org and branch data
+export class SessionResponseDto {
+    @ApiProperty({
+        description: 'JWT access token for API authentication',
+        example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    })
+    accessToken: string;
+
+    @ApiProperty({
+        description: 'JWT refresh token for token renewal',
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    })
+    refreshToken: string;
+
+    @ApiProperty({
+        description: 'Token expiration time in seconds',
+        example: 3600,
+    })
+    expiresIn: number;
+
+    @ApiProperty({
+        description: 'Authenticated user information',
+        type: UserResponseDto,
+    })
+    user: UserResponseDto;
+
+    @ApiProperty({
+        description: 'User leaderboard statistics and performance metrics',
+        type: UserStatsResponseDto,
+        required: false,
+    })
+    leaderboard?: UserStatsResponseDto;
+
+    @ApiProperty({
+        description:
+            'Organization information if user belongs to an organization',
+        type: OrgInfo,
+        required: false,
+    })
+    organization?: OrgInfo;
+
+    @ApiProperty({
+        description: 'Branch information if user belongs to a specific branch',
         type: BranchInfo,
         required: false,
     })
@@ -189,8 +214,18 @@ export class StandardApiResponse<T = any> {
 
 export class AuthSuccessResponse extends StandardApiResponse<SessionResponseDto> {
     @ApiProperty({
-        description: 'Authentication session data',
+        description:
+            'Authentication session data with tokens, user info, leaderboard stats, and organization/branch details',
         type: SessionResponseDto,
     })
     data: SessionResponseDto;
+}
+
+export class SignUpSuccessResponse extends StandardApiResponse<SignUpResponseDto> {
+    @ApiProperty({
+        description:
+            'User registration data with organization/branch info if applicable',
+        type: SignUpResponseDto,
+    })
+    data: SignUpResponseDto;
 }
