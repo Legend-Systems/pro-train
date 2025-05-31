@@ -9,11 +9,13 @@ import { TokenManagerService } from './token-manager.service';
 import { OrgBranchScopingService } from './services/org-branch-scoping.service';
 import { UserModule } from '../user/user.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
+import { CommunicationsModule } from '../communications/communications.module';
 
 @Module({
     imports: [
         UserModule,
         LeaderboardModule,
+        CommunicationsModule,
         PassportModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],

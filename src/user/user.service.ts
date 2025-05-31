@@ -194,4 +194,37 @@ export class UserService {
             return user;
         });
     }
+
+    /**
+     * Update user password directly (for password reset)
+     */
+    async updatePassword(
+        userId: string,
+        hashedPassword: string,
+    ): Promise<void> {
+        return this.retryOperation(async () => {
+            const result = await this.userRepository.update(userId, {
+                password: hashedPassword,
+            });
+
+            if (result.affected === 0) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+        });
+    }
+
+    /**
+     * Mark user email as verified
+     */
+    async verifyEmail(userId: string): Promise<void> {
+        return this.retryOperation(async () => {
+            const result = await this.userRepository.update(userId, {
+                emailVerified: true,
+            });
+
+            if (result.affected === 0) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+        });
+    }
 }

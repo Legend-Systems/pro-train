@@ -27,11 +27,14 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
 import { RefreshTokenDto } from '../user/dto/refresh-token.dto';
+import { SendInvitationDto } from './dto/send-invitation.dto';
+import { ValidateInvitationDto } from './dto/validate-invitation.dto';
 import {
     SessionResponseDto,
     StandardApiResponse,
 } from '../user/dto/session-response.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { AuthenticatedRequest } from './interfaces/authenticated-request.interface';
 
 @ApiTags('🔐 Authentication & Account Management')
 @Controller('auth')
@@ -1151,9 +1154,355 @@ export class AuthController {
     })
     @ApiBearerAuth()
     async getTokenInfo(
-        @Request() req: { user: any },
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse<any>> {
         this.logger.log('Token information retrieval request received');
         return this.authService.getTokenInfo(req.user);
+    }
+
+    @Post('send-invitation')
+    @UseGuards(JwtAuthGuard)
+    @Throttle({ default: { limit: 10, ttl: 300000 } }) // 10 invitations per 5 minutes
+    @ApiOperation({
+        summary: '📧 Send User Invitation',
+        description: `
+      **Sends an invitation email to a new user to join the platform**
+      
+      This endpoint handles user invitation functionality with the following features:
+      - Email invitation sending
+      - Customizable invitation messages
+      - Organization/branch assignment
+      - Secure invitation token generation
+      - Email delivery tracking
+      
+      **Security Features:**
+      - Rate limiting: 10 invitations per 5 minutes per user
+      - Authentication required (JWT)
+      - Invitation token with expiration
+      - Email validation
+      - Duplicate invitation prevention
+      
+      **Invitation Flow:**
+      1. Authenticated user sends invitation
+      2. System validates email and permissions
+      3. Secure invitation token is generated
+      4. Invitation email is sent to recipient
+      5. Token expires after configured time
+      6. Recipient can use token to register
+      
+      **Use Cases:**
+      - Team member onboarding
+      - Student invitation to courses
+      - Organization member recruitment
+      - Branch-specific invitations
+    `,
+        operationId: 'sendInvitation',
+    })
+    @ApiBody({
+        type: SendInvitationDto,
+        description:
+            'Invitation details including recipient email and optional message',
+        examples: {
+            'basic-invitation': {
+                summary: '✉️ Basic Invitation',
+                description: 'Simple invitation with just email address',
+                value: {
+                    email: 'newuser@example.com',
+                },
+            },
+            'team-invitation': {
+                summary: '👥 Team Invitation',
+                description: 'Invitation with custom message and organization',
+                value: {
+                    email: 'teammate@company.com',
+                    message:
+                        "Join our team on the Exxam platform! We're excited to have you aboard.",
+                    organizationId: 'org_123456789',
+                },
+            },
+            'branch-invitation': {
+                summary: '🏢 Branch-Specific Invitation',
+                description:
+                    'Invitation to specific branch within organization',
+                value: {
+                    email: 'employee@company.com',
+                    message: 'Welcome to our Sales division!',
+                    organizationId: 'org_123456789',
+                    branchId: 'branch_sales_001',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Invitation sent successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Invitation sending success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Invitation sent successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Invitation details',
+                    properties: {
+                        invitationId: {
+                            type: 'string',
+                            example: 'inv_a1b2c3d4e5f6',
+                            description: 'Unique invitation identifier',
+                        },
+                        email: {
+                            type: 'string',
+                            example: 'newuser@example.com',
+                            description: 'Recipient email address',
+                        },
+                        expiresAt: {
+                            type: 'string',
+                            example: '2024-01-22T10:30:00.000Z',
+                            description: 'Invitation expiration timestamp',
+                        },
+                        invitedBy: {
+                            type: 'string',
+                            example: 'John Doe',
+                            description: 'Name of user who sent invitation',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid input data or user already exists',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    examples: [
+                        ['Please provide a valid email address'],
+                        ['User with this email already exists'],
+                        ['Invalid organization or branch ID'],
+                    ],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Authentication required',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: {
+                    type: 'string',
+                    example: 'Unauthorized',
+                },
+                error: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        description: '⏰ Rate limit exceeded',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 429 },
+                message: {
+                    type: 'string',
+                    example:
+                        'Too many invitation requests. Please try again later.',
+                },
+                error: { type: 'string', example: 'Too Many Requests' },
+            },
+        },
+    })
+    @ApiBearerAuth()
+    async sendInvitation(
+        @Body() sendInvitationDto: SendInvitationDto,
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse<any>> {
+        this.logger.log(
+            `Sending invitation to ${sendInvitationDto.email} from user ${req.user.id}`,
+        );
+        return this.authService.sendInvitation(sendInvitationDto, req.user.id);
+    }
+
+    @Post('validate-invitation')
+    @SkipThrottle()
+    @ApiOperation({
+        summary: '🔍 Validate Invitation Token',
+        description: `
+      **Validates an invitation token and returns invitation details**
+      
+      This endpoint handles invitation token validation with the following features:
+      - Token authenticity verification
+      - Expiration date checking
+      - Invitation details retrieval
+      - Security token validation
+      - Pre-registration validation
+      
+      **Security Features:**
+      - Cryptographic token validation
+      - Expiration time enforcement
+      - Token tampering detection
+      - Rate limiting bypass for validation
+      - Secure token parsing
+      
+      **Validation Flow:**
+      1. User receives invitation email
+      2. User clicks invitation link with token
+      3. Frontend calls this endpoint to validate
+      4. System verifies token authenticity
+      5. Invitation details are returned if valid
+      6. User can proceed with registration
+      
+      **Use Cases:**
+      - Pre-registration token validation
+      - Invitation link verification
+      - Registration form pre-population
+      - Token expiration checking
+    `,
+        operationId: 'validateInvitation',
+    })
+    @ApiBody({
+        type: ValidateInvitationDto,
+        description: 'Invitation token from email link',
+        examples: {
+            'token-validation': {
+                summary: '🎫 Token Validation',
+                description: 'Validate invitation token from email',
+                value: {
+                    token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im5ld3VzZXJAZXhhbXBsZS5jb20iLCJ0eXBlIjoiaW52aXRhdGlvbiIsImlhdCI6MTcwNTMxNzAwMCwiZXhwIjoxNzA1OTIxODAwfQ.ABC123...',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Invitation token is valid',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Token validation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Invitation token is valid',
+                    description: 'Validation confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Invitation details from valid token',
+                    properties: {
+                        email: {
+                            type: 'string',
+                            example: 'newuser@example.com',
+                            description:
+                                'Email address the invitation was sent to',
+                        },
+                        invitedBy: {
+                            type: 'object',
+                            description: 'Details of user who sent invitation',
+                            properties: {
+                                name: {
+                                    type: 'string',
+                                    example: 'John Doe',
+                                    description: 'Name of inviting user',
+                                },
+                                email: {
+                                    type: 'string',
+                                    example: 'john.doe@company.com',
+                                    description: 'Email of inviting user',
+                                },
+                            },
+                        },
+                        message: {
+                            type: 'string',
+                            example: 'Join our team on the Exxam platform!',
+                            description: 'Custom message from inviter',
+                        },
+                        organizationId: {
+                            type: 'string',
+                            example: 'org_123456789',
+                            description:
+                                'Organization ID if invitation is org-specific',
+                            nullable: true,
+                        },
+                        branchId: {
+                            type: 'string',
+                            example: 'branch_sales_001',
+                            description:
+                                'Branch ID if invitation is branch-specific',
+                            nullable: true,
+                        },
+                        expiresAt: {
+                            type: 'string',
+                            example: '2024-01-22T10:30:00.000Z',
+                            description: 'Invitation expiration timestamp',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid or expired invitation token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    examples: [
+                        ['Invalid invitation token'],
+                        ['Invitation token has expired'],
+                        ['Malformed token format'],
+                        ['Invitation token is required'],
+                    ],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.GONE,
+        description: '🚫 Invitation has been revoked or used',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 410 },
+                message: {
+                    type: 'string',
+                    example: 'Invitation has been revoked or already used',
+                },
+                error: { type: 'string', example: 'Gone' },
+            },
+        },
+    })
+    async validateInvitation(
+        @Body() validateInvitationDto: ValidateInvitationDto,
+    ): Promise<StandardApiResponse<any>> {
+        this.logger.log(
+            `Validating invitation token: ${validateInvitationDto.token.substring(0, 20)}...`,
+        );
+        return this.authService.validateInvitation(validateInvitationDto);
     }
 }

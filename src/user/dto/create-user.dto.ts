@@ -85,4 +85,16 @@ export class CreateUserDto {
     @IsOptional()
     @IsString({ message: 'Avatar must be a valid URL string' })
     avatar?: string;
+
+    @ApiProperty({
+        description:
+            'Optional invitation token from email invitation to automatically assign organization and branch',
+        example: 'abc123-invitation-token-xyz789',
+        required: false,
+        type: String,
+        title: 'Invitation Token',
+    })
+    @IsOptional()
+    @IsString({ message: 'Invitation token must be a string' })
+    invitationToken?: string;
 }

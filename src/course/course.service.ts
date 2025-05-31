@@ -82,10 +82,8 @@ export class CourseService {
             const course = this.courseRepository.create({
                 ...createCourseDto,
                 createdBy: scope.userId,
-                orgId: scope.orgId ? ({ id: scope.orgId } as any) : undefined,
-                branchId: scope.branchId
-                    ? ({ id: scope.branchId } as any)
-                    : undefined,
+                orgId: scope.orgId ? { id: scope.orgId } : undefined,
+                branchId: scope.branchId ? { id: scope.branchId } : undefined,
             });
 
             const savedCourse = await this.courseRepository.save(course);

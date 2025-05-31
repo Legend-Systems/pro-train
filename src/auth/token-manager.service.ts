@@ -20,6 +20,18 @@ export interface TokenPair {
     expiresIn: number;
 }
 
+export interface SpecialTokenData {
+    userId: string;
+    email: string;
+    type: 'password_reset' | 'email_verification' | 'invitation';
+    expiresAt: number;
+    createdAt: number;
+    inviterUserId?: string; // For invitation tokens
+    inviterName?: string; // For invitation tokens
+    organizationId?: string; // For invitation tokens
+    branchId?: string; // For invitation tokens
+}
+
 @Injectable()
 export class TokenManagerService {
     private readonly accessTokenExpiry = '1h';
@@ -28,6 +40,9 @@ export class TokenManagerService {
         string,
         { userId: string; expiresAt: number }
     >();
+
+    // Store password reset and email verification tokens
+    private readonly specialTokens = new Map<string, SpecialTokenData>();
 
     constructor(
         private readonly jwtService: JwtService,
@@ -77,6 +92,217 @@ export class TokenManagerService {
 
         this.refreshTokens.set(token, { userId, expiresAt });
         return token;
+    }
+
+    /**
+     * Generate a password reset token
+     */
+    generatePasswordResetToken(
+        userId: string,
+        email: string,
+    ): { token: string; expiresAt: Date } {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+        this.specialTokens.set(token, {
+            userId,
+            email,
+            type: 'password_reset',
+            expiresAt,
+            createdAt: Date.now(),
+        });
+
+        return {
+            token,
+            expiresAt: new Date(expiresAt),
+        };
+    }
+
+    /**
+     * Generate an email verification token
+     */
+    generateEmailVerificationToken(
+        userId: string,
+        email: string,
+    ): { token: string; expiresAt: Date } {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+        this.specialTokens.set(token, {
+            userId,
+            email,
+            type: 'email_verification',
+            expiresAt,
+            createdAt: Date.now(),
+        });
+
+        return {
+            token,
+            expiresAt: new Date(expiresAt),
+        };
+    }
+
+    /**
+     * Generate an invitation token
+     */
+    generateInvitationToken(
+        inviteeEmail: string,
+        inviterUserId: string,
+        inviterName: string,
+        organizationId?: string,
+        branchId?: string,
+    ): { token: string; expiresAt: Date } {
+        const token = crypto.randomBytes(32).toString('hex');
+        const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
+
+        this.specialTokens.set(token, {
+            userId: '', // Will be set when user registers
+            email: inviteeEmail,
+            type: 'invitation',
+            expiresAt,
+            createdAt: Date.now(),
+            inviterUserId,
+            inviterName,
+            organizationId,
+            branchId,
+        });
+
+        return {
+            token,
+            expiresAt: new Date(expiresAt),
+        };
+    }
+
+    /**
+     * Validate a password reset token
+     */
+    validatePasswordResetToken(token: string): {
+        isValid: boolean;
+        userId?: string;
+        email?: string;
+    } {
+        const tokenData = this.specialTokens.get(token);
+
+        if (!tokenData || tokenData.type !== 'password_reset') {
+            return { isValid: false };
+        }
+
+        if (tokenData.expiresAt < Date.now()) {
+            this.specialTokens.delete(token);
+            return { isValid: false };
+        }
+
+        return {
+            isValid: true,
+            userId: tokenData.userId,
+            email: tokenData.email,
+        };
+    }
+
+    /**
+     * Validate an email verification token
+     */
+    validateEmailVerificationToken(token: string): {
+        isValid: boolean;
+        userId?: string;
+        email?: string;
+    } {
+        const tokenData = this.specialTokens.get(token);
+
+        if (!tokenData || tokenData.type !== 'email_verification') {
+            return { isValid: false };
+        }
+
+        if (tokenData.expiresAt < Date.now()) {
+            this.specialTokens.delete(token);
+            return { isValid: false };
+        }
+
+        return {
+            isValid: true,
+            userId: tokenData.userId,
+            email: tokenData.email,
+        };
+    }
+
+    /**
+     * Validate an invitation token
+     */
+    validateInvitationToken(token: string): {
+        isValid: boolean;
+        email?: string;
+        inviterName?: string;
+        organizationId?: string;
+        branchId?: string;
+        data?: SpecialTokenData;
+    } {
+        const tokenData = this.specialTokens.get(token);
+
+        if (!tokenData || tokenData.type !== 'invitation') {
+            return { isValid: false };
+        }
+
+        if (tokenData.expiresAt < Date.now()) {
+            this.specialTokens.delete(token);
+            return { isValid: false };
+        }
+
+        return {
+            isValid: true,
+            email: tokenData.email,
+            inviterName: tokenData.inviterName,
+            organizationId: tokenData.organizationId,
+            branchId: tokenData.branchId,
+            data: tokenData,
+        };
+    }
+
+    /**
+     * Consume a special token (removes it after use)
+     */
+    consumeSpecialToken(token: string): {
+        isValid: boolean;
+        data?: SpecialTokenData;
+    } {
+        const tokenData = this.specialTokens.get(token);
+
+        if (!tokenData) {
+            return { isValid: false };
+        }
+
+        if (tokenData.expiresAt < Date.now()) {
+            this.specialTokens.delete(token);
+            return { isValid: false };
+        }
+
+        // Remove token after successful validation
+        this.specialTokens.delete(token);
+        return { isValid: true, data: tokenData };
+    }
+
+    /**
+     * Revoke all special tokens for a user
+     */
+    revokeUserSpecialTokens(
+        userId: string,
+        type?: 'password_reset' | 'email_verification' | 'invitation',
+    ): void {
+        for (const [token, data] of this.specialTokens.entries()) {
+            if (data.userId === userId && (!type || data.type === type)) {
+                this.specialTokens.delete(token);
+            }
+        }
+    }
+
+    /**
+     * Revoke invitation tokens by email (for when invitation is consumed)
+     */
+    revokeInvitationTokensByEmail(email: string): void {
+        for (const [token, data] of this.specialTokens.entries()) {
+            if (data.type === 'invitation' && data.email === email) {
+                this.specialTokens.delete(token);
+            }
+        }
     }
 
     async validateAccessToken(token: string): Promise<TokenPayload> {
@@ -141,12 +367,25 @@ export class TokenManagerService {
                 this.refreshTokens.delete(token);
             }
         }
+
+        // Also revoke special tokens
+        this.revokeUserSpecialTokens(userId);
     }
 
     cleanupExpiredTokens(): void {
+        const now = Date.now();
+
+        // Cleanup refresh tokens
         for (const [token, data] of this.refreshTokens.entries()) {
-            if (data.expiresAt < Date.now()) {
+            if (data.expiresAt < now) {
                 this.refreshTokens.delete(token);
+            }
+        }
+
+        // Cleanup special tokens
+        for (const [token, data] of this.specialTokens.entries()) {
+            if (data.expiresAt < now) {
+                this.specialTokens.delete(token);
             }
         }
     }

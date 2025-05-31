@@ -85,6 +85,14 @@ export class User {
     @IsEnum(UserRole)
     role?: UserRole;
 
+    @Column({ default: false })
+    @ApiProperty({
+        description: 'Whether user email is verified',
+        example: true,
+        default: false,
+    })
+    emailVerified: boolean;
+
     @IsString()
     @CreateDateColumn()
     @ApiProperty({
