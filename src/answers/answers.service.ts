@@ -279,6 +279,15 @@ export class AnswersService {
         }
     }
 
+    /**
+     * Count answers for a specific question
+     */
+    async countByQuestion(questionId: number): Promise<number> {
+        return await this.answerRepository.count({
+            where: { questionId },
+        });
+    }
+
     private mapToResponseDto(answer: Answer): AnswerResponseDto {
         return {
             answerId: answer.answerId,

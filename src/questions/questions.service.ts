@@ -5,6 +5,7 @@ import {
     ConflictException,
     Logger,
     Inject,
+    forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryRunner, DataSource } from 'typeorm';
@@ -21,6 +22,8 @@ import { StandardOperationResponse } from '../user/dto/common-response.dto';
 import { Question } from './entities/question.entity';
 import { Test } from '../test/entities/test.entity';
 import { TestService } from '../test/test.service';
+import { AnswersService } from '../answers/answers.service';
+import { QuestionsOptionsService } from '../questions_options/questions_options.service';
 
 // Type definitions for query results
 interface MaxOrderResult {
@@ -66,6 +69,9 @@ export class QuestionsService {
         private readonly testService: TestService,
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+        private readonly answersService: AnswersService,
+        @Inject(forwardRef(() => QuestionsOptionsService))
+        private readonly questionsOptionsService: QuestionsOptionsService,
     ) {}
 
     /**
@@ -423,7 +429,9 @@ export class QuestionsService {
                 .getRawOne<TotalPointsResult>();
 
             const result = {
-                questions: questions.map(q => this.mapToResponseDto(q)),
+                questions: await Promise.all(
+                    questions.map(q => this.mapToResponseDto(q)),
+                ),
                 total,
                 page,
                 pageSize,
@@ -494,7 +502,7 @@ export class QuestionsService {
                 await this.validateTestAccess(question.testId, userId);
             }
 
-            const result = this.mapToResponseDto(question);
+            const result = await this.mapToResponseDto(question);
 
             // Cache the result with error handling
             try {
@@ -649,11 +657,13 @@ export class QuestionsService {
             // Validate test access
             await this.validateTestAccess(question.testId, userId);
 
-            // TODO: Check if question has answers (will be implemented in Answers module)
-            // const answersCount = await this.answersService.countByQuestion(id);
-            // if (answersCount > 0) {
-            //     throw new BadRequestException('Cannot delete question that has answers');
-            // }
+            // Check if question has answers
+            const answersCount = await this.answersService.countByQuestion(id);
+            if (answersCount > 0) {
+                throw new ConflictException(
+                    'Cannot delete question that has answers',
+                );
+            }
 
             const testId = question.testId;
             await this.questionRepository.remove(question);
@@ -766,7 +776,15 @@ export class QuestionsService {
     /**
      * Map Question entity to response DTO
      */
-    private mapToResponseDto(question: Question): QuestionResponseDto {
+    private async mapToResponseDto(
+        question: Question,
+    ): Promise<QuestionResponseDto> {
+        // Get actual counts from related services
+        const [optionsCount, answersCount] = await Promise.all([
+            this.questionsOptionsService.getOptionCount(question.questionId),
+            this.answersService.countByQuestion(question.questionId),
+        ]);
+
         return {
             questionId: question.questionId,
             testId: question.testId,
@@ -783,9 +801,8 @@ export class QuestionsService {
                       testType: question.test.testType,
                   }
                 : undefined,
-            // TODO: Add counts when implementing related modules
-            optionsCount: 0, // Will be calculated when QuestionOptions module is implemented
-            answersCount: 0, // Will be calculated when Answers module is implemented
+            optionsCount,
+            answersCount,
         };
     }
 }

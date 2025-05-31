@@ -25,6 +25,7 @@ export enum EmailType {
     WELCOME_BRANCH = 'welcome_branch',
     WELCOME_USER = 'welcome_user',
     PASSWORD_RESET = 'password_reset',
+    EMAIL_VERIFICATION = 'email_verification',
     TEST_NOTIFICATION = 'test_notification',
     RESULTS_SUMMARY = 'results_summary',
     COURSE_ENROLLMENT = 'course_enrollment',

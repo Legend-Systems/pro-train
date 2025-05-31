@@ -4,6 +4,7 @@ import {
     ForbiddenException,
     Logger,
     Inject,
+    forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -56,6 +57,7 @@ export class QuestionsOptionsService {
         private readonly questionOptionRepository: Repository<QuestionOption>,
         @InjectRepository(Question)
         private readonly questionRepository: Repository<Question>,
+        @Inject(forwardRef(() => QuestionsService))
         private readonly questionsService: QuestionsService,
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,

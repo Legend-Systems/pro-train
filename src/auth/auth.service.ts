@@ -728,17 +728,15 @@ export class AuthService {
                 ),
             };
 
-            // Use welcome template for email verification for now
-            // TODO: Create dedicated email verification template
             const rendered = await this.emailTemplateService.renderByType(
-                EmailType.WELCOME,
+                EmailType.EMAIL_VERIFICATION,
                 templateData,
             );
 
             await this.emailQueueService.queueEmail(
                 {
                     to: user.email,
-                    subject: 'Please verify your email address',
+                    subject: rendered.subject,
                     html: rendered.html,
                     text: rendered.text,
                 },
@@ -746,7 +744,7 @@ export class AuthService {
                 0, // Send immediately
                 {
                     userId: user.id,
-                    templateType: 'email_verification',
+                    templateType: EmailType.EMAIL_VERIFICATION,
                     tokenExpiresAt: expiresAt,
                 },
             );
