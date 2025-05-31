@@ -18,4 +18,4 @@ export interface BranchFilters {
 export interface OrganizationFilters {
     isActive?: boolean;
     name?: string;
-} 
+}

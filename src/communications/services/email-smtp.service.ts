@@ -70,7 +70,10 @@ export class EmailSMTPService {
         const rateLimit = this.configService.get<number>('SMTP_RATE_LIMIT');
         if (rateLimit) {
             smtpConfig.rateLimit = rateLimit;
-            smtpConfig.rateDelta = this.configService.get<number>('SMTP_RATE_DELTA', 1000);
+            smtpConfig.rateDelta = this.configService.get<number>(
+                'SMTP_RATE_DELTA',
+                1000,
+            );
         }
 
         // Add debug logging if enabled

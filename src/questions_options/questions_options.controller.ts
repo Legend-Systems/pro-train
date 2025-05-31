@@ -24,6 +24,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { QuestionsOptionsService } from './questions_options.service';
 import { CreateQuestionOptionDto } from './dto/create-questions_option.dto';
 import { UpdateQuestionOptionDto } from './dto/update-questions_option.dto';
@@ -152,6 +153,7 @@ export class QuestionsOptionsController {
     })
     async create(
         @Body() createQuestionOptionDto: CreateQuestionOptionDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<QuestionOptionResponseDto> {
         try {
@@ -161,6 +163,7 @@ export class QuestionsOptionsController {
 
             const option = await this.questionsOptionsService.create(
                 createQuestionOptionDto,
+                scope,
                 userId,
             );
 
@@ -199,60 +202,47 @@ export class QuestionsOptionsController {
       
       **Business Rules:**
       - All options must belong to the same question
-      - User must have access to the question
-      - At least one option should be marked as correct
-      - Option texts must be unique within the question
+      - Each option must have valid text content
+      - At least one correct option required
+      - Maximum option limit per question enforced
+      
+      **Authorization Requirements:**
+      - Must be the owner of the test containing the question
+      - Valid JWT authentication required
       
       **Use Cases:**
-      - Creating complete multiple choice option sets
-      - Bulk importing answer choices
-      - Setting up comprehensive question options
-      - Rapid test development workflows
+      - Quick setup of multiple choice questions
+      - Import question options from templates
+      - Batch creation for quiz preparation
+      - Efficient test construction workflows
     `,
-        operationId: 'createQuestionOptionsInBulk',
+        operationId: 'createBulkQuestionOptions',
     })
     @ApiBody({
         type: BulkCreateOptionsDto,
-        description: 'Bulk question options creation data',
+        description: 'Bulk option creation data',
         examples: {
-            'multiple-choice-set': {
-                summary: '🎯 Complete Multiple Choice Set',
-                description: 'Create a full set of multiple choice options',
+            'multiple-choice': {
+                summary: '🎯 Multiple Choice Options Set',
+                description:
+                    'Create complete set of options for a multiple choice question',
                 value: {
                     questionId: 1,
                     options: [
                         {
-                            optionText:
-                                'O(log n) - Logarithmic time complexity',
+                            optionText: 'Variable declaration',
+                            isCorrect: false,
+                        },
+                        {
+                            optionText: 'Function definition',
                             isCorrect: true,
                         },
                         {
-                            optionText: 'O(n) - Linear time complexity',
+                            optionText: 'Class instantiation',
                             isCorrect: false,
                         },
                         {
-                            optionText: 'O(n²) - Quadratic time complexity',
-                            isCorrect: false,
-                        },
-                        {
-                            optionText: 'O(1) - Constant time complexity',
-                            isCorrect: false,
-                        },
-                    ],
-                },
-            },
-            'true-false-set': {
-                summary: '✅ True/False Options',
-                description: 'Create true/false question options',
-                value: {
-                    questionId: 2,
-                    options: [
-                        {
-                            optionText: 'True',
-                            isCorrect: true,
-                        },
-                        {
-                            optionText: 'False',
+                            optionText: 'Module import',
                             isCorrect: false,
                         },
                     ],
@@ -262,13 +252,12 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
-        description: '✅ Question options created successfully in bulk',
+        description: '✅ Question options created successfully',
         type: [QuestionOptionResponseDto],
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description:
-            '❌ Invalid input data or validation errors for one or more options',
+        description: '❌ Invalid bulk creation data',
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
@@ -278,28 +267,34 @@ export class QuestionsOptionsController {
         status: HttpStatus.FORBIDDEN,
         description: '⛔ Forbidden - No access to the specified question',
     })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Question not found',
+    })
     async createBulk(
         @Body() bulkCreateDto: BulkCreateOptionsDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<QuestionOptionResponseDto[]> {
         try {
             this.logger.log(
-                `Creating ${bulkCreateDto.options.length} options in bulk for question ${bulkCreateDto.questionId}`,
+                `Creating ${bulkCreateDto.options.length} options for question ${bulkCreateDto.questionId} by user: ${userId}`,
             );
 
             const options = await this.questionsOptionsService.createBulk(
                 bulkCreateDto,
+                scope,
                 userId,
             );
 
             this.logger.log(
-                `${options.length} question options created successfully in bulk`,
+                `${options.length} question options created successfully`,
             );
 
             return options;
         } catch (error) {
             this.logger.error(
-                `Error creating question options in bulk for user ${userId}:`,
+                `Error creating bulk question options for user ${userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -308,39 +303,37 @@ export class QuestionsOptionsController {
 
     @Get('question/:questionId')
     @ApiOperation({
-        summary: '📝 Get Options for Specific Question',
+        summary: '📝 Get Options for Question',
         description: `
-      **Retrieves all answer options for a specific question**
+      **Retrieve all answer options for a specific question**
       
-      This endpoint provides comprehensive option listings:
-      - All options within the specified question
-      - Correct answer indicators
-      - Option statistics and analytics
-      - Ordered by creation sequence
+      This endpoint returns all options configured for a question including:
+      - Option text and content
+      - Correct answer indicators (filtered for students)
+      - Option ordering and metadata
+      - Complete option details for creators
       
-      **Response Information:**
-      - Complete option information
-      - Correct answer designation
-      - Selection statistics (when available)
-      - Question context information
+      **Data Filtering:**
+      - Correct answer status hidden from students during active tests
+      - Full details available to test creators
+      - Proper ordering maintained
+      - Active options only returned
       
-      **Authorization:**
-      - Question access validation
-      - Test ownership verification for full details
+      **Authorization Requirements:**
+      - Must have access to the question (student or creator)
+      - Valid JWT authentication required
       
       **Use Cases:**
-      - Question preview and review
+      - Displaying question options to test takers
+      - Reviewing question setup for creators
       - Option management interfaces
-      - Student answer choice display
-      - Academic content analysis
-      - Answer key generation
+      - Test preview functionality
     `,
-        operationId: 'getOptionsByQuestion',
+        operationId: 'getQuestionOptions',
     })
     @ApiParam({
         name: 'questionId',
-        type: Number,
-        description: 'Question identifier to retrieve options for',
+        description: 'ID of the question to get options for',
         example: 1,
     })
     @ApiResponse({
@@ -362,13 +355,17 @@ export class QuestionsOptionsController {
     })
     async findByQuestion(
         @Param('questionId', ParseIntPipe) questionId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<QuestionOptionListResponseDto> {
         try {
-            this.logger.log(`Getting options for question ${questionId}`);
+            this.logger.log(
+                `Fetching options for question ${questionId} by user: ${userId}`,
+            );
 
             const result = await this.questionsOptionsService.findByQuestion(
                 questionId,
+                scope,
                 userId,
             );
 
@@ -379,7 +376,7 @@ export class QuestionsOptionsController {
             return result;
         } catch (error) {
             this.logger.error(
-                `Error getting options for question ${questionId}:`,
+                `Error fetching options for question ${questionId} by user ${userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -390,43 +387,40 @@ export class QuestionsOptionsController {
     @ApiOperation({
         summary: '🔍 Get Question Option Details',
         description: `
-      **Retrieves detailed information about a specific question option**
+      **Retrieve detailed information about a specific question option**
       
-      This endpoint provides comprehensive option data including:
-      - Complete option information
-      - Correct answer status
-      - Selection statistics and analytics
-      - Question context information
-      
-      **Detailed Information:**
+      This endpoint returns comprehensive details for a single option including:
       - Option text and content
-      - Correct answer designation
-      - Creation and modification timestamps
-      - Associated question information
-      - Usage statistics (when available)
+      - Correct answer status (filtered appropriately)
+      - Creation and modification metadata
+      - Related question information
       
-      **Security:**
-      - Option access validation
-      - Question ownership verification
-      - Proper permission checks
+      **Data Access Rules:**
+      - Test creators see all option details
+      - Students see filtered information based on test status
+      - Correct answer status controlled by context
+      - Metadata available for authorized users
+      
+      **Authorization Requirements:**
+      - Must have access to the question containing the option
+      - Valid JWT authentication required
       
       **Use Cases:**
-      - Option editing interfaces
-      - Detailed option preview
-      - Option analytics dashboard
-      - Content review and approval
+      - Option editing interfaces for creators
+      - Detailed option review and validation
+      - Option-specific metadata access
+      - Debugging and administration
     `,
-        operationId: 'getQuestionOptionDetails',
+        operationId: 'getQuestionOption',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question option unique identifier',
-        type: 'number',
+        description: 'ID of the question option to retrieve',
         example: 1,
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Question option details retrieved successfully',
+        description: '✅ Question option retrieved successfully',
         type: QuestionOptionResponseDto,
     })
     @ApiResponse({
@@ -435,7 +429,7 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No access to this question option',
+        description: '⛔ Forbidden - No access to this option',
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
@@ -443,22 +437,26 @@ export class QuestionsOptionsController {
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<QuestionOptionResponseDto> {
         try {
-            this.logger.log(`Getting question option details for ID: ${id}`);
+            this.logger.log(
+                `Fetching question option ${id} by user: ${userId}`,
+            );
 
             const option = await this.questionsOptionsService.findOne(
                 id,
+                scope,
                 userId,
             );
 
-            this.logger.log(`Question option details retrieved for ID: ${id}`);
+            this.logger.log(`Question option ${id} retrieved successfully`);
 
             return option;
         } catch (error) {
             this.logger.error(
-                `Error getting question option ${id}:`,
+                `Error fetching question option ${id} by user ${userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -469,42 +467,41 @@ export class QuestionsOptionsController {
     @ApiOperation({
         summary: '✏️ Update Question Option',
         description: `
-      **Updates question option information with comprehensive validation**
+      **Update an existing question option with new information**
       
-      This endpoint allows option owners to update options including:
-      - Option text modifications
+      This endpoint allows test creators to modify question options including:
+      - Option text and content updates
       - Correct answer status changes
-      - Content improvements and corrections
+      - Option metadata modifications
+      - Validation and consistency checks
       
-      **Updatable Fields:**
-      - Option text content
-      - Correct answer designation
-      - Update timestamp (automatic)
-      
-      **Security Features:**
-      - Only question owners can update options
-      - Ownership validation required
-      - Input validation and sanitization
-      - Change audit logging
+      **Update Capabilities:**
+      - Modify option text content
+      - Change correct answer designation
+      - Update option ordering
+      - Preserve option relationships
       
       **Business Rules:**
-      - Cannot change option's question assignment
-      - Must maintain at least one correct option per question
-      - Option text must remain unique within question
-      - Content updates require proper validation
+      - Only test creators can update options
+      - At least one correct option must remain per question
+      - Option text cannot be empty
+      - Changes validated for consistency
+      
+      **Authorization Requirements:**
+      - Must be the owner of the test containing the question
+      - Valid JWT authentication required
       
       **Use Cases:**
-      - Option content improvements
-      - Correct answer adjustments
-      - Text corrections and updates
-      - Content maintenance workflows
+      - Correcting option text errors
+      - Adjusting correct answer designations
+      - Improving option clarity and accuracy
+      - Maintaining question quality
     `,
         operationId: 'updateQuestionOption',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question option unique identifier',
-        type: 'number',
+        description: 'ID of the question option to update',
         example: 1,
     })
     @ApiBody({
@@ -513,26 +510,24 @@ export class QuestionsOptionsController {
         examples: {
             'text-update': {
                 summary: '📝 Update Option Text',
-                description: 'Update just the option text content',
+                description: 'Modify the text content of an option',
                 value: {
-                    optionText:
-                        'O(log n) - Logarithmic time complexity (average case)',
+                    optionText: 'Updated option text with better clarity',
                 },
             },
-            'correctness-update': {
-                summary: '✅ Update Correct Status',
-                description: 'Change the correct answer designation',
+            'correctness-change': {
+                summary: '✅ Change Correct Answer',
+                description: 'Update the correct answer designation',
                 value: {
                     isCorrect: true,
                 },
             },
-            'full-update': {
-                summary: '🔄 Complete Update',
-                description: 'Update both text and correct status',
+            'complete-update': {
+                summary: '🔄 Complete Option Update',
+                description: 'Update both text and correctness',
                 value: {
-                    optionText:
-                        'O(log n) - Logarithmic time complexity (best and average case)',
-                    isCorrect: true,
+                    optionText: 'Completely revised option text',
+                    isCorrect: false,
                 },
             },
         },
@@ -544,7 +539,7 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid input data or validation errors',
+        description: '❌ Invalid update data or validation errors',
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
@@ -552,7 +547,7 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No permission to update this option',
+        description: '⛔ Forbidden - No access to update this option',
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
@@ -561,16 +556,18 @@ export class QuestionsOptionsController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionOptionDto: UpdateQuestionOptionDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<QuestionOptionResponseDto> {
         try {
             this.logger.log(
-                `Updating question option ${id} for user: ${userId}`,
+                `Updating question option ${id} by user: ${userId}`,
             );
 
             const option = await this.questionsOptionsService.update(
                 id,
                 updateQuestionOptionDto,
+                scope,
                 userId,
             );
 
@@ -579,7 +576,7 @@ export class QuestionsOptionsController {
             return option;
         } catch (error) {
             this.logger.error(
-                `Error updating question option ${id} for user ${userId}:`,
+                `Error updating question option ${id} by user ${userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -591,46 +588,41 @@ export class QuestionsOptionsController {
     @ApiOperation({
         summary: '🗑️ Delete Question Option',
         description: `
-      **Permanently deletes a question option with comprehensive validation**
+      **Permanently delete a question option**
       
-      This endpoint allows option owners to delete options with:
-      - Ownership verification
-      - Answer dependency checks
-      - Data integrity protection
-      - Audit trail logging
+      This endpoint allows test creators to remove question options including:
+      - Complete option removal from the question
+      - Validation for minimum option requirements
+      - Cascade handling for related data
+      - Immediate effect on question structure
       
-      **Deletion Process:**
-      - Validates user ownership of question
-      - Checks for existing answer submissions
-      - Prevents deletion if answers reference this option
-      - Ensures at least one option remains per question
-      - Logs deletion for audit purposes
+      **Deletion Rules:**
+      - Only test creators can delete options
+      - Must maintain minimum number of options per question
+      - At least one correct option must remain
+      - Cannot delete if option is referenced in active attempts
       
-      **Safety Features:**
-      - Only question owners can delete options
-      - Prevents deletion of options with submitted answers
-      - Maintains minimum option requirements
-      - Confirms deletion before execution
-      - Maintains referential integrity
+      **Safety Measures:**
+      - Validation before deletion
+      - Transaction-based removal
+      - Related data cleanup
+      - Audit trail maintenance
       
-      **Important Notes:**
-      - **This action is irreversible**
-      - All option data will be permanently deleted
-      - Associated answer references may be affected
-      - Consider archiving instead of deletion
+      **Authorization Requirements:**
+      - Must be the owner of the test containing the question
+      - Valid JWT authentication required
       
       **Use Cases:**
-      - Option cleanup and maintenance
-      - Removing incorrect or outdated options
-      - Question content management
-      - Option lifecycle management
+      - Removing incorrect or redundant options
+      - Simplifying question structure
+      - Quality improvement of questions
+      - Test maintenance and cleanup
     `,
         operationId: 'deleteQuestionOption',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question option unique identifier',
-        type: 'number',
+        description: 'ID of the question option to delete',
         example: 1,
     })
     @ApiResponse({
@@ -639,8 +631,18 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description:
-            '❌ Cannot delete option that has submitted answers or is the last option',
+        description: '❌ Cannot delete option - validation failed',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'string',
+                    example: 'Cannot delete last correct option for question',
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
@@ -648,7 +650,7 @@ export class QuestionsOptionsController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No permission to delete this option',
+        description: '⛔ Forbidden - No access to delete this option',
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
@@ -656,19 +658,20 @@ export class QuestionsOptionsController {
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @GetUser('id') userId: string,
     ): Promise<void> {
         try {
             this.logger.log(
-                `Deleting question option ${id} for user: ${userId}`,
+                `Deleting question option ${id} by user: ${userId}`,
             );
 
-            await this.questionsOptionsService.remove(id, userId);
+            await this.questionsOptionsService.remove(id, scope, userId);
 
             this.logger.log(`Question option ${id} deleted successfully`);
         } catch (error) {
             this.logger.error(
-                `Error deleting question option ${id} for user ${userId}:`,
+                `Error deleting question option ${id} by user ${userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;

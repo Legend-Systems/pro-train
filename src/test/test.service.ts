@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { TestFilterDto } from './dto/test-filter.dto';
@@ -60,11 +61,14 @@ export class TestService {
 
     async create(
         createTestDto: CreateTestDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<TestResponseDto> {
         return this.retryOperation(async () => {
             // Validate course exists and user has ownership
-            await this.validateCourseAccess(createTestDto.courseId, userId);
+            await this.validateCourseAccess(
+                createTestDto.courseId,
+                scope.userId,
+            );
 
             // Get course information to inherit org and branch
             const course = await this.courseRepository.findOne({
@@ -102,7 +106,10 @@ export class TestService {
         });
     }
 
-    async findAll(filters: TestFilterDto): Promise<TestListResponseDto> {
+    async findAll(
+        filters: TestFilterDto,
+        scope: OrgBranchScope,
+    ): Promise<TestListResponseDto> {
         return this.retryOperation(async () => {
             const {
                 courseId,
@@ -123,6 +130,18 @@ export class TestService {
 
             const query = this.testRepository.createQueryBuilder('test');
             query.leftJoinAndSelect('test.course', 'course');
+            query.leftJoinAndSelect('test.orgId', 'org');
+            query.leftJoinAndSelect('test.branchId', 'branch');
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('test.orgId = :orgId', { orgId: scope.orgId });
+            }
+            if (scope.branchId) {
+                query.andWhere('test.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
 
             // Apply filters
             if (courseId) {
@@ -268,8 +287,11 @@ export class TestService {
         });
     }
 
-    async findByCourse(courseId: number): Promise<TestListResponseDto> {
-        return this.findAll({ courseId, page: 1, limit: 100 });
+    async findByCourse(
+        courseId: number,
+        scope: OrgBranchScope,
+    ): Promise<TestListResponseDto> {
+        return this.findAll({ courseId, page: 1, limit: 100 }, scope);
     }
 
     async update(

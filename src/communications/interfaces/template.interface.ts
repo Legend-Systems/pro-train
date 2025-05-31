@@ -122,4 +122,4 @@ export interface TemplateValidationResult {
     errors: string[];
     warnings?: string[];
     missingRequired?: string[];
-} 
+}

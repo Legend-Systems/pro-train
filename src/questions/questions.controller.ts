@@ -26,7 +26,7 @@ import {
     ApiSecurity,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { GetUser } from '../auth/decorators/get-user.decorator';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { QuestionsService } from './questions.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
@@ -165,17 +165,17 @@ export class QuestionsController {
         description: '🔄 Question with this order index already exists',
     })
     async create(
-        @GetUser('id') userId: string,
         @Body() createQuestionDto: CreateQuestionDto,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<QuestionResponseDto> {
         try {
             this.logger.log(
-                `Creating question for test ${createQuestionDto.testId} by user: ${userId}`,
+                `Creating question for test ${createQuestionDto.testId} by user: ${scope.userId}`,
             );
 
             const question = await this.questionsService.create(
                 createQuestionDto,
-                userId,
+                scope,
             );
 
             this.logger.log(
@@ -185,7 +185,7 @@ export class QuestionsController {
             return question;
         } catch (error) {
             this.logger.error(
-                `Error creating question for user ${userId}:`,
+                `Error creating question for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -300,16 +300,16 @@ export class QuestionsController {
     })
     async createBulk(
         @Body() bulkCreateDto: BulkCreateQuestionsDto,
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<QuestionResponseDto[]> {
         try {
             this.logger.log(
-                `Creating ${bulkCreateDto.questions.length} questions in bulk for user: ${userId}`,
+                `Creating ${bulkCreateDto.questions.length} questions in bulk for user: ${scope.userId}`,
             );
 
             const questions = await this.questionsService.createBulk(
                 bulkCreateDto,
-                userId,
+                scope,
             );
 
             this.logger.log(
@@ -319,7 +319,7 @@ export class QuestionsController {
             return questions;
         } catch (error) {
             this.logger.error(
-                `Error creating questions in bulk for user ${userId}:`,
+                `Error creating questions in bulk for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -429,7 +429,7 @@ export class QuestionsController {
     async findByTest(
         @Param('testId', ParseIntPipe) testId: number,
         @Query() filters: QuestionFilterDto,
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<QuestionListResponseDto> {
         try {
             this.logger.log(
@@ -438,7 +438,7 @@ export class QuestionsController {
 
             const result = await this.questionsService.findByTest(
                 testId,
-                userId,
+                scope.userId,
                 filters,
             );
 
@@ -514,12 +514,15 @@ export class QuestionsController {
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<QuestionResponseDto> {
         try {
             this.logger.log(`Getting question details for ID: ${id}`);
 
-            const question = await this.questionsService.findOne(id, userId);
+            const question = await this.questionsService.findOne(
+                id,
+                scope.userId,
+            );
 
             this.logger.log(`Question details retrieved for ID: ${id}`);
 
@@ -636,15 +639,17 @@ export class QuestionsController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionDto: UpdateQuestionDto,
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<QuestionResponseDto> {
         try {
-            this.logger.log(`Updating question ${id} for user: ${userId}`);
+            this.logger.log(
+                `Updating question ${id} for user: ${scope.userId}`,
+            );
 
             const question = await this.questionsService.update(
                 id,
                 updateQuestionDto,
-                userId,
+                scope.userId,
             );
 
             this.logger.log(`Question ${id} updated successfully`);
@@ -652,7 +657,7 @@ export class QuestionsController {
             return question;
         } catch (error) {
             this.logger.error(
-                `Error updating question ${id} for user ${userId}:`,
+                `Error updating question ${id} for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -784,7 +789,7 @@ export class QuestionsController {
             testId: number;
             questions: { questionId: number; newOrderIndex: number }[];
         },
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<void> {
         try {
             this.logger.log(
@@ -794,7 +799,7 @@ export class QuestionsController {
             await this.questionsService.reorder(
                 reorderData.testId,
                 reorderData.questions,
-                userId,
+                scope.userId,
             );
 
             this.logger.log(
@@ -877,17 +882,19 @@ export class QuestionsController {
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
-        @GetUser('id') userId: string,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<void> {
         try {
-            this.logger.log(`Deleting question ${id} for user: ${userId}`);
+            this.logger.log(
+                `Deleting question ${id} for user: ${scope.userId}`,
+            );
 
-            await this.questionsService.remove(id, userId);
+            await this.questionsService.remove(id, scope.userId);
 
             this.logger.log(`Question ${id} deleted successfully`);
         } catch (error) {
             this.logger.error(
-                `Error deleting question ${id} for user ${userId}:`,
+                `Error deleting question ${id} for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;

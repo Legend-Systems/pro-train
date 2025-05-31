@@ -3,18 +3,18 @@ import { OrgController } from './org.controller';
 import { OrgService } from './org.service';
 
 describe('OrgController', () => {
-  let controller: OrgController;
+    let controller: OrgController;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [OrgController],
-      providers: [OrgService],
-    }).compile();
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [OrgController],
+            providers: [OrgService],
+        }).compile();
 
-    controller = module.get<OrgController>(OrgController);
-  });
+        controller = module.get<OrgController>(OrgController);
+    });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
+    it('should be defined', () => {
+        expect(controller).toBeDefined();
+    });
 });

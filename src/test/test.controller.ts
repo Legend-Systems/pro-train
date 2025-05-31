@@ -9,7 +9,6 @@ import {
     Delete,
     Query,
     UseGuards,
-    Request,
     HttpStatus,
     Logger,
     NotFoundException,
@@ -27,7 +26,7 @@ import {
     ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TestService } from './test.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
@@ -151,18 +150,15 @@ export class TestController {
         description: '❌ Course not found',
     })
     async create(
-        @Request() req: AuthenticatedRequest,
         @Body() createTestDto: CreateTestDto,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestResponseDto>> {
         try {
             this.logger.log(
-                `Creating test for course ${createTestDto.courseId} by user: ${req.user.id}`,
+                `Creating test for course ${createTestDto.courseId} by user: ${scope.userId}`,
             );
 
-            const test = await this.testService.create(
-                createTestDto,
-                req.user.id,
-            );
+            const test = await this.testService.create(createTestDto, scope);
 
             this.logger.log(
                 `Test created successfully with ID: ${test.testId}`,
@@ -175,7 +171,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error creating test for user ${req.user.id}:`,
+                `Error creating test for user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -269,13 +265,13 @@ export class TestController {
         description: '🚫 Unauthorized - Invalid or missing JWT token',
     })
     async findAll(
-        @Request() req: AuthenticatedRequest,
         @Query() filters: TestFilterDto,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestListResponseDto>> {
         try {
-            this.logger.log(`Listing tests for user: ${req.user.id}`);
+            this.logger.log(`Listing tests for user: ${scope.userId}`);
 
-            const result = await this.testService.findAll(filters);
+            const result = await this.testService.findAll(filters, scope);
 
             this.logger.log(
                 `Retrieved ${result.tests.length} tests (${result.total} total)`,
@@ -288,7 +284,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error listing tests for user ${req.user.id}:`,
+                `Error listing tests for user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -343,15 +339,15 @@ export class TestController {
         description: '❌ Course not found',
     })
     async findByCourse(
-        @Request() req: AuthenticatedRequest,
         @Param('courseId', ParseIntPipe) courseId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestListResponseDto>> {
         try {
             this.logger.log(
-                `Getting tests for course ${courseId} by user: ${req.user.id}`,
+                `Getting tests for course ${courseId} by user: ${scope.userId}`,
             );
 
-            const result = await this.testService.findByCourse(courseId);
+            const result = await this.testService.findByCourse(courseId, scope);
 
             this.logger.log(
                 `Retrieved ${result.tests.length} tests for course ${courseId}`,
@@ -364,7 +360,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error getting tests for course ${courseId} by user ${req.user.id}:`,
+                `Error getting tests for course ${courseId} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -422,13 +418,13 @@ export class TestController {
         description: '❌ Test not found',
     })
     async findOne(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestDetailDto>> {
         try {
-            this.logger.log(`Getting test ${id} for user: ${req.user.id}`);
+            this.logger.log(`Getting test ${id} for user: ${scope.userId}`);
 
-            const test = await this.testService.findOne(id, req.user.id);
+            const test = await this.testService.findOne(id, scope.userId);
 
             if (!test) {
                 throw new NotFoundException(`Test with ID ${id} not found`);
@@ -443,7 +439,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error getting test ${id} for user ${req.user.id}:`,
+                `Error getting test ${id} for user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -544,17 +540,17 @@ export class TestController {
         description: '❌ Test not found',
     })
     async update(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
         @Body() updateTestDto: UpdateTestDto,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestResponseDto>> {
         try {
-            this.logger.log(`Updating test ${id} by user: ${req.user.id}`);
+            this.logger.log(`Updating test ${id} by user: ${scope.userId}`);
 
             const test = await this.testService.update(
                 id,
                 updateTestDto,
-                req.user.id,
+                scope.userId,
             );
 
             this.logger.log(`Test ${id} updated successfully`);
@@ -566,7 +562,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error updating test ${id} by user ${req.user.id}:`,
+                `Error updating test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -624,13 +620,13 @@ export class TestController {
         description: '❌ Test not found',
     })
     async activate(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestResponseDto>> {
         try {
-            this.logger.log(`Activating test ${id} by user: ${req.user.id}`);
+            this.logger.log(`Activating test ${id} by user: ${scope.userId}`);
 
-            const test = await this.testService.activate(id, req.user.id);
+            const test = await this.testService.activate(id, scope.userId);
 
             this.logger.log(`Test ${id} activated successfully`);
 
@@ -641,7 +637,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error activating test ${id} by user ${req.user.id}:`,
+                `Error activating test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -699,13 +695,13 @@ export class TestController {
         description: '❌ Test not found',
     })
     async deactivate(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestResponseDto>> {
         try {
-            this.logger.log(`Deactivating test ${id} by user: ${req.user.id}`);
+            this.logger.log(`Deactivating test ${id} by user: ${scope.userId}`);
 
-            const test = await this.testService.deactivate(id, req.user.id);
+            const test = await this.testService.deactivate(id, scope.userId);
 
             this.logger.log(`Test ${id} deactivated successfully`);
 
@@ -716,7 +712,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error deactivating test ${id} by user ${req.user.id}:`,
+                `Error deactivating test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -777,15 +773,15 @@ export class TestController {
         description: '❌ Test not found',
     })
     async getStats(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestStatsDto>> {
         try {
             this.logger.log(
-                `Getting stats for test ${id} by user: ${req.user.id}`,
+                `Getting stats for test ${id} by user: ${scope.userId}`,
             );
 
-            const stats = await this.testService.getStats(id, req.user.id);
+            const stats = await this.testService.getStats(id, scope.userId);
 
             this.logger.log(`Stats retrieved for test ${id}`);
 
@@ -796,7 +792,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error getting stats for test ${id} by user ${req.user.id}:`,
+                `Error getting stats for test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -857,15 +853,15 @@ export class TestController {
         description: '❌ Test not found',
     })
     async getConfig(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<TestConfigDto>> {
         try {
             this.logger.log(
-                `Getting config for test ${id} by user: ${req.user.id}`,
+                `Getting config for test ${id} by user: ${scope.userId}`,
             );
 
-            const config = await this.testService.getConfig(id, req.user.id);
+            const config = await this.testService.getConfig(id, scope.userId);
 
             this.logger.log(`Config retrieved for test ${id}`);
 
@@ -876,7 +872,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error getting config for test ${id} by user ${req.user.id}:`,
+                `Error getting config for test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -957,13 +953,13 @@ export class TestController {
         description: '⚠️ Conflict - Test has active attempts or dependencies',
     })
     async remove(
-        @Request() req: AuthenticatedRequest,
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse<null>> {
         try {
-            this.logger.log(`Deleting test ${id} by user: ${req.user.id}`);
+            this.logger.log(`Deleting test ${id} by user: ${scope.userId}`);
 
-            await this.testService.remove(id, req.user.id);
+            await this.testService.remove(id, scope.userId);
 
             this.logger.log(`Test ${id} deleted successfully`);
 
@@ -974,7 +970,7 @@ export class TestController {
             };
         } catch (error) {
             this.logger.error(
-                `Error deleting test ${id} by user ${req.user.id}:`,
+                `Error deleting test ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;

@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsObject, MinLength } from 'class-validator';
+import {
+    IsString,
+    IsOptional,
+    IsEmail,
+    IsObject,
+    MinLength,
+} from 'class-validator';
 import { OperatingHours } from '../entities/branch.entity';
 
 export class CreateBranchDto {

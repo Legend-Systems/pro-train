@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryRunner, DataSource } from 'typeorm';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionFilterDto } from './dto/question-filter.dto';
@@ -65,11 +66,14 @@ export class QuestionsService {
      */
     async create(
         createQuestionDto: CreateQuestionDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<QuestionResponseDto> {
         return this.retryOperation(async () => {
             // Validate test access
-            await this.validateTestAccess(createQuestionDto.testId, userId);
+            await this.validateTestAccess(
+                createQuestionDto.testId,
+                scope.userId,
+            );
 
             // Get test information to inherit org and branch
             const test = await this.testRepository.findOne({
@@ -126,7 +130,7 @@ export class QuestionsService {
      */
     async createBulk(
         bulkCreateDto: BulkCreateQuestionsDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<QuestionResponseDto[]> {
         return this.retryOperation(async () => {
             const queryRunner = this.dataSource.createQueryRunner();
@@ -138,7 +142,10 @@ export class QuestionsService {
 
                 for (const questionDto of bulkCreateDto.questions) {
                     // Validate test access for each question
-                    await this.validateTestAccess(questionDto.testId, userId);
+                    await this.validateTestAccess(
+                        questionDto.testId,
+                        scope.userId,
+                    );
 
                     const question = await this.createQuestionInTransaction(
                         questionDto,

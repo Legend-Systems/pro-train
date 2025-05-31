@@ -19,6 +19,7 @@ import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptListResponseDto } from './dto/test-attempt-list-response.dto';
 import { ResultsService } from '../results/results.service';
 import { AnswersService } from '../answers/answers.service';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class TestAttemptsService {
@@ -71,17 +72,26 @@ export class TestAttemptsService {
      */
     async startAttempt(
         createAttemptDto: CreateTestAttemptDto,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            // Get test details
+            // Get test details with org/branch validation
             const test = await this.testRepository.findOne({
                 where: { testId: createAttemptDto.testId },
-                relations: ['course'],
+                relations: ['course', 'orgId', 'branchId'],
             });
 
             if (!test) {
                 throw new NotFoundException('Test not found');
+            }
+
+            // Validate org/branch access
+            if (scope.orgId && test.orgId?.id !== scope.orgId) {
+                throw new ForbiddenException('Access denied to this test');
+            }
+            if (scope.branchId && test.branchId?.id !== scope.branchId) {
+                throw new ForbiddenException('Access denied to this test');
             }
 
             if (!test.isActive) {
@@ -132,6 +142,9 @@ export class TestAttemptsService {
                 startTime,
                 expiresAt,
                 progressPercentage: 0,
+                // Inherit org/branch from test
+                orgId: test.orgId,
+                branchId: test.branchId,
             });
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
@@ -145,12 +158,14 @@ export class TestAttemptsService {
      */
     async submitAttempt(
         attemptId: number,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            const attempt = await this.findAttemptByIdAndUser(
+            const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
+                scope,
             );
 
             if (attempt.status !== AttemptStatus.IN_PROGRESS) {
@@ -207,12 +222,14 @@ export class TestAttemptsService {
     async updateProgress(
         attemptId: number,
         updateDto: UpdateTestAttemptDto,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            const attempt = await this.findAttemptByIdAndUser(
+            const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
+                scope,
             );
 
             if (attempt.status !== AttemptStatus.IN_PROGRESS) {
@@ -251,6 +268,7 @@ export class TestAttemptsService {
      */
     async getUserAttempts(
         userId: string,
+        scope: OrgBranchScope,
         testId?: number,
         page: number = 1,
         pageSize: number = 10,
@@ -264,20 +282,34 @@ export class TestAttemptsService {
             const query = this.testAttemptRepository
                 .createQueryBuilder('attempt')
                 .leftJoinAndSelect('attempt.test', 'test')
-                .leftJoinAndSelect('test.course', 'course')
+                .leftJoinAndSelect('attempt.orgId', 'org')
+                .leftJoinAndSelect('attempt.branchId', 'branch')
                 .where('attempt.userId = :userId', { userId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere(
+                    '(attempt.orgId IS NULL OR attempt.orgId = :orgId)',
+                    { orgId: scope.orgId },
+                );
+            }
+            if (scope.branchId) {
+                query.andWhere(
+                    '(attempt.branchId IS NULL OR attempt.branchId = :branchId)',
+                    { branchId: scope.branchId },
+                );
+            }
 
             if (testId) {
                 query.andWhere('attempt.testId = :testId', { testId });
             }
 
-            query.orderBy('attempt.createdAt', 'DESC');
+            query
+                .orderBy('attempt.createdAt', 'DESC')
+                .skip((page - 1) * pageSize)
+                .take(pageSize);
 
-            const offset = (page - 1) * pageSize;
-            const [attempts, total] = await query
-                .skip(offset)
-                .take(pageSize)
-                .getManyAndCount();
+            const [attempts, total] = await query.getManyAndCount();
 
             return {
                 attempts: attempts.map(attempt =>
@@ -295,12 +327,14 @@ export class TestAttemptsService {
      */
     async findOne(
         attemptId: number,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            const attempt = await this.findAttemptByIdAndUser(
+            const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
+                scope,
             );
             return this.mapToResponseDto(attempt);
         });
@@ -311,17 +345,19 @@ export class TestAttemptsService {
      */
     async cancelAttempt(
         attemptId: number,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            const attempt = await this.findAttemptByIdAndUser(
+            const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
+                scope,
             );
 
             if (attempt.status !== AttemptStatus.IN_PROGRESS) {
                 throw new BadRequestException(
-                    'Can only cancel attempts that are in progress',
+                    'Cannot cancel attempt that is not in progress',
                 );
             }
 
@@ -340,28 +376,43 @@ export class TestAttemptsService {
         userId: string,
     ): Promise<TestAttempt> {
         const attempt = await this.testAttemptRepository.findOne({
-            where: { attemptId },
-            relations: [
-                'test',
-                'test.course',
-                'test.course.orgId',
-                'test.course.branchId',
-                'user',
-                'user.orgId',
-                'user.branchId',
-                'answers',
-                'results',
-            ],
+            where: {
+                attemptId,
+                userId,
+            },
+            relations: ['test', 'test.course'],
         });
 
         if (!attempt) {
             throw new NotFoundException('Test attempt not found');
         }
 
-        if (attempt.userId !== userId) {
-            throw new ForbiddenException(
-                'You do not have access to this test attempt',
-            );
+        return attempt;
+    }
+
+    private async findAttemptByIdAndUserWithScope(
+        attemptId: number,
+        userId: string,
+        scope: OrgBranchScope,
+    ): Promise<TestAttempt> {
+        const attempt = await this.testAttemptRepository.findOne({
+            where: {
+                attemptId,
+                userId,
+            },
+            relations: ['test', 'test.course', 'orgId', 'branchId'],
+        });
+
+        if (!attempt) {
+            throw new NotFoundException('Test attempt not found');
+        }
+
+        // Validate org/branch access
+        if (scope.orgId && attempt.orgId?.id !== scope.orgId) {
+            throw new ForbiddenException('Access denied to this test attempt');
+        }
+        if (scope.branchId && attempt.branchId?.id !== scope.branchId) {
+            throw new ForbiddenException('Access denied to this test attempt');
         }
 
         return attempt;

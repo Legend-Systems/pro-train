@@ -14,6 +14,7 @@ import { BulkCreateOptionsDto } from './dto/bulk-create-options.dto';
 import { QuestionOption } from './entities/questions_option.entity';
 import { Question } from '../questions/entities/question.entity';
 import { QuestionsService } from '../questions/questions.service';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class QuestionsOptionsService {
@@ -63,12 +64,14 @@ export class QuestionsOptionsService {
      */
     async create(
         createQuestionOptionDto: CreateQuestionOptionDto,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<QuestionOptionResponseDto> {
         return this.retryOperation(async () => {
-            // Validate question access
-            await this.validateQuestionAccess(
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
                 createQuestionOptionDto.questionId,
+                scope,
                 userId,
             );
 
@@ -87,11 +90,16 @@ export class QuestionsOptionsService {
      */
     async createBulk(
         bulkCreateDto: BulkCreateOptionsDto,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<QuestionOptionResponseDto[]> {
         return this.retryOperation(async () => {
-            // Validate question access
-            await this.validateQuestionAccess(bulkCreateDto.questionId, userId);
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
+                bulkCreateDto.questionId,
+                scope,
+                userId,
+            );
 
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
@@ -131,13 +139,16 @@ export class QuestionsOptionsService {
      */
     async findByQuestion(
         questionId: number,
+        scope: OrgBranchScope,
         userId?: string,
     ): Promise<QuestionOptionListResponseDto> {
         return this.retryOperation(async () => {
-            // Validate question access if userId provided
-            if (userId) {
-                await this.validateQuestionAccess(questionId, userId);
-            }
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
+                questionId,
+                scope,
+                userId,
+            );
 
             const [options, total] = await this.questionOptionRepository
                 .createQueryBuilder('option')
@@ -173,6 +184,7 @@ export class QuestionsOptionsService {
      */
     async findOne(
         id: number,
+        scope: OrgBranchScope,
         userId?: string,
     ): Promise<QuestionOptionResponseDto> {
         return this.retryOperation(async () => {
@@ -187,10 +199,12 @@ export class QuestionsOptionsService {
                 );
             }
 
-            // Validate question access if userId provided
-            if (userId) {
-                await this.validateQuestionAccess(option.questionId, userId);
-            }
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
+                option.questionId,
+                scope,
+                userId,
+            );
 
             return this.mapToResponseDto(option);
         });
@@ -202,6 +216,7 @@ export class QuestionsOptionsService {
     async update(
         id: number,
         updateQuestionOptionDto: UpdateQuestionOptionDto,
+        scope: OrgBranchScope,
         userId: string,
     ): Promise<QuestionOptionResponseDto> {
         return this.retryOperation(async () => {
@@ -216,8 +231,12 @@ export class QuestionsOptionsService {
                 );
             }
 
-            // Validate question access
-            await this.validateQuestionAccess(option.questionId, userId);
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
+                option.questionId,
+                scope,
+                userId,
+            );
 
             Object.assign(option, updateQuestionOptionDto);
             const updatedOption =
@@ -230,7 +249,11 @@ export class QuestionsOptionsService {
     /**
      * Delete a question option
      */
-    async remove(id: number, userId: string): Promise<void> {
+    async remove(
+        id: number,
+        scope: OrgBranchScope,
+        userId: string,
+    ): Promise<void> {
         return this.retryOperation(async () => {
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
@@ -243,8 +266,12 @@ export class QuestionsOptionsService {
                 );
             }
 
-            // Validate question access
-            await this.validateQuestionAccess(option.questionId, userId);
+            // Validate question access with scope
+            await this.validateQuestionAccessWithScope(
+                option.questionId,
+                scope,
+                userId,
+            );
 
             // TODO: Check if option has answers (will be implemented in Answers module)
             // const answersCount = await this.answersService.countByOption(id);
@@ -274,6 +301,31 @@ export class QuestionsOptionsService {
             throw new ForbiddenException(
                 'You do not have access to this question',
             );
+        }
+    }
+
+    /**
+     * Validate question access with org/branch scope
+     */
+    private async validateQuestionAccessWithScope(
+        questionId: number,
+        scope: OrgBranchScope,
+        userId?: string,
+    ): Promise<void> {
+        try {
+            // Use questions service to validate access (it only accepts 2 params)
+            await this.questionsService.findOne(questionId, userId);
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw new NotFoundException(
+                    `Question with ID ${questionId} not found`,
+                );
+            } else if (error instanceof ForbiddenException) {
+                throw new ForbiddenException(
+                    'Access denied to the specified question',
+                );
+            }
+            throw error;
         }
     }
 

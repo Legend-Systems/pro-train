@@ -27,6 +27,7 @@ import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('📊 Test Attempts')
 @Controller('test-attempts')
@@ -126,10 +127,12 @@ export class TestAttemptsController {
     })
     async startAttempt(
         @Body() createTestAttemptDto: CreateTestAttemptDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
         return this.testAttemptsService.startAttempt(
             createTestAttemptDto,
+            scope,
             req.user.id,
         );
     }
@@ -202,36 +205,34 @@ export class TestAttemptsController {
     })
     async submitAttempt(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.submitAttempt(id, req.user.id);
+        return this.testAttemptsService.submitAttempt(id, scope, req.user.id);
     }
 
     @Patch(':id/progress')
     @ApiOperation({
         summary: '📈 Update Test Progress',
         description: `
-        **Update the progress of an active test attempt**
+        **Update progress for an in-progress test attempt**
         
-        This endpoint allows updating the progress percentage and status of an active test attempt.
-        Used for tracking completion as students work through questions.
-        
-        **Features:**
-        - Update progress percentage (0-100)
-        - Change attempt status
-        - Automatic expiry checking
-        - Progress validation
+        This endpoint allows updating the progress percentage and other
+        modifiable fields while a test is in progress. Useful for:
+        - Tracking completion percentage as questions are answered
+        - Updating time spent on the test
+        - Recording intermediate saves
         
         **Business Rules:**
         - Only IN_PROGRESS attempts can be updated
-        - Progress must be between 0-100
-        - Expired attempts are automatically marked as EXPIRED
-        - Submitting via status change sets progress to 100%
+        - Progress percentage must be between 0-100
+        - Cannot update submitted or expired attempts
+        - Automatic progress calculation based on answered questions
         
         **Security:**
         - JWT authentication required
         - Users can only update their own attempts
-        - Status transitions are validated
+        - Progress validation performed
         `,
     })
     @ApiParam({
@@ -241,46 +242,45 @@ export class TestAttemptsController {
     })
     @ApiBody({
         type: UpdateTestAttemptDto,
-        description: 'Progress update details',
+        description: 'Progress update data',
         examples: {
             progressUpdate: {
                 summary: 'Update progress percentage',
                 description: 'Update how much of the test is completed',
                 value: {
-                    progressPercentage: 75.5,
-                },
-            },
-            statusChange: {
-                summary: 'Change attempt status',
-                description: 'Submit the test via status change',
-                value: {
-                    status: 'submitted',
+                    progressPercentage: 45,
                 },
             },
         },
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Test progress updated successfully',
+        description: '✅ Progress updated successfully',
         type: TestAttemptResponseDto,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid progress update',
+        description: '❌ Invalid progress data or attempt not in progress',
         example: {
             statusCode: 400,
-            message: 'Test attempt has expired',
+            message: 'Cannot update progress for submitted attempt',
             error: 'Bad Request',
         },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Test attempt not found',
     })
     async updateProgress(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateTestAttemptDto: UpdateTestAttemptDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
         return this.testAttemptsService.updateProgress(
             id,
             updateTestAttemptDto,
+            scope,
             req.user.id,
         );
     }
@@ -291,26 +291,20 @@ export class TestAttemptsController {
         description: `
         **Retrieve all test attempts for the authenticated user**
         
-        This endpoint returns a paginated list of all test attempts made by the current user.
-        Includes filtering options and detailed attempt information.
+        This endpoint returns a paginated list of test attempts created by
+        the current user. Supports filtering by test ID and pagination.
         
         **Features:**
-        - Paginated results with customizable page size
+        - Pagination support with configurable page size
         - Optional filtering by specific test
-        - Includes test and user information
-        - Ordered by creation date (newest first)
-        - Comprehensive attempt details and statistics
+        - Sorted by creation date (newest first)
+        - Includes attempt status and progress information
         
         **Use Cases:**
-        - Student dashboard showing attempt history
-        - Progress tracking across multiple tests
-        - Performance analysis and improvement insights
-        - Retry planning and attempt management
-        
-        **Security:**
-        - JWT authentication required
-        - Users can only see their own attempts
-        - No cross-user data exposure
+        - Student dashboard showing recent attempts
+        - Test history and progress tracking
+        - Resuming incomplete attempts
+        - Performance analytics
         `,
     })
     @ApiQuery({
@@ -321,7 +315,7 @@ export class TestAttemptsController {
     })
     @ApiQuery({
         name: 'page',
-        description: 'Page number for pagination',
+        description: 'Page number for pagination (1-based)',
         required: false,
         example: 1,
     })
@@ -333,35 +327,35 @@ export class TestAttemptsController {
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ User test attempts retrieved successfully',
+        description: '✅ User attempts retrieved successfully',
         example: {
             attempts: [
                 {
                     attemptId: 1,
                     testId: 1,
-                    userId: '123e4567-e89b-12d3-a456-426614174000',
                     attemptNumber: 1,
                     status: 'submitted',
                     startTime: '2024-01-01T09:00:00.000Z',
                     submitTime: '2024-01-01T10:30:00.000Z',
-                    expiresAt: '2024-01-01T11:00:00.000Z',
                     progressPercentage: 100,
-                    createdAt: '2024-01-01T09:00:00.000Z',
-                    updatedAt: '2024-01-01T10:30:00.000Z',
-                    test: {
-                        testId: 1,
-                        title: 'JavaScript Fundamentals Quiz',
-                        testType: 'quiz',
-                        durationMinutes: 120,
-                    },
+                },
+                {
+                    attemptId: 2,
+                    testId: 2,
+                    attemptNumber: 1,
+                    status: 'in_progress',
+                    startTime: '2024-01-02T14:00:00.000Z',
+                    submitTime: null,
+                    progressPercentage: 75,
                 },
             ],
-            total: 1,
+            total: 2,
             page: 1,
             pageSize: 10,
         },
     })
     async getMyAttempts(
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
         @Query('testId') testId?: number,
         @Query('page') page: number = 1,
@@ -369,6 +363,7 @@ export class TestAttemptsController {
     ) {
         return this.testAttemptsService.getUserAttempts(
             req.user.id,
+            scope,
             testId,
             page,
             pageSize,
@@ -381,26 +376,20 @@ export class TestAttemptsController {
         description: `
         **Retrieve detailed information about a specific test attempt**
         
-        This endpoint returns comprehensive details for a single test attempt,
-        including test information, user details, progress, and current status.
+        This endpoint returns comprehensive details about a test attempt
+        including progress, timing, and associated test information.
         
-        **Features:**
-        - Complete attempt information
-        - Related test details
-        - User information
-        - Progress and timing data
-        - Status and metadata
-        
-        **Use Cases:**
-        - Resuming an in-progress attempt
-        - Reviewing completed attempts
-        - Detailed progress tracking
-        - Performance analysis
+        **Included Information:**
+        - Attempt status and progress
+        - Start/submit timestamps
+        - Test details and configuration
+        - Expiration information
+        - Answer summary (if applicable)
         
         **Security:**
-        - JWT authentication required
-        - Users can only access their own attempts
+        - Users can only view their own attempts
         - Ownership validation performed
+        - Sensitive data filtered based on attempt status
         `,
     })
     @ApiParam({
@@ -415,54 +404,45 @@ export class TestAttemptsController {
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
-        description: '❌ Test attempt not found',
+        description: '❌ Test attempt not found or access denied',
         example: {
             statusCode: 404,
             message: 'Test attempt not found',
             error: 'Not Found',
         },
     })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '❌ Access denied to this attempt',
-        example: {
-            statusCode: 403,
-            message: 'You do not have access to this test attempt',
-            error: 'Forbidden',
-        },
-    })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.findOne(id, req.user.id);
+        return this.testAttemptsService.findOne(id, scope, req.user.id);
     }
 
     @Delete(':id/cancel')
     @ApiOperation({
         summary: '❌ Cancel Test Attempt',
         description: `
-        **Cancel an active test attempt**
+        **Cancel an in-progress test attempt**
         
-        This endpoint allows students to cancel an in-progress test attempt.
-        Useful for cases where the student needs to stop and restart later.
-        
-        **Features:**
-        - Cancel only IN_PROGRESS attempts
-        - Permanent status change to CANCELLED
-        - Preserves attempt record for history
-        - Allows starting a new attempt (within limits)
+        This endpoint allows students to cancel an active test attempt.
+        The attempt status will be changed to CANCELLED and cannot be resumed.
         
         **Business Rules:**
-        - Only active attempts can be cancelled
-        - Cancelled attempts cannot be resumed
-        - Cancellation counts towards attempt limit
-        - New attempt can be started if within max attempts
+        - Only IN_PROGRESS attempts can be cancelled
+        - Cancelled attempts count towards the maximum attempt limit
+        - Cancellation is permanent and irreversible
+        - No results are generated for cancelled attempts
+        
+        **Use Cases:**
+        - Student decides not to complete the test
+        - Technical issues preventing test completion
+        - Accidental test start
         
         **Security:**
         - JWT authentication required
         - Users can only cancel their own attempts
-        - Status validation performed
+        - Ownership validation performed
         `,
     })
     @ApiParam({
@@ -482,10 +462,9 @@ export class TestAttemptsController {
             status: 'cancelled',
             startTime: '2024-01-01T09:00:00.000Z',
             submitTime: null,
-            expiresAt: '2024-01-01T11:00:00.000Z',
-            progressPercentage: 45.5,
+            progressPercentage: 45,
             createdAt: '2024-01-01T09:00:00.000Z',
-            updatedAt: '2024-01-01T09:30:00.000Z',
+            updatedAt: '2024-01-01T09:15:00.000Z',
         },
     })
     @ApiResponse({
@@ -493,14 +472,19 @@ export class TestAttemptsController {
         description: '❌ Cannot cancel non-active attempt',
         example: {
             statusCode: 400,
-            message: 'Can only cancel attempts that are in progress',
+            message: 'Cannot cancel attempt that is not in progress',
             error: 'Bad Request',
         },
     })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Test attempt not found',
+    })
     async cancelAttempt(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.cancelAttempt(id, req.user.id);
+        return this.testAttemptsService.cancelAttempt(id, scope, req.user.id);
     }
 }

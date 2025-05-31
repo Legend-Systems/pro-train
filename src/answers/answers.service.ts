@@ -12,8 +12,11 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { MarkAnswerDto } from './dto/mark-answer.dto';
 import { BulkAnswersDto } from './dto/bulk-answers.dto';
 import { AnswerResponseDto } from './dto/answer-response.dto';
-import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
-import { Question } from '../questions/entities/question.entity';
+import {
+    TestAttempt,
+    AttemptStatus,
+} from '../test_attempts/entities/test_attempt.entity';
+import { Question, QuestionType } from '../questions/entities/question.entity';
 import { QuestionOption } from '../questions_options/entities/questions_option.entity';
 
 @Injectable()
@@ -49,7 +52,7 @@ export class AnswersService {
             );
         }
 
-        if (attempt.status !== 'in_progress') {
+        if (attempt.status !== AttemptStatus.IN_PROGRESS) {
             throw new BadRequestException(
                 'Cannot create answers for non-active attempts',
             );
@@ -126,7 +129,7 @@ export class AnswersService {
             );
         }
 
-        if (answer.attempt.status !== 'in_progress') {
+        if (answer.attempt.status !== AttemptStatus.IN_PROGRESS) {
             throw new BadRequestException(
                 'Cannot update answers for non-active attempts',
             );
@@ -217,10 +220,7 @@ export class AnswersService {
         return answers.map(answer => this.mapToResponseDto(answer));
     }
 
-    async findByQuestion(
-        questionId: number,
-        userId?: string,
-    ): Promise<AnswerResponseDto[]> {
+    async findByQuestion(questionId: number): Promise<AnswerResponseDto[]> {
         // This method is typically for instructors to see all answers to a question
         const answers = await this.answerRepository.find({
             where: { questionId },
@@ -245,7 +245,7 @@ export class AnswersService {
                 // Continue with other answers even if one fails
                 console.error(
                     `Failed to create answer for question ${answerDto.questionId}:`,
-                    error.message,
+                    error instanceof Error ? error.message : 'Unknown error',
                 );
             }
         }
@@ -264,9 +264,10 @@ export class AnswersService {
             if (
                 answer.selectedOptionId &&
                 answer.selectedOption &&
-                answer.question.questionType === 'multiple_choice'
+                answer.question.questionType === QuestionType.MULTIPLE_CHOICE
             ) {
-                answer.isCorrect = answer.selectedOption.isCorrect;
+                const selectedOption = answer.selectedOption as QuestionOption;
+                answer.isCorrect = selectedOption.isCorrect;
                 answer.pointsAwarded = answer.isCorrect
                     ? answer.question.points
                     : 0;
@@ -303,9 +304,12 @@ export class AnswersService {
                 : undefined,
             selectedOption: answer.selectedOption
                 ? {
-                      optionId: answer.selectedOption.optionId,
-                      optionText: answer.selectedOption.optionText,
-                      isCorrect: answer.selectedOption.isCorrect,
+                      optionId: (answer.selectedOption as QuestionOption)
+                          .optionId,
+                      optionText: (answer.selectedOption as QuestionOption)
+                          .optionText,
+                      isCorrect: (answer.selectedOption as QuestionOption)
+                          .isCorrect,
                   }
                 : undefined,
         };

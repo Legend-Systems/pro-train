@@ -18,6 +18,7 @@ import { Course } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
 import { UserService } from '../user/user.service';
 import { OrgBranchScopingService } from '../auth/services/org-branch-scoping.service';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class CourseService {
@@ -61,18 +62,24 @@ export class CourseService {
 
     async create(
         createCourseDto: CreateCourseDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<CourseResponseDto> {
         return this.retryOperation(async () => {
             // Validate user exists
-            const user = await this.userService.findById(userId);
+            const user = await this.userService.findById(scope.userId);
             if (!user) {
-                throw new NotFoundException(`User with ID ${userId} not found`);
+                throw new NotFoundException(
+                    `User with ID ${scope.userId} not found`,
+                );
             }
 
             const course = this.courseRepository.create({
                 ...createCourseDto,
-                createdBy: userId,
+                createdBy: scope.userId,
+                orgId: scope.orgId ? ({ id: scope.orgId } as any) : undefined,
+                branchId: scope.branchId
+                    ? ({ id: scope.branchId } as any)
+                    : undefined,
             });
 
             const savedCourse = await this.courseRepository.save(course);
@@ -86,7 +93,10 @@ export class CourseService {
         });
     }
 
-    async findAll(filters: CourseFilterDto): Promise<CourseListResponseDto> {
+    async findAll(
+        filters: CourseFilterDto,
+        scope?: OrgBranchScope,
+    ): Promise<CourseListResponseDto> {
         return this.retryOperation(async () => {
             const {
                 title,
@@ -101,6 +111,18 @@ export class CourseService {
 
             const query = this.courseRepository.createQueryBuilder('course');
             query.leftJoinAndSelect('course.creator', 'creator');
+            query.leftJoinAndSelect('course.orgId', 'org');
+            query.leftJoinAndSelect('course.branchId', 'branch');
+
+            // Apply org/branch scoping
+            if (scope?.orgId) {
+                query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
+            }
+            if (scope?.branchId) {
+                query.andWhere('course.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
 
             // Apply filters
             if (title) {
@@ -164,10 +186,23 @@ export class CourseService {
         });
     }
 
-    async findOne(id: number): Promise<CourseDetailDto | null> {
+    async findOne(
+        id: number,
+        scope?: OrgBranchScope,
+    ): Promise<CourseDetailDto | null> {
         return this.retryOperation(async () => {
+            const whereCondition: any = { courseId: id };
+
+            // Apply org/branch scoping
+            if (scope?.orgId) {
+                whereCondition.orgId = { id: scope.orgId };
+            }
+            if (scope?.branchId) {
+                whereCondition.branchId = { id: scope.branchId };
+            }
+
             const course = await this.courseRepository.findOne({
-                where: { courseId: id },
+                where: whereCondition,
                 relations: ['creator', 'orgId', 'branchId'],
             });
 
@@ -204,8 +239,9 @@ export class CourseService {
     async findByCreator(
         userId: string,
         filters: Partial<CourseFilterDto>,
+        scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
-        return this.findAll({ ...filters, createdBy: userId });
+        return this.findAll({ ...filters, createdBy: userId }, scope);
     }
 
     async update(

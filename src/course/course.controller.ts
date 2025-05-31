@@ -27,6 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseService } from './course.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
@@ -147,16 +148,16 @@ export class CourseController {
     })
     async create(
         @Body() createCourseDto: CreateCourseDto,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<CourseResponseDto> {
         try {
             this.logger.log(
-                `Creating course "${createCourseDto.title}" for user: ${req.user.id}`,
+                `Creating course "${createCourseDto.title}" for user: ${scope.userId} in org: ${scope.orgId}, branch: ${scope.branchId}`,
             );
 
             const course = await this.courseService.create(
                 createCourseDto,
-                req.user.id,
+                scope,
             );
 
             this.logger.log(
@@ -166,7 +167,7 @@ export class CourseController {
             return course;
         } catch (error) {
             this.logger.error(
-                `Error creating course for user ${req.user.id}:`,
+                `Error creating course for user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -267,13 +268,14 @@ export class CourseController {
     })
     async findAll(
         @Query() filters: CourseFilterDto,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
         try {
             this.logger.log(
-                `Listing courses with filters: ${JSON.stringify(filters)}`,
+                `Listing courses with filters: ${JSON.stringify(filters)} for org: ${scope.orgId}, branch: ${scope.branchId}`,
             );
 
-            const result = await this.courseService.findAll(filters);
+            const result = await this.courseService.findAll(filters, scope);
 
             this.logger.log(
                 `Retrieved ${result.courses.length} courses out of ${result.total} total`,
@@ -323,24 +325,25 @@ export class CourseController {
     })
     async getMyCreatedCourses(
         @Query() filters: CourseFilterDto,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
         try {
-            this.logger.log(`Getting courses created by user: ${req.user.id}`);
+            this.logger.log(`Getting courses created by user: ${scope.userId}`);
 
             const result = await this.courseService.findByCreator(
-                req.user.id,
+                scope.userId,
                 filters,
+                scope,
             );
 
             this.logger.log(
-                `Retrieved ${result.courses.length} courses created by user: ${req.user.id}`,
+                `Retrieved ${result.courses.length} courses created by user: ${scope.userId}`,
             );
 
             return result;
         } catch (error) {
             this.logger.error(
-                `Error getting courses for user ${req.user.id}:`,
+                `Error getting courses for user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -410,11 +413,14 @@ export class CourseController {
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<CourseDetailDto> {
         try {
-            this.logger.log(`Getting course details for ID: ${id}`);
+            this.logger.log(
+                `Getting course details for ID: ${id} with org/branch scope`,
+            );
 
-            const course = await this.courseService.findOne(id);
+            const course = await this.courseService.findOne(id, scope);
 
             if (!course) {
                 this.logger.error(`Course not found: ${id}`);

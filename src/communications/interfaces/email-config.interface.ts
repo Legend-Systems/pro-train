@@ -56,4 +56,4 @@ export interface EmailResult {
     messageId?: string;
     error?: string;
     response?: string;
-} 
+}
