@@ -72,17 +72,14 @@ export class EmailTemplateService {
         );
 
         // Capitalize helper
-        Handlebars.registerHelper(
-            'capitalize',
-            (str: any): string => {
-                if (!str) return '';
-                const stringValue = String(str);
-                return (
-                    stringValue.charAt(0).toUpperCase() +
-                    stringValue.slice(1).toLowerCase()
-                );
-            },
-        );
+        Handlebars.registerHelper('capitalize', (str: any): string => {
+            if (!str) return '';
+            const stringValue = String(str);
+            return (
+                stringValue.charAt(0).toUpperCase() +
+                stringValue.slice(1).toLowerCase()
+            );
+        });
 
         this.logger.log('Handlebars helpers registered successfully');
     }
@@ -101,7 +98,11 @@ export class EmailTemplateService {
                         type: EmailType.WELCOME,
                         version: '1.0.0',
                         description: 'Welcome new users to the platform',
-                        requiredData: ['recipientName', 'loginUrl', 'dashboardUrl'],
+                        requiredData: [
+                            'recipientName',
+                            'loginUrl',
+                            'dashboardUrl',
+                        ],
                         optionalData: ['activationToken', 'profileUrl'],
                     },
                 },
@@ -130,7 +131,11 @@ export class EmailTemplateService {
                         version: '1.0.0',
                         description: 'Notify users about new tests',
                         requiredData: ['testTitle', 'dueDate', 'testUrl'],
-                        optionalData: ['testDescription', 'duration', 'instructorName'],
+                        optionalData: [
+                            'testDescription',
+                            'duration',
+                            'instructorName',
+                        ],
                     },
                 },
                 {
@@ -143,7 +148,15 @@ export class EmailTemplateService {
                         type: EmailType.RESULTS_SUMMARY,
                         version: '1.0.0',
                         description: 'Test results summary',
-                        requiredData: ['testTitle', 'score', 'totalQuestions', 'correctAnswers', 'percentage', 'completionTime', 'resultsUrl'],
+                        requiredData: [
+                            'testTitle',
+                            'score',
+                            'totalQuestions',
+                            'correctAnswers',
+                            'percentage',
+                            'completionTime',
+                            'resultsUrl',
+                        ],
                         optionalData: ['feedback'],
                     },
                 },
@@ -158,7 +171,12 @@ export class EmailTemplateService {
                         version: '1.0.0',
                         description: 'Course enrollment confirmation',
                         requiredData: ['courseName', 'courseUrl'],
-                        optionalData: ['courseDescription', 'instructorName', 'startDate', 'endDate'],
+                        optionalData: [
+                            'courseDescription',
+                            'instructorName',
+                            'startDate',
+                            'endDate',
+                        ],
                     },
                 },
                 {
@@ -171,7 +189,12 @@ export class EmailTemplateService {
                         type: EmailType.SYSTEM_ALERT,
                         version: '1.0.0',
                         description: 'System notifications and alerts',
-                        requiredData: ['alertType', 'alertTitle', 'alertMessage', 'timestamp'],
+                        requiredData: [
+                            'alertType',
+                            'alertTitle',
+                            'alertMessage',
+                            'timestamp',
+                        ],
                         optionalData: ['actionUrl', 'actionText'],
                     },
                 },
@@ -218,9 +241,11 @@ export class EmailTemplateService {
         }
     }
 
-    private async loadTemplate(templateFile: string): Promise<Handlebars.TemplateDelegate> {
+    private async loadTemplate(
+        templateFile: string,
+    ): Promise<Handlebars.TemplateDelegate> {
         const cacheKey = templateFile;
-        
+
         // Check cache first
         if (this.templateCache.has(cacheKey)) {
             return this.templateCache.get(cacheKey)!;
@@ -230,19 +255,24 @@ export class EmailTemplateService {
             const templatePath = path.join(this.templatesPath, templateFile);
             const templateContent = await fs.readFile(templatePath, 'utf-8');
             const compiledTemplate = Handlebars.compile(templateContent);
-            
+
             // Cache the compiled template
             this.templateCache.set(cacheKey, compiledTemplate);
-            
+
             this.logger.debug(`Template loaded and cached: ${templateFile}`);
             return compiledTemplate;
         } catch (error) {
-            this.logger.error(`Failed to load template: ${templateFile}`, error);
+            this.logger.error(
+                `Failed to load template: ${templateFile}`,
+                error,
+            );
             throw new NotFoundException(`Template not found: ${templateFile}`);
         }
     }
 
-    async renderTemplate(options: TemplateRenderOptions): Promise<TemplateRenderResult> {
+    async renderTemplate(
+        options: TemplateRenderOptions,
+    ): Promise<TemplateRenderResult> {
         const { template, data, format = 'both' } = options;
 
         try {
@@ -257,7 +287,9 @@ export class EmailTemplateService {
 
             if (format === 'text' || format === 'both') {
                 try {
-                    const textTemplate = await this.loadTemplate(`${template}.txt.hbs`);
+                    const textTemplate = await this.loadTemplate(
+                        `${template}.txt.hbs`,
+                    );
                     result.text = textTemplate(data);
                 } catch (error) {
                     // If text template doesn't exist, generate from HTML
@@ -274,16 +306,24 @@ export class EmailTemplateService {
         }
     }
 
-    async renderByType(type: EmailType, data: TemplateData, format?: 'html' | 'text' | 'both'): Promise<TemplateRenderResult> {
+    async renderByType(
+        type: EmailType,
+        data: TemplateData,
+        format?: 'html' | 'text' | 'both',
+    ): Promise<TemplateRenderResult> {
         const config = this.templateConfigs.get(type);
         if (!config) {
-            throw new NotFoundException(`Template configuration not found for type: ${type}`);
+            throw new NotFoundException(
+                `Template configuration not found for type: ${type}`,
+            );
         }
 
         // Validate required data
         const validation = this.validateTemplateData(type, data);
         if (!validation.isValid) {
-            throw new Error(`Template validation failed: ${validation.errors.join(', ')}`);
+            throw new Error(
+                `Template validation failed: ${validation.errors.join(', ')}`,
+            );
         }
 
         return this.renderTemplate({
@@ -293,7 +333,10 @@ export class EmailTemplateService {
         });
     }
 
-    validateTemplateData(type: EmailType, data: TemplateData): TemplateValidationResult {
+    validateTemplateData(
+        type: EmailType,
+        data: TemplateData,
+    ): TemplateValidationResult {
         const config = this.templateConfigs.get(type);
         if (!config) {
             return {
@@ -315,7 +358,10 @@ export class EmailTemplateService {
         });
 
         // Check email format if present
-        if (data.recipientEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.recipientEmail)) {
+        if (
+            data.recipientEmail &&
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.recipientEmail)
+        ) {
             errors.push('Invalid email format for recipientEmail');
         }
 
@@ -330,24 +376,24 @@ export class EmailTemplateService {
     private generateSubject(templateName: string, data: TemplateData): string {
         // Subject templates based on email type
         const subjectTemplates: Record<string, string> = {
-            'welcome': 'Welcome to {{companyName}} - Get Started!',
+            welcome: 'Welcome to {{companyName}} - Get Started!',
             'password-reset': 'Password Reset Request',
             'test-notification': 'New Test Available: {{testTitle}}',
             'results-summary': 'Test Results: {{testTitle}}',
             'course-enrollment': 'Enrolled in {{courseName}}',
             'system-alert': '{{alertTitle}}',
-            'custom': '{{title}}',
+            custom: '{{title}}',
         };
 
         const subjectTemplate = subjectTemplates[templateName] || '{{title}}';
         const compiledSubject = Handlebars.compile(subjectTemplate);
-        
+
         // Provide default company name if not provided
         const subjectData = {
             companyName: 'Exxam Platform',
             ...data,
         };
-        
+
         return compiledSubject(subjectData);
     }
 
@@ -381,4 +427,4 @@ export class EmailTemplateService {
         await this.loadTemplate(templateFile);
         this.logger.log(`Template reloaded: ${templateFile}`);
     }
-} 
+}
