@@ -144,13 +144,19 @@ export class AuthService {
         const hashedPassword = await bcrypt.hash(password, this.saltRounds);
 
         // Create user with org/branch from invitation if available
-        const user = await this.userService.create({
+        await this.userService.create({
             email,
             password: hashedPassword,
             firstName,
             lastName,
             avatar,
         });
+
+        // Fetch the created user
+        const user = await this.userService.findByEmail(email);
+        if (!user) {
+            throw new Error('Failed to retrieve user after creation');
+        }
 
         // Assign organization and branch if from invitation
         if (
