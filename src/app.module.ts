@@ -27,6 +27,10 @@ import { Answer } from './answers/entities/answer.entity';
 import { Result } from './results/entities/result.entity';
 import { Leaderboard } from './leaderboard/entities/leaderboard.entity';
 import { TrainingProgress } from './training_progress/entities/training_progress.entity';
+import { Communication } from './communications/entities/communication.entity';
+import { CommunicationsModule } from './communications/communications.module';
+import { OrgModule } from './org/org.module';
+import { BranchModule } from './branch/branch.module';
 
 @Module({
     imports: [
@@ -76,6 +80,7 @@ import { TrainingProgress } from './training_progress/entities/training_progress
                     Result,
                     Leaderboard,
                     TrainingProgress,
+                    Communication,
                 ],
                 synchronize: true,
                 logging: false,
@@ -112,6 +117,9 @@ import { TrainingProgress } from './training_progress/entities/training_progress
         LeaderboardModule,
         TrainingProgressModule,
         ReportsModule,
+        CommunicationsModule,
+        OrgModule,
+        BranchModule,
     ],
     controllers: [AppController],
     providers: [
