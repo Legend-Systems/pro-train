@@ -1,0 +1,20 @@
+{{#if title}}{{title}}{{else}}{{companyName}}{{/if}}
+
+{{#if recipientName}}Hello {{recipientName}},{{/if}}
+
+{{#if message}}
+{{message}}
+{{else}}
+This is a custom email from {{companyName}}.
+{{/if}}
+
+{{#each customSections}}
+
+{{#if this.title}}{{this.title}}{{/if}}
+{{this.content}}
+{{/each}}
+
+Need help? Contact us at {{supportEmail}}
+
+{{companyName}}
+{{#if unsubscribeUrl}}Unsubscribe: {{unsubscribeUrl}}{{/if}} 

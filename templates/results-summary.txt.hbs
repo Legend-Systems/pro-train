@@ -1,0 +1,34 @@
+Test Results: {{testTitle}}
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}},
+
+Your test results are now available!
+
+TEST RESULTS:
+{{testTitle}}
+
+Score: {{score}}/{{totalQuestions}} ({{percentage}}%)
+Correct Answers: {{correctAnswers}}
+Completion Time: {{completionTime}}
+
+{{#if feedback}}
+FEEDBACK:
+{{feedback}}
+{{/if}}
+
+View Detailed Results: {{resultsUrl}}
+
+{{#if gt percentage 80}}
+🎉 Excellent work! You've demonstrated strong understanding of the material.
+{{else if gt percentage 60}}
+✅ Good job! You've shown solid knowledge with room for improvement.
+{{else}}
+📚 Keep studying! Consider reviewing the material and retaking the test if allowed.
+{{/if}}
+
+We're here to support your learning journey. Keep up the great work!
+
+Need help? Contact us at {{supportEmail}}
+
+{{companyName}}
+{{#if unsubscribeUrl}}Unsubscribe: {{unsubscribeUrl}}{{/if}} 

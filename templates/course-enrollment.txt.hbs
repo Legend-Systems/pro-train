@@ -1,0 +1,31 @@
+Enrolled in {{courseName}}
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}},
+
+Congratulations! You have successfully enrolled in {{courseName}}.
+
+COURSE DETAILS:
+{{courseName}}
+
+{{#if courseDescription}}Description: {{courseDescription}}{{/if}}
+{{#if instructorName}}Instructor: {{instructorName}}{{/if}}
+{{#if startDate}}Start Date: {{formatDate startDate 'long'}}{{/if}}
+{{#if endDate}}End Date: {{formatDate endDate 'long'}}{{/if}}
+
+Access Your Course: {{courseUrl}}
+
+You now have access to all course materials, assignments, and resources. We recommend starting with the course overview to familiarize yourself with the curriculum.
+
+WHAT'S NEXT:
+• Review the course syllabus and schedule
+• Complete any prerequisite assessments
+• Join course discussions and forums
+• Start working through the course materials
+• Reach out to your instructor with any questions
+
+We're excited to have you on this learning journey!
+
+Need help? Contact us at {{supportEmail}}
+
+{{companyName}}
+{{#if unsubscribeUrl}}Unsubscribe: {{unsubscribeUrl}}{{/if}} 

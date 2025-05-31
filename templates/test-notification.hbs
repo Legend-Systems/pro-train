@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Test Available: {{testTitle}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .test-info {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .test-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 15px;
+        }
+        
+        .test-details {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .detail-item {
+            display: flex;
+            align-items: center;
+            font-size: 16px;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #374151;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        
+        .detail-value {
+            color: #4b5563;
+        }
+        
+        .due-date {
+            background-color: #fef3c7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #f59e0b;
+            text-align: center;
+        }
+        
+        .due-date p {
+            color: #92400e;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s ease;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .footer a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .test-info {
+                padding: 20px;
+            }
+            
+            .test-title {
+                font-size: 20px;
+            }
+            
+            .detail-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            
+            .detail-label {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 New Test Available</h1>
+            <p>You have been assigned a new test</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello{{#if recipientName}} {{recipientName}}{{/if}},
+            </div>
+            
+            <div class="message">
+                {{#if instructorName}}{{instructorName}}{{else}}Your instructor{{/if}} has assigned you a new test. Please review the details below and complete it by the due date.
+            </div>
+            
+            <div class="test-info">
+                <div class="test-title">{{testTitle}}</div>
+                
+                <div class="test-details">
+                    {{#if testDescription}}
+                    <div class="detail-item">
+                        <span class="detail-label">Description:</span>
+                        <span class="detail-value">{{testDescription}}</span>
+                    </div>
+                    {{/if}}
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Due Date:</span>
+                        <span class="detail-value">{{formatDate dueDate 'long'}}</span>
+                    </div>
+                    
+                    {{#if duration}}
+                    <div class="detail-item">
+                        <span class="detail-label">Duration:</span>
+                        <span class="detail-value">{{duration}}</span>
+                    </div>
+                    {{/if}}
+                    
+                    {{#if instructorName}}
+                    <div class="detail-item">
+                        <span class="detail-label">Instructor:</span>
+                        <span class="detail-value">{{instructorName}}</span>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+            
+            <div class="due-date">
+                <p>⏰ Due: {{formatDate dueDate 'long'}}</p>
+            </div>
+            
+            <div class="cta-section">
+                <a href="{{testUrl}}" class="cta-button">Start Test</a>
+            </div>
+            
+            <div class="message">
+                <strong>Important Reminders:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Make sure you have a stable internet connection</li>
+                    <li>Complete the test in one session if possible</li>
+                    <li>Submit your answers before the due date</li>
+                    <li>Contact support if you experience any technical issues</li>
+                </ul>
+            </div>
+            
+            <div class="message">
+                Good luck with your test! We're here to support your learning journey.
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>
+                {{companyName}} | 
+                {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
+            </p>
+        </div>
+    </div>
+</body>
+</html> 

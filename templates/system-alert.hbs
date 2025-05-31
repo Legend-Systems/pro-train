@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{alertTitle}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header.error {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+        
+        .header.warning {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+        }
+        
+        .header.success {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+        
+        .header.info {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .alert-card {
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid;
+        }
+        
+        .alert-card.error {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border-left-color: #dc2626;
+        }
+        
+        .alert-card.warning {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border-left-color: #d97706;
+        }
+        
+        .alert-card.success {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-left-color: #059669;
+        }
+        
+        .alert-card.info {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border-left-color: #2563eb;
+        }
+        
+        .alert-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .alert-title.error {
+            color: #991b1b;
+        }
+        
+        .alert-title.warning {
+            color: #92400e;
+        }
+        
+        .alert-title.success {
+            color: #065f46;
+        }
+        
+        .alert-title.info {
+            color: #1e40af;
+        }
+        
+        .alert-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .alert-message {
+            font-size: 16px;
+            line-height: 1.7;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .alert-message.error {
+            color: #7f1d1d;
+        }
+        
+        .alert-message.warning {
+            color: #78350f;
+        }
+        
+        .alert-message.success {
+            color: #064e3b;
+        }
+        
+        .alert-message.info {
+            color: #1e3a8a;
+        }
+        
+        .timestamp {
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f9fafb;
+            border-radius: 6px;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s ease;
+        }
+        
+        .cta-button.error {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+        
+        .cta-button.warning {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+        }
+        
+        .cta-button.success {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+        
+        .cta-button.info {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .footer a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .alert-card {
+                padding: 20px;
+            }
+            
+            .alert-title {
+                font-size: 20px;
+            }
+            
+            .alert-icon {
+                font-size: 36px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header {{alertType}}">
+            <h1>System Alert</h1>
+            <p>{{alertTitle}}</p>
+        </div>
+        
+        <div class="content">
+            {{#if recipientName}}
+            <div class="greeting">
+                Hello {{recipientName}},
+            </div>
+            {{/if}}
+            
+            <div class="alert-card {{alertType}}">
+                <div class="alert-icon">
+                    {{#if eq alertType 'error'}}🚨{{/if}}
+                    {{#if eq alertType 'warning'}}⚠️{{/if}}
+                    {{#if eq alertType 'success'}}✅{{/if}}
+                    {{#if eq alertType 'info'}}ℹ️{{/if}}
+                </div>
+                
+                <div class="alert-title {{alertType}}">
+                    {{alertTitle}}
+                </div>
+                
+                <div class="alert-message {{alertType}}">
+                    {{alertMessage}}
+                </div>
+                
+                {{#if actionUrl}}
+                <div class="cta-section">
+                    <a href="{{actionUrl}}" class="cta-button {{alertType}}">
+                        {{#if actionText}}{{actionText}}{{else}}Learn More{{/if}}
+                    </a>
+                </div>
+                {{/if}}
+            </div>
+            
+            <div class="timestamp">
+                <strong>Time:</strong> {{formatDate timestamp 'long'}}
+            </div>
+            
+            <div class="message">
+                {{#if eq alertType 'error'}}
+                We apologize for any inconvenience this may cause. Our team is working to resolve this issue as quickly as possible. If you need immediate assistance, please contact our support team.
+                {{else if eq alertType 'warning'}}
+                Please take note of this important information and plan accordingly. If you have any questions or concerns, don't hesitate to reach out to our support team.
+                {{else if eq alertType 'success'}}
+                Thank you for your attention to this matter. We appreciate your understanding and continued use of our platform.
+                {{else}}
+                This is an informational notice to keep you updated about our platform. No action is required on your part at this time.
+                {{/if}}
+            </div>
+            
+            {{#if eq alertType 'error'}}
+            <div class="message">
+                <strong>What you can do:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Check our status page for real-time updates</li>
+                    <li>Try refreshing the page or logging out and back in</li>
+                    <li>Contact support if the issue persists</li>
+                    <li>Follow our social media for the latest updates</li>
+                </ul>
+            </div>
+            {{/if}}
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>{{companyName}} System Team</p>
+        </div>
+    </div>
+</body>
+</html> 

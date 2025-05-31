@@ -1,0 +1,27 @@
+{{alertTitle}}
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}},
+
+{{#if eq alertType 'error'}}🚨{{else if eq alertType 'warning'}}⚠️{{else if eq alertType 'success'}}✅{{else}}ℹ️{{/if}} {{alertTitle}}
+
+{{alertMessage}}
+
+{{#if actionUrl}}
+{{#if actionText}}{{actionText}}: {{actionUrl}}{{else}}More Information: {{actionUrl}}{{/if}}
+{{/if}}
+
+Time: {{formatDate timestamp 'long'}}
+
+{{#if eq alertType 'error'}}
+If you need immediate assistance, please contact our support team.
+{{else if eq alertType 'warning'}}
+Please take note of this important information.
+{{else if eq alertType 'success'}}
+Thank you for your attention.
+{{else}}
+This is an informational notice.
+{{/if}}
+
+Need help? Contact us at {{supportEmail}}
+
+{{companyName}} System Team 

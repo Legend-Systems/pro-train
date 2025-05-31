@@ -1,0 +1,30 @@
+📋 New Test Available
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}},
+
+{{#if instructorName}}{{instructorName}}{{else}}Your instructor{{/if}} has assigned you a new test. Please review the details below and complete it by the due date.
+
+TEST DETAILS:
+{{testTitle}}
+
+{{#if testDescription}}Description: {{testDescription}}{{/if}}
+Due Date: {{formatDate dueDate 'long'}}
+{{#if duration}}Duration: {{duration}}{{/if}}
+{{#if instructorName}}Instructor: {{instructorName}}{{/if}}
+
+⏰ Due: {{formatDate dueDate 'long'}}
+
+Start Test: {{testUrl}}
+
+IMPORTANT REMINDERS:
+• Make sure you have a stable internet connection
+• Complete the test in one session if possible
+• Submit your answers before the due date
+• Contact support if you experience any technical issues
+
+Good luck with your test! We're here to support your learning journey.
+
+Need help? Contact us at {{supportEmail}}
+
+{{companyName}}
+{{#if unsubscribeUrl}}Unsubscribe: {{unsubscribeUrl}}{{/if}} 

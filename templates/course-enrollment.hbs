@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enrolled in {{courseName}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .course-card {
+            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #8b5cf6;
+        }
+        
+        .course-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #5b21b6;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .course-details {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .detail-item {
+            display: flex;
+            align-items: flex-start;
+            font-size: 16px;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #374151;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        
+        .detail-value {
+            color: #4b5563;
+            flex: 1;
+        }
+        
+        .schedule-info {
+            background-color: #e0e7ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .schedule-info h4 {
+            color: #3730a3;
+            margin-bottom: 10px;
+        }
+        
+        .date-range {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e1b4b;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s ease;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .next-steps {
+            background-color: #f8fafc;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 30px 0;
+        }
+        
+        .next-steps h3 {
+            color: #1f2937;
+            font-size: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .steps-list {
+            list-style: none;
+            counter-reset: step-counter;
+        }
+        
+        .steps-list li {
+            counter-increment: step-counter;
+            padding: 12px 0;
+            color: #4b5563;
+            padding-left: 40px;
+            position: relative;
+        }
+        
+        .steps-list li:before {
+            content: counter(step-counter);
+            position: absolute;
+            left: 0;
+            top: 12px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .footer a {
+            color: #8b5cf6;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .course-card {
+                padding: 20px;
+            }
+            
+            .course-title {
+                font-size: 20px;
+            }
+            
+            .detail-item {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .detail-label {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 Course Enrollment</h1>
+            <p>Welcome to your new learning journey</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello{{#if recipientName}} {{recipientName}}{{/if}},
+            </div>
+            
+            <div class="message">
+                Congratulations! You have successfully enrolled in your new course. We're excited to have you join us on this learning journey.
+            </div>
+            
+            <div class="course-card">
+                <div class="course-title">{{courseName}}</div>
+                
+                <div class="course-details">
+                    {{#if courseDescription}}
+                    <div class="detail-item">
+                        <span class="detail-label">Description:</span>
+                        <span class="detail-value">{{courseDescription}}</span>
+                    </div>
+                    {{/if}}
+                    
+                    {{#if instructorName}}
+                    <div class="detail-item">
+                        <span class="detail-label">Instructor:</span>
+                        <span class="detail-value">{{instructorName}}</span>
+                    </div>
+                    {{/if}}
+                </div>
+                
+                {{#if startDate}}
+                <div class="schedule-info">
+                    <h4>Course Schedule</h4>
+                    <div class="date-range">
+                        {{formatDate startDate 'short'}}{{#if endDate}} - {{formatDate endDate 'short'}}{{/if}}
+                    </div>
+                </div>
+                {{/if}}
+            </div>
+            
+            <div class="cta-section">
+                <a href="{{courseUrl}}" class="cta-button">Access Your Course</a>
+            </div>
+            
+            <div class="next-steps">
+                <h3>What's Next?</h3>
+                <ol class="steps-list">
+                    <li>Review the course syllabus and schedule</li>
+                    <li>Complete any prerequisite assessments</li>
+                    <li>Join course discussions and forums</li>
+                    <li>Start working through the course materials</li>
+                    <li>Reach out to your instructor with any questions</li>
+                </ol>
+            </div>
+            
+            <div class="message">
+                You now have access to all course materials, assignments, and resources. We recommend starting with the course overview to familiarize yourself with the curriculum.
+            </div>
+            
+            <div class="message">
+                <strong>Pro Tips for Success:</strong>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Set aside dedicated time for studying each week</li>
+                    <li>Participate actively in discussions and forums</li>
+                    <li>Don't hesitate to ask questions if you're stuck</li>
+                    <li>Connect with fellow students for peer learning</li>
+                    <li>Take advantage of all available resources</li>
+                </ul>
+            </div>
+            
+            <div class="message">
+                We're excited to support you throughout your learning journey. Let's achieve great things together!
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>
+                {{companyName}} | 
+                {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
+            </p>
+        </div>
+    </div>
+</body>
+</html> 
