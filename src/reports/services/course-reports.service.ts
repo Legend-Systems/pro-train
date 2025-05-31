@@ -87,7 +87,10 @@ export class CourseReportsService {
             .where('t.courseId = :courseId', { courseId })
             .select('COUNT(DISTINCT ta.userId)', 'count')
             .getRawOne()
-            .then((result: { count: string } | undefined) => parseInt(result?.count || '0') || 0);
+            .then(
+                (result: { count: string } | undefined) =>
+                    parseInt(result?.count || '0') || 0,
+            );
 
         // Get completion rate (students who completed all tests vs total enrolled)
         const totalTests = course.tests?.length || 0;
@@ -123,13 +126,19 @@ export class CourseReportsService {
 
         let averageStudyDurationHours = 0;
         if (avgStudyDuration.length > 0) {
-            const totalHours = avgStudyDuration.reduce((sum, student) => {
-                const duration =
-                    (new Date(student.lastAttempt).getTime() -
-                        new Date(student.firstAttempt).getTime()) /
-                    (1000 * 60 * 60);
-                return sum + duration;
-            }, 0);
+            const totalHours = avgStudyDuration.reduce(
+                (
+                    sum: number,
+                    student: { lastAttempt: string; firstAttempt: string },
+                ) => {
+                    const duration =
+                        (new Date(student.lastAttempt).getTime() -
+                            new Date(student.firstAttempt).getTime()) /
+                        (1000 * 60 * 60);
+                    return sum + duration;
+                },
+                0,
+            );
             averageStudyDurationHours = totalHours / avgStudyDuration.length;
         }
 

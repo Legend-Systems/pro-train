@@ -5,37 +5,75 @@ import { UpdateCommunicationDto } from './dto/update-communication.dto';
 
 @Injectable()
 export class CommunicationsService {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     create(
-        _createCommunicationDto: CreateCommunicationDto,
-        _scope: OrgBranchScope,
-        _userId: string,
+        createCommunicationDto: CreateCommunicationDto,
+        scope: OrgBranchScope,
+        userId: string,
     ) {
+        // TODO: Implement actual communication creation with proper scoping
+        console.log(
+            'Creating communication for org:',
+            scope.orgId,
+            'user:',
+            userId,
+        );
+        console.log('Communication data:', createCommunicationDto);
         return 'This action adds a new communication';
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    findAll(_scope: OrgBranchScope, _userId: string) {
+    findAll(scope: OrgBranchScope, userId: string) {
+        // TODO: Implement actual communication retrieval with proper scoping
+        console.log(
+            'Getting communications for org:',
+            scope.orgId,
+            'user:',
+            userId,
+        );
         return `This action returns all communications`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    findOne(id: number, _scope: OrgBranchScope, _userId: string) {
+    findOne(id: number, scope: OrgBranchScope, userId: string) {
+        // TODO: Implement actual communication retrieval with proper scoping
+        console.log(
+            'Getting communication',
+            id,
+            'for org:',
+            scope.orgId,
+            'user:',
+            userId,
+        );
         return `This action returns a #${id} communication`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     update(
         id: number,
-        _updateCommunicationDto: UpdateCommunicationDto,
-        _scope: OrgBranchScope,
-        _userId: string,
+        updateCommunicationDto: UpdateCommunicationDto,
+        scope: OrgBranchScope,
+        userId: string,
     ) {
+        // TODO: Implement actual communication update with proper scoping
+        console.log(
+            'Updating communication',
+            id,
+            'for org:',
+            scope.orgId,
+            'user:',
+            userId,
+        );
+        console.log('Update data:', updateCommunicationDto);
         return `This action updates a #${id} communication`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    remove(id: number, _scope: OrgBranchScope, _userId: string) {
+    remove(id: number, scope: OrgBranchScope, userId: string) {
+        // TODO: Implement actual communication deletion with proper scoping
+        console.log(
+            'Removing communication',
+            id,
+            'for org:',
+            scope.orgId,
+            'user:',
+            userId,
+        );
         return `This action removes a #${id} communication`;
     }
 }

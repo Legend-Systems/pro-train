@@ -65,7 +65,7 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
         private emailSMTPService: EmailSMTPService,
     ) {}
 
-    async onModuleInit() {
+    onModuleInit(): void {
         this.initializeQueues();
         this.startProcessing();
     }

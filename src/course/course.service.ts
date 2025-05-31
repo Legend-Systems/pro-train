@@ -16,6 +16,8 @@ import {
 } from './dto/course-response.dto';
 import { Course } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
+import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
+import { Result } from '../results/entities/result.entity';
 import { UserService } from '../user/user.service';
 import { OrgBranchScopingService } from '../auth/services/org-branch-scoping.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
@@ -27,6 +29,10 @@ export class CourseService {
         private readonly courseRepository: Repository<Course>,
         @InjectRepository(Test)
         private readonly testRepository: Repository<Test>,
+        @InjectRepository(TestAttempt)
+        private readonly testAttemptRepository: Repository<TestAttempt>,
+        @InjectRepository(Result)
+        private readonly resultRepository: Repository<Result>,
         private readonly userService: UserService,
         private readonly orgBranchScopingService: OrgBranchScopingService,
     ) {}
@@ -165,8 +171,19 @@ export class CourseService {
                         where: { courseId: course.courseId },
                     });
 
-                    // TODO: Calculate student count when TestAttempt entity is available
-                    const studentCount = 0;
+                    // Calculate student count using TestAttempt entity
+                    const studentCount = await this.testAttemptRepository
+                        .createQueryBuilder('attempt')
+                        .innerJoin('attempt.test', 'test')
+                        .where('test.courseId = :courseId', {
+                            courseId: course.courseId,
+                        })
+                        .select('COUNT(DISTINCT attempt.userId)', 'count')
+                        .getRawOne()
+                        .then(
+                            (result: { count: string }) =>
+                                parseInt(result.count) || 0,
+                        );
 
                     return {
                         ...course,
@@ -219,18 +236,47 @@ export class CourseService {
                 where: { courseId: id, isActive: true },
             });
 
-            // TODO: Calculate totalAttempts and averageScore when TestAttempt entity is available
+            // Calculate statistics using TestAttempt and Result entities
+            const totalAttempts = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .where('test.courseId = :courseId', { courseId: id })
+                .getCount();
+
+            const studentCount = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .where('test.courseId = :courseId', { courseId: id })
+                .select('COUNT(DISTINCT attempt.userId)', 'count')
+                .getRawOne()
+                .then(
+                    (result: { count: string }) => parseInt(result.count) || 0,
+                );
+
+            const averageScoreResult: { avgScore: string } | undefined =
+                await this.resultRepository
+                    .createQueryBuilder('result')
+                    .innerJoin('result.attempt', 'attempt')
+                    .innerJoin('attempt.test', 'test')
+                    .where('test.courseId = :courseId', { courseId: id })
+                    .select('AVG(result.score)', 'avgScore')
+                    .getRawOne();
+
+            const averageScore = averageScoreResult?.avgScore
+                ? parseFloat(averageScoreResult.avgScore)
+                : 0;
+
             const statistics = {
                 totalTests,
                 activeTests,
-                totalAttempts: 0,
-                averageScore: 0,
+                totalAttempts,
+                averageScore,
             };
 
             return {
                 ...course,
                 testCount: totalTests,
-                studentCount: 0, // TODO: Calculate when TestAttempt entity is available
+                studentCount,
                 statistics,
             };
         });
@@ -318,16 +364,69 @@ export class CourseService {
                 where: { courseId: id, isActive: true },
             });
 
-            // TODO: Calculate real attempt statistics when TestAttempt entity is available
+            // Calculate real attempt statistics using TestAttempt and Result entities
+            const totalAttempts = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .where('test.courseId = :courseId', { courseId: id })
+                .getCount();
+
+            const uniqueStudents = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .where('test.courseId = :courseId', { courseId: id })
+                .select('COUNT(DISTINCT attempt.userId)', 'count')
+                .getRawOne()
+                .then(
+                    (result: { count: string }) => parseInt(result.count) || 0,
+                );
+
+            const averageScoreResult: { avgScore: string } | undefined =
+                await this.resultRepository
+                    .createQueryBuilder('result')
+                    .innerJoin('result.attempt', 'attempt')
+                    .innerJoin('attempt.test', 'test')
+                    .where('test.courseId = :courseId', { courseId: id })
+                    .select('AVG(result.score)', 'avgScore')
+                    .getRawOne();
+
+            const averageScore = averageScoreResult?.avgScore
+                ? parseFloat(averageScoreResult.avgScore)
+                : 0;
+
+            const passRateResult: { passRate: string } | undefined =
+                await this.resultRepository
+                    .createQueryBuilder('result')
+                    .innerJoin('result.attempt', 'attempt')
+                    .innerJoin('attempt.test', 'test')
+                    .where('test.courseId = :courseId', { courseId: id })
+                    .select(
+                        'AVG(CASE WHEN result.passed = 1 THEN 1 ELSE 0 END) * 100',
+                        'passRate',
+                    )
+                    .getRawOne();
+
+            const passRate = passRateResult?.passRate
+                ? parseFloat(passRateResult.passRate)
+                : 0;
+
+            const lastActivity = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .where('test.courseId = :courseId', { courseId: id })
+                .orderBy('attempt.updatedAt', 'DESC')
+                .select('attempt.updatedAt')
+                .getOne();
+
             return {
                 courseId: id,
                 totalTests,
                 activeTests,
-                totalAttempts: 0,
-                uniqueStudents: 0,
-                averageScore: 0,
-                passRate: 0,
-                lastActivityAt: undefined,
+                totalAttempts,
+                uniqueStudents,
+                averageScore,
+                passRate,
+                lastActivityAt: lastActivity?.updatedAt,
             };
         });
     }

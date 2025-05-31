@@ -17,6 +17,12 @@ import {
     TestConfigDto,
 } from './dto/test-response.dto';
 import { Test } from './entities/test.entity';
+import { Question } from '../questions/entities/question.entity';
+import {
+    TestAttempt,
+    AttemptStatus,
+} from '../test_attempts/entities/test_attempt.entity';
+import { Result } from '../results/entities/result.entity';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 
@@ -27,6 +33,12 @@ export class TestService {
         private readonly testRepository: Repository<Test>,
         @InjectRepository(Course)
         private readonly courseRepository: Repository<Course>,
+        @InjectRepository(Question)
+        private readonly questionRepository: Repository<Question>,
+        @InjectRepository(TestAttempt)
+        private readonly testAttemptRepository: Repository<TestAttempt>,
+        @InjectRepository(Result)
+        private readonly resultRepository: Repository<Result>,
         private readonly courseService: CourseService,
     ) {}
 
@@ -208,18 +220,32 @@ export class TestService {
             const [tests, total] = await query.getManyAndCount();
 
             // Calculate actual question counts and prepare test data
-            const testsWithCounts = tests.map(test => ({
-                ...test,
-                course: test.course
-                    ? {
-                          courseId: test.course.courseId,
-                          title: test.course.title,
-                          description: test.course.description,
-                      }
-                    : undefined,
-                questionCount: 0, // TODO: Will be calculated when Question entity is available
-                attemptCount: 0, // TODO: Will be calculated when TestAttempt entity is available
-            }));
+            const testsWithCounts = await Promise.all(
+                tests.map(async test => {
+                    const questionCount = await this.questionRepository.count({
+                        where: { testId: test.testId },
+                    });
+
+                    const attemptCount = await this.testAttemptRepository.count(
+                        {
+                            where: { testId: test.testId },
+                        },
+                    );
+
+                    return {
+                        ...test,
+                        course: test.course
+                            ? {
+                                  courseId: test.course.courseId,
+                                  title: test.course.title,
+                                  description: test.course.description,
+                              }
+                            : undefined,
+                        questionCount,
+                        attemptCount,
+                    };
+                }),
+            );
 
             return {
                 tests: testsWithCounts,
@@ -259,13 +285,66 @@ export class TestService {
             }
 
             // Calculate available statistics with current entities
+            const totalQuestions = await this.questionRepository.count({
+                where: { testId: id },
+            });
+
+            const totalAttempts = await this.testAttemptRepository.count({
+                where: { testId: id },
+            });
+
+            const uniqueStudents = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', { testId: id })
+                .select('COUNT(DISTINCT attempt.userId)', 'count')
+                .getRawOne()
+                .then(
+                    (result: { count: string }) => parseInt(result.count) || 0,
+                );
+
+            const averageScoreResult: { avgScore: string } | undefined =
+                await this.resultRepository
+                    .createQueryBuilder('result')
+                    .innerJoin('result.attempt', 'attempt')
+                    .where('attempt.testId = :testId', { testId: id })
+                    .select('AVG(result.score)', 'avgScore')
+                    .getRawOne();
+
+            const averageScore = averageScoreResult?.avgScore
+                ? parseFloat(averageScoreResult.avgScore)
+                : 0;
+
+            const passRateResult: { passRate: string } | undefined =
+                await this.resultRepository
+                    .createQueryBuilder('result')
+                    .innerJoin('result.attempt', 'attempt')
+                    .where('attempt.testId = :testId', { testId: id })
+                    .select(
+                        'AVG(CASE WHEN result.passed = 1 THEN 1 ELSE 0 END) * 100',
+                        'passRate',
+                    )
+                    .getRawOne();
+
+            const passRate = passRateResult?.passRate
+                ? parseFloat(passRateResult.passRate)
+                : 0;
+
+            const completedAttempts = await this.testAttemptRepository.count({
+                where: { testId: id, status: AttemptStatus.SUBMITTED },
+            });
+
+            const completionRate =
+                totalAttempts > 0
+                    ? (completedAttempts / totalAttempts) * 100
+                    : 0;
+
             const statistics = {
-                totalQuestions: 0, // TODO: Will be calculated when Question entity is available
-                totalAttempts: 0, // TODO: Will be calculated when TestAttempt entity is available
-                uniqueStudents: 0, // TODO: Will be calculated when TestAttempt entity is available
-                averageScore: 0, // TODO: Will be calculated when Result entity is available
-                passRate: 0, // TODO: Will be calculated when Result entity is available
-                completionRate: 0, // TODO: Will be calculated when TestAttempt entity is available
+                totalQuestions,
+                totalAttempts,
+                uniqueStudents,
+                averageScore,
+                passRate,
+                completionRate,
             };
 
             return {

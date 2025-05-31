@@ -5,6 +5,8 @@ import {
     Repository,
     ObjectLiteral,
     DeepPartial,
+    SelectQueryBuilder,
+    FindOptionsWhere,
 } from 'typeorm';
 
 export interface ScopeOptions {
@@ -64,11 +66,11 @@ export class OrgBranchScopingService {
     /**
      * Apply org and branch scoping to a query builder
      */
-    applyScopeToQueryBuilder(
-        queryBuilder: any,
+    applyScopeToQueryBuilder<T extends ObjectLiteral>(
+        queryBuilder: SelectQueryBuilder<T>,
         scope: ScopeOptions,
         entityAlias: string = 'entity',
-    ): any {
+    ): SelectQueryBuilder<T> {
         if (scope.orgId) {
             if (scope.includeGlobal) {
                 queryBuilder.andWhere(
@@ -164,7 +166,9 @@ export class ScopedRepository<T extends ObjectLiteral> {
     }
 
     async findById(id: string): Promise<T | null> {
-        return this.findOne({ where: { id } as any });
+        return this.findOne({
+            where: { id } as any,
+        });
     }
 
     async count(options?: FindManyOptions<T>): Promise<number> {
@@ -175,7 +179,7 @@ export class ScopedRepository<T extends ObjectLiteral> {
         return this.repository.count(scopedOptions);
     }
 
-    createQueryBuilder(alias?: string): any {
+    createQueryBuilder(alias?: string): SelectQueryBuilder<T> {
         const queryBuilder = this.repository.createQueryBuilder(alias);
         return this.scopingService.applyScopeToQueryBuilder(
             queryBuilder,
@@ -185,7 +189,7 @@ export class ScopedRepository<T extends ObjectLiteral> {
     }
 
     // Passthrough methods that don't need scoping
-    async save(entity: any): Promise<T> {
+    async save(entity: DeepPartial<T>): Promise<T> {
         return this.repository.save(entity);
     }
 
@@ -193,11 +197,30 @@ export class ScopedRepository<T extends ObjectLiteral> {
         return this.repository.remove(entity);
     }
 
-    async delete(criteria: any): Promise<any> {
+    async delete(
+        criteria:
+            | string
+            | string[]
+            | number
+            | number[]
+            | Date
+            | Date[]
+            | FindOptionsWhere<T>,
+    ): Promise<any> {
         return this.repository.delete(criteria);
     }
 
-    async update(criteria: any, partialEntity: any): Promise<any> {
+    async update(
+        criteria:
+            | string
+            | string[]
+            | number
+            | number[]
+            | Date
+            | Date[]
+            | FindOptionsWhere<T>,
+        partialEntity: any,
+    ): Promise<any> {
         return this.repository.update(criteria, partialEntity);
     }
 

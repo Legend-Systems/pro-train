@@ -267,7 +267,11 @@ export class ReportsController {
             );
 
             const analytics =
-                await this.courseReportsService.getCourseAnalytics(courseId, scope, req.user.id);
+                await this.courseReportsService.getCourseAnalytics(
+                    courseId,
+                    scope,
+                    req.user.id,
+                );
 
             this.logger.log(
                 `Course analytics retrieved successfully for course: ${courseId}`,
