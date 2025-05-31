@@ -8,6 +8,7 @@ import { EmailTemplateService } from './services/email-template.service';
 import { TemplateTestingService } from './services/template-testing.service';
 import { EmailSMTPService } from './services/email-smtp.service';
 import { EmailQueueService } from './services/email-queue.service';
+import { EmailListener } from './listeners/email.listener';
 
 @Module({
     imports: [TypeOrmModule.forFeature([Communication])],
@@ -19,6 +20,7 @@ import { EmailQueueService } from './services/email-queue.service';
         TemplateTestingService,
         EmailSMTPService,
         EmailQueueService,
+        EmailListener,
     ],
     exports: [
         CommunicationsService,

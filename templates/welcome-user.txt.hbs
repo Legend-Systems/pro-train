@@ -1,0 +1,36 @@
+Welcome to {{companyName}}!
+
+Hello {{firstName}} {{lastName}}!
+
+We're thrilled to have you join our learning platform! Your account has been successfully created and you're ready to start your educational journey with us.
+
+Get Started: {{loginUrl}}
+
+What you can do now:
+✓ Access your personalized dashboard
+✓ Browse available courses and tests
+✓ Track your progress and achievements
+✓ Connect with instructors and peers
+✓ Customize your learning preferences
+{{#if setupGuideUrl}}✓ Follow our getting started guide{{/if}}
+
+Your Account Information:
+• Name: {{firstName}} {{lastName}}
+{{#if organizationName}}• Organization: {{organizationName}}{{/if}}
+{{#if branchName}}• Branch: {{branchName}}{{/if}}
+
+Quick Links:
+• Dashboard: {{dashboardUrl}}
+• Profile: {{profileUrl}}
+{{#if setupGuideUrl}}• Getting Started: {{setupGuideUrl}}{{/if}}
+• Help Center: {{companyUrl}}/help
+
+{{#if activationToken}}
+ACTION REQUIRED: Please verify your email address by clicking the activation link in your email.
+{{/if}}
+
+Need help? Contact us at {{supportEmail}}
+
+Welcome aboard!
+{{companyName}}
+{{#if unsubscribeUrl}}Unsubscribe: {{unsubscribeUrl}}{{/if}} 

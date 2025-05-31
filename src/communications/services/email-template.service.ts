@@ -107,6 +107,79 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'welcome-organization',
+                    type: EmailType.WELCOME_ORGANIZATION,
+                    htmlFile: 'welcome-organization.hbs',
+                    textFile: 'welcome-organization.txt.hbs',
+                    metadata: {
+                        name: 'Organization Welcome Email',
+                        type: EmailType.WELCOME_ORGANIZATION,
+                        version: '1.0.0',
+                        description:
+                            'Welcome new organizations to the platform',
+                        requiredData: [
+                            'organizationName',
+                            'organizationId',
+                            'dashboardUrl',
+                            'loginUrl',
+                        ],
+                        optionalData: ['logoUrl', 'website', 'setupGuideUrl'],
+                    },
+                },
+                {
+                    name: 'welcome-branch',
+                    type: EmailType.WELCOME_BRANCH,
+                    htmlFile: 'welcome-branch.hbs',
+                    textFile: 'welcome-branch.txt.hbs',
+                    metadata: {
+                        name: 'Branch Welcome Email',
+                        type: EmailType.WELCOME_BRANCH,
+                        version: '1.0.0',
+                        description: 'Welcome new branches to the platform',
+                        requiredData: [
+                            'branchName',
+                            'branchId',
+                            'organizationName',
+                            'organizationId',
+                            'dashboardUrl',
+                            'loginUrl',
+                        ],
+                        optionalData: [
+                            'address',
+                            'contactNumber',
+                            'managerName',
+                            'setupGuideUrl',
+                        ],
+                    },
+                },
+                {
+                    name: 'welcome-user',
+                    type: EmailType.WELCOME_USER,
+                    htmlFile: 'welcome-user.hbs',
+                    textFile: 'welcome-user.txt.hbs',
+                    metadata: {
+                        name: 'User Welcome Email',
+                        type: EmailType.WELCOME_USER,
+                        version: '1.0.0',
+                        description: 'Welcome new users to the platform',
+                        requiredData: [
+                            'firstName',
+                            'lastName',
+                            'userId',
+                            'dashboardUrl',
+                            'loginUrl',
+                            'profileUrl',
+                        ],
+                        optionalData: [
+                            'organizationName',
+                            'branchName',
+                            'avatar',
+                            'activationToken',
+                            'setupGuideUrl',
+                        ],
+                    },
+                },
+                {
                     name: 'password-reset',
                     type: EmailType.PASSWORD_RESET,
                     htmlFile: 'password-reset.hbs',
@@ -377,6 +450,12 @@ export class EmailTemplateService {
         // Subject templates based on email type
         const subjectTemplates: Record<string, string> = {
             welcome: 'Welcome to {{companyName}} - Get Started!',
+            'welcome-organization':
+                'Welcome {{organizationName}} to {{companyName}}!',
+            'welcome-branch':
+                'Welcome {{branchName}} - {{organizationName}} Branch Setup Complete!',
+            'welcome-user':
+                'Welcome {{firstName}}! Your {{companyName}} Account is Ready',
             'password-reset': 'Password Reset Request',
             'test-notification': 'New Test Available: {{testTitle}}',
             'results-summary': 'Test Results: {{testTitle}}',

@@ -1,9 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
+import { UserCreatedEvent } from '../common/events';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -11,6 +13,7 @@ export class UserService {
     constructor(
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
 
     private async retryOperation<T>(
@@ -45,7 +48,25 @@ export class UserService {
     async create(createUserDto: CreateUserDto): Promise<User> {
         return this.retryOperation(async () => {
             const user = this.userRepository.create(createUserDto);
-            return await this.userRepository.save(user);
+            const savedUser = await this.userRepository.save(user);
+
+            // Emit user created event
+            this.eventEmitter.emit(
+                'user.created',
+                new UserCreatedEvent(
+                    savedUser.id,
+                    savedUser.email,
+                    savedUser.firstName,
+                    savedUser.lastName,
+                    savedUser.orgId?.id,
+                    savedUser.orgId?.name,
+                    savedUser.branchId?.id,
+                    savedUser.branchId?.name,
+                    savedUser.avatar,
+                ),
+            );
+
+            return savedUser;
         });
     }
 

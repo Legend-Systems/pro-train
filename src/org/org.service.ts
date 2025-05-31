@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Organization } from './entities/org.entity';
 import { Branch } from '../branch/entities/branch.entity';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
 import { CreateBranchDto } from '../branch/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branch/dto/update-branch.dto';
+import { OrganizationCreatedEvent, BranchCreatedEvent } from '../common/events';
 
 @Injectable()
 export class OrgService {
@@ -19,6 +21,7 @@ export class OrgService {
         private readonly organizationRepository: Repository<Organization>,
         @InjectRepository(Branch)
         private readonly branchRepository: Repository<Branch>,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
 
     private async retryOperation<T>(
@@ -68,7 +71,21 @@ export class OrgService {
 
             const organization =
                 this.organizationRepository.create(createOrgDto);
-            return await this.organizationRepository.save(organization);
+            const savedOrganization = await this.organizationRepository.save(organization);
+
+            // Emit organization created event
+            this.eventEmitter.emit(
+                'organization.created',
+                new OrganizationCreatedEvent(
+                    savedOrganization.id,
+                    savedOrganization.name,
+                    savedOrganization.email || '',
+                    savedOrganization.logoUrl,
+                    savedOrganization.website,
+                ),
+            );
+
+            return savedOrganization;
         });
     }
 
@@ -143,7 +160,24 @@ export class OrgService {
                 organization,
             });
 
-            return await this.branchRepository.save(branch);
+            const savedBranch = await this.branchRepository.save(branch);
+
+            // Emit branch created event
+            this.eventEmitter.emit(
+                'branch.created',
+                new BranchCreatedEvent(
+                    savedBranch.id,
+                    savedBranch.name,
+                    savedBranch.email || '',
+                    organization.id,
+                    organization.name,
+                    savedBranch.address,
+                    savedBranch.contactNumber,
+                    savedBranch.managerName,
+                ),
+            );
+
+            return savedBranch;
         });
     }
 

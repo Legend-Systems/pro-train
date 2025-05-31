@@ -21,6 +21,9 @@ import { Branch } from '../../branch/entities/branch.entity';
 
 export enum EmailType {
     WELCOME = 'welcome',
+    WELCOME_ORGANIZATION = 'welcome_organization',
+    WELCOME_BRANCH = 'welcome_branch',
+    WELCOME_USER = 'welcome_user',
     PASSWORD_RESET = 'password_reset',
     TEST_NOTIFICATION = 'test_notification',
     RESULTS_SUMMARY = 'results_summary',

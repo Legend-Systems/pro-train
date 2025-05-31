@@ -1,10 +1,278 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { ConfigService } from '@nestjs/config';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateCommunicationDto } from './dto/create-communication.dto';
 import { UpdateCommunicationDto } from './dto/update-communication.dto';
+import { Communication } from './entities/communication.entity';
+import { EmailTemplateService } from './services/email-template.service';
+import { EmailQueueService } from './services/email-queue.service';
+import { EmailSMTPService } from './services/email-smtp.service';
+import {
+    WelcomeOrganizationTemplateData,
+    WelcomeBranchTemplateData,
+    WelcomeUserTemplateData,
+} from './interfaces/template.interface';
+import { EmailType } from './entities/communication.entity';
+import { EmailStatus } from './entities/communication.entity';
 
 @Injectable()
 export class CommunicationsService {
+    private readonly logger = new Logger(CommunicationsService.name);
+
+    constructor(
+        @InjectRepository(Communication)
+        private readonly communicationRepository: Repository<Communication>,
+        private readonly emailTemplateService: EmailTemplateService,
+        private readonly emailSMTPService: EmailSMTPService,
+        private readonly emailQueueService: EmailQueueService,
+        private readonly configService: ConfigService,
+    ) {}
+
+    async sendWelcomeOrganizationEmail(
+        organizationId: string,
+        organizationName: string,
+        organizationEmail: string,
+        logoUrl?: string,
+        website?: string,
+    ): Promise<void> {
+        try {
+            const templateData: WelcomeOrganizationTemplateData = {
+                recipientName: organizationName,
+                recipientEmail: organizationEmail,
+                organizationName,
+                organizationId,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                loginUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/login`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+                logoUrl,
+                website,
+                setupGuideUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/setup-guide`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.WELCOME_ORGANIZATION,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: organizationEmail,
+                recipientName: organizationName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.WELCOME_ORGANIZATION,
+                templateUsed: 'welcome-organization',
+                status: EmailStatus.PENDING,
+                metadata: { organizationId, organizationName },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: organizationEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Welcome email queued for organization: ${organizationName} (${organizationEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send welcome email for organization ${organizationName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendWelcomeBranchEmail(
+        branchId: string,
+        branchName: string,
+        branchEmail: string,
+        organizationId: string,
+        organizationName: string,
+        address?: string,
+        contactNumber?: string,
+        managerName?: string,
+    ): Promise<void> {
+        try {
+            const templateData: WelcomeBranchTemplateData = {
+                recipientName: branchName,
+                recipientEmail: branchEmail,
+                branchName,
+                branchId,
+                organizationName,
+                organizationId,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                loginUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/login`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+                address,
+                contactNumber,
+                managerName,
+                setupGuideUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/setup-guide`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.WELCOME_BRANCH,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: branchEmail,
+                recipientName: branchName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.WELCOME_BRANCH,
+                templateUsed: 'welcome-branch',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    branchId,
+                    branchName,
+                    organizationId,
+                    organizationName,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: branchEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Welcome email queued for branch: ${branchName} (${branchEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send welcome email for branch ${branchName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendWelcomeUserEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        organizationId?: string,
+        organizationName?: string,
+        branchId?: string,
+        branchName?: string,
+        avatar?: string,
+    ): Promise<void> {
+        try {
+            const templateData: WelcomeUserTemplateData = {
+                recipientName: `${firstName} ${lastName}`,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userId,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                loginUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/login`,
+                profileUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/profile`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+                organizationName,
+                branchName,
+                avatar,
+                setupGuideUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/setup-guide`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.WELCOME_USER,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${firstName} ${lastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.WELCOME_USER,
+                templateUsed: 'welcome-user',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    firstName,
+                    lastName,
+                    organizationId,
+                    organizationName,
+                    branchId,
+                    branchName,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Welcome email queued for user: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send welcome email for user ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
     create(
         createCommunicationDto: CreateCommunicationDto,
         scope: OrgBranchScope,

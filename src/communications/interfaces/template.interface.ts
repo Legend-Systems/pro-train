@@ -22,6 +22,46 @@ export interface WelcomeTemplateData extends BaseTemplateData {
     activationToken?: string;
 }
 
+// Organization welcome template data
+export interface WelcomeOrganizationTemplateData extends BaseTemplateData {
+    organizationName: string;
+    organizationId: string;
+    dashboardUrl: string;
+    loginUrl: string;
+    logoUrl?: string;
+    website?: string;
+    setupGuideUrl?: string;
+}
+
+// Branch welcome template data
+export interface WelcomeBranchTemplateData extends BaseTemplateData {
+    branchName: string;
+    branchId: string;
+    organizationName: string;
+    organizationId: string;
+    dashboardUrl: string;
+    loginUrl: string;
+    address?: string;
+    contactNumber?: string;
+    managerName?: string;
+    setupGuideUrl?: string;
+}
+
+// User welcome template data
+export interface WelcomeUserTemplateData extends BaseTemplateData {
+    firstName: string;
+    lastName: string;
+    userId: string;
+    dashboardUrl: string;
+    loginUrl: string;
+    profileUrl: string;
+    organizationName?: string;
+    branchName?: string;
+    avatar?: string;
+    activationToken?: string;
+    setupGuideUrl?: string;
+}
+
 // Password reset template data
 export interface PasswordResetTemplateData extends BaseTemplateData {
     resetUrl: string;
