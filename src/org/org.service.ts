@@ -71,7 +71,8 @@ export class OrgService {
 
             const organization =
                 this.organizationRepository.create(createOrgDto);
-            const savedOrganization = await this.organizationRepository.save(organization);
+            const savedOrganization =
+                await this.organizationRepository.save(organization);
 
             // Emit organization created event
             this.eventEmitter.emit(

@@ -65,6 +65,7 @@ export class CommunicationsService {
                 templateData,
             );
 
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: organizationEmail,
                 recipientName: organizationName,
@@ -79,7 +80,10 @@ export class CommunicationsService {
                 emailType: EmailType.WELCOME_ORGANIZATION,
                 templateUsed: 'welcome-organization',
                 status: EmailStatus.PENDING,
-                metadata: { organizationId, organizationName },
+                metadata: {
+                    organizationId,
+                    organizationName,
+                },
             });
 
             await this.communicationRepository.save(communication);
@@ -157,6 +161,7 @@ export class CommunicationsService {
                 emailType: EmailType.WELCOME_BRANCH,
                 templateUsed: 'welcome-branch',
                 status: EmailStatus.PENDING,
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
                 metadata: {
                     branchId,
                     branchName,
@@ -227,6 +232,7 @@ export class CommunicationsService {
                 templateData,
             );
 
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${firstName} ${lastName}`,
@@ -268,6 +274,244 @@ export class CommunicationsService {
         } catch (error) {
             this.logger.error(
                 `Failed to send welcome email for user ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendUserProfileUpdateEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        updatedFields: string[],
+        organizationName?: string,
+        branchName?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: `${firstName} ${lastName}`,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userId,
+                updatedFields: updatedFields.join(', '),
+                profileUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/profile`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+                organizationName,
+                branchName,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.SYSTEM_ALERT,
+                templateData,
+            );
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${firstName} ${lastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject || 'Profile Updated',
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.SYSTEM_ALERT,
+                templateUsed: 'profile-update',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    updatedFields,
+                    profileUpdate: true,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject || 'Profile Updated',
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Profile update email queued for user: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send profile update email for user ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendPasswordChangeEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        organizationName?: string,
+        branchName?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: `${firstName} ${lastName}`,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userId,
+                changeTime: new Date().toISOString(),
+                securityUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/security`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+                organizationName,
+                branchName,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.PASSWORD_RESET,
+                templateData,
+            );
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${firstName} ${lastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject || 'Password Changed',
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.PASSWORD_RESET,
+                templateUsed: 'password-change',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    passwordChange: true,
+                    changeTime: new Date().toISOString(),
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject || 'Password Changed',
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Password change email queued for user: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send password change email for user ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendOrganizationAssignmentEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        organizationName: string,
+        branchName?: string,
+        assignedBy?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: `${firstName} ${lastName}`,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userId,
+                organizationName,
+                branchName,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                companyName: 'Exxam Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@exxam.com',
+                ),
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.SYSTEM_ALERT,
+                templateData,
+            );
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${firstName} ${lastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@exxam.com',
+                ),
+                senderName: 'Exxam Platform',
+                subject: rendered.subject || 'Organization Assignment Updated',
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.SYSTEM_ALERT,
+                templateUsed: 'organization-assignment',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    organizationAssignment: true,
+                    organizationName,
+                    branchName,
+                    assignedBy,
+                    assignedAt: new Date().toISOString(),
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            // Queue the email for sending
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject || 'Organization Assignment Updated',
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Organization assignment email queued for user: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send organization assignment email for user ${firstName} ${lastName}:`,
                 error,
             );
         }

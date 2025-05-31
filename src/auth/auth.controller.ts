@@ -118,7 +118,8 @@ export class AuthController {
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
-        description: '✅ User successfully registered - please sign in separately',
+        description:
+            '✅ User successfully registered - please sign in separately',
         schema: {
             type: 'object',
             properties: {
@@ -129,12 +130,14 @@ export class AuthController {
                 },
                 message: {
                     type: 'string',
-                    example: 'Account created successfully. Please sign in with your credentials.',
+                    example:
+                        'Account created successfully. Please sign in with your credentials.',
                     description: 'Success confirmation message',
                 },
                 data: {
                     type: 'object',
-                    description: 'User data and organization/branch information if applicable',
+                    description:
+                        'User data and organization/branch information if applicable',
                     properties: {
                         user: {
                             type: 'object',
@@ -181,18 +184,21 @@ export class AuthController {
                                     type: 'string',
                                     example: '2024-01-15T10:30:00.000Z',
                                     description: 'Last update timestamp',
+                                },
                             },
-                        },
                         },
                         organization: {
                             type: 'object',
-                            description: 'Organization information if user was invited to organization',
+                            description:
+                                'Organization information if user was invited to organization',
                             nullable: true,
                             properties: {
                                 id: {
                                     type: 'string',
-                                    example: 'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                                    description: 'Organization unique identifier',
+                                    example:
+                                        'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    description:
+                                        'Organization unique identifier',
                                 },
                                 name: {
                                     type: 'string',
@@ -201,7 +207,8 @@ export class AuthController {
                                 },
                                 avatar: {
                                     type: 'string',
-                                    example: 'https://cdn.example.com/logos/acme-corp.png',
+                                    example:
+                                        'https://cdn.example.com/logos/acme-corp.png',
                                     description: 'Organization logo URL',
                                     nullable: true,
                                 },
@@ -209,12 +216,14 @@ export class AuthController {
                         },
                         branch: {
                             type: 'object',
-                            description: 'Branch information if user was invited to specific branch',
+                            description:
+                                'Branch information if user was invited to specific branch',
                             nullable: true,
                             properties: {
                                 id: {
                                     type: 'string',
-                                    example: 'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                                    example:
+                                        'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
                                     description: 'Branch unique identifier',
                                 },
                                 name: {
@@ -230,7 +239,8 @@ export class AuthController {
                                 },
                                 address: {
                                     type: 'string',
-                                    example: '123 Main Street, Downtown, City 12345',
+                                    example:
+                                        '123 Main Street, Downtown, City 12345',
                                     description: 'Branch physical address',
                                     nullable: true,
                                 },
@@ -426,15 +436,14 @@ export class AuthController {
                     properties: {
                         accessToken: {
                             type: 'string',
-                            example:
-                                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
                             description: 'JWT access token for API calls',
                         },
                         refreshToken: {
                             type: 'string',
-                            example:
-                                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-                            description: 'JWT refresh token for session renewal',
+                            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+                            description:
+                                'JWT refresh token for session renewal',
                         },
                         expiresIn: {
                             type: 'number',
@@ -539,13 +548,16 @@ export class AuthController {
                         },
                         organization: {
                             type: 'object',
-                            description: 'Organization information if user belongs to an organization',
+                            description:
+                                'Organization information if user belongs to an organization',
                             nullable: true,
                             properties: {
                                 id: {
                                     type: 'string',
-                                    example: 'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                                    description: 'Organization unique identifier',
+                                    example:
+                                        'org-a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    description:
+                                        'Organization unique identifier',
                                 },
                                 name: {
                                     type: 'string',
@@ -554,7 +566,8 @@ export class AuthController {
                                 },
                                 avatar: {
                                     type: 'string',
-                                    example: 'https://cdn.example.com/logos/acme-corp.png',
+                                    example:
+                                        'https://cdn.example.com/logos/acme-corp.png',
                                     description: 'Organization logo URL',
                                     nullable: true,
                                 },
@@ -562,12 +575,14 @@ export class AuthController {
                         },
                         branch: {
                             type: 'object',
-                            description: 'Branch information if user belongs to a specific branch',
+                            description:
+                                'Branch information if user belongs to a specific branch',
                             nullable: true,
                             properties: {
                                 id: {
                                     type: 'string',
-                                    example: 'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                                    example:
+                                        'branch-b1c2d3e4-f5g6-7890-bcde-fg1234567890',
                                     description: 'Branch unique identifier',
                                 },
                                 name: {
@@ -583,7 +598,8 @@ export class AuthController {
                                 },
                                 address: {
                                     type: 'string',
-                                    example: '123 Main Street, Downtown, City 12345',
+                                    example:
+                                        '123 Main Street, Downtown, City 12345',
                                     description: 'Branch physical address',
                                     nullable: true,
                                 },

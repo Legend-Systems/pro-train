@@ -4,8 +4,13 @@ import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/user.entity';
-import { UserCreatedEvent } from '../common/events';
+import { User, UserStatus } from './entities/user.entity';
+import {
+    UserCreatedEvent,
+    UserProfileUpdatedEvent,
+    UserPasswordChangedEvent,
+    UserOrgBranchAssignedEvent,
+} from '../common/events';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -72,14 +77,17 @@ export class UserService {
 
     async findAll(): Promise<User[]> {
         return this.retryOperation(async () => {
-            return await this.userRepository.find();
+            return await this.userRepository.find({
+                where: { status: UserStatus.ACTIVE },
+                relations: ['orgId', 'branchId'],
+            });
         });
     }
 
     async findOne(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
             return await this.userRepository.findOne({
-                where: { id },
+                where: { id, status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId'],
             });
         });
@@ -88,7 +96,7 @@ export class UserService {
     async findByEmail(email: string): Promise<User | null> {
         return this.retryOperation(async () => {
             return await this.userRepository.findOne({
-                where: { email },
+                where: { email, status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId'],
             });
         });

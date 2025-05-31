@@ -21,6 +21,13 @@ export enum UserRole {
     USER = 'user',
 }
 
+export enum UserStatus {
+    ACTIVE = 'active',
+    INACTIVE = 'inactive',
+    DELETED = 'deleted',
+    SUSPENDED = 'suspended',
+}
+
 @Entity('users')
 @Index('IDX_USER_EMAIL', ['email'])
 @Index('IDX_USER_CREATED_AT', ['createdAt'])
@@ -92,6 +99,16 @@ export class User {
         default: false,
     })
     emailVerified: boolean;
+
+    @Column({ nullable: true, default: UserStatus.ACTIVE })
+    @ApiProperty({
+        description: 'User account status',
+        example: 'active',
+        default: 'active',
+        enum: UserStatus,
+    })
+    @IsEnum(UserStatus)
+    status: UserStatus;
 
     @IsString()
     @CreateDateColumn()
