@@ -163,3 +163,153 @@ export class CourseStatsDto {
     })
     lastActivityAt?: Date;
 }
+
+// Enhanced response types matching user controller pattern
+export class StandardApiResponse<T = unknown> {
+    @ApiProperty({
+        description: 'Indicates if the operation was successful',
+        example: true,
+    })
+    success: boolean;
+
+    @ApiProperty({
+        description: 'Human-readable message about the operation result',
+        example: 'Operation completed successfully',
+    })
+    message: string;
+
+    @ApiProperty({
+        description: 'Response data payload',
+        required: false,
+    })
+    data?: T;
+
+    @ApiProperty({
+        description: 'Additional metadata about the response',
+        required: false,
+    })
+    meta?: {
+        timestamp?: string;
+        requestId?: string;
+        pagination?: {
+            page: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+        };
+    };
+}
+
+export class StandardOperationResponse {
+    @ApiProperty({
+        description: 'Human-readable message about the operation result',
+        example: 'Course created successfully',
+    })
+    message: string;
+
+    @ApiProperty({
+        description: 'Operation status indicator',
+        example: 'success',
+        enum: ['success', 'error', 'warning', 'info', 'debug'],
+    })
+    status: string;
+
+    @ApiProperty({
+        description: 'HTTP status code',
+        example: 200,
+    })
+    code: number;
+}
+
+export class CourseApiResponse extends StandardApiResponse<CourseResponseDto> {
+    @ApiProperty({
+        description: 'Course data retrieved successfully',
+        type: CourseResponseDto,
+    })
+    data: CourseResponseDto;
+}
+
+export class CourseListApiResponse extends StandardApiResponse<CourseListResponseDto> {
+    @ApiProperty({
+        description: 'Courses list data with pagination',
+        type: CourseListResponseDto,
+    })
+    data: CourseListResponseDto;
+}
+
+export class CourseDetailApiResponse extends StandardApiResponse<CourseDetailDto> {
+    @ApiProperty({
+        description: 'Course details retrieved successfully',
+        type: CourseDetailDto,
+    })
+    data: CourseDetailDto;
+}
+
+export class CourseStatsApiResponse extends StandardApiResponse<CourseStatsDto> {
+    @ApiProperty({
+        description: 'Course statistics retrieved successfully',
+        type: CourseStatsDto,
+    })
+    data: CourseStatsDto;
+}
+
+// Specific operation response DTOs for better documentation
+export class CourseCreatedResponse extends StandardOperationResponse {
+    @ApiProperty({
+        description: 'Course creation success message',
+        example: 'Course created successfully',
+    })
+    message: string;
+
+    @ApiProperty({
+        description: 'Operation status',
+        example: 'success',
+    })
+    status: string;
+
+    @ApiProperty({
+        description: 'HTTP status code',
+        example: 201,
+    })
+    code: number;
+}
+
+export class CourseUpdatedResponse extends StandardOperationResponse {
+    @ApiProperty({
+        description: 'Course update success message',
+        example: 'Course updated successfully',
+    })
+    message: string;
+
+    @ApiProperty({
+        description: 'Operation status',
+        example: 'success',
+    })
+    status: string;
+
+    @ApiProperty({
+        description: 'HTTP status code',
+        example: 200,
+    })
+    code: number;
+}
+
+export class CourseDeletedResponse extends StandardOperationResponse {
+    @ApiProperty({
+        description: 'Course deletion success message',
+        example: 'Course deleted successfully',
+    })
+    message: string;
+
+    @ApiProperty({
+        description: 'Operation status',
+        example: 'success',
+    })
+    status: string;
+
+    @ApiProperty({
+        description: 'HTTP status code',
+        example: 200,
+    })
+    code: number;
+}

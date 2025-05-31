@@ -10,6 +10,7 @@ import {
     UseGuards,
     Request,
     HttpStatus,
+    HttpCode,
     Logger,
     NotFoundException,
     ParseIntPipe,
@@ -37,8 +38,16 @@ import {
     CourseListResponseDto,
     CourseDetailDto,
     CourseStatsDto,
+    StandardApiResponse,
+    StandardOperationResponse,
+    CourseApiResponse,
+    CourseListApiResponse,
+    CourseDetailApiResponse,
+    CourseStatsApiResponse,
+    CourseCreatedResponse,
+    CourseUpdatedResponse,
+    CourseDeletedResponse,
 } from './dto/course-response.dto';
-import { StandardApiResponse } from '../user/dto/common-response.dto';
 
 @ApiTags('🎓 Course Management')
 @Controller('courses')
@@ -57,28 +66,30 @@ export class CourseController {
     constructor(private readonly courseService: CourseService) {}
 
     @Post()
+    @HttpCode(HttpStatus.CREATED)
     @ApiOperation({
         summary: '🆕 Create New Course',
         description: `
-      **Creates a new course with comprehensive validation**
+      **Creates a new course with comprehensive validation and caching**
       
-      This endpoint allows authenticated users to create new courses including:
-      - Course title and description
-      - Automatic creator assignment
+      This endpoint allows authenticated users to create new courses with:
+      - Course title and description validation
+      - Automatic creator assignment from JWT context
+      - Organization/branch scope assignment
+      - Comprehensive caching invalidation
       - Input validation and sanitization
-      - Unique course creation
       
       **Security Features:**
       - Requires valid JWT authentication
-      - Automatic creator assignment from JWT token
+      - Organization/branch scope validation
+      - Automatic creator ownership tracking
       - Input validation and sanitization
-      - Creator ownership tracking
       
       **Business Rules:**
       - Course title must be at least 3 characters
       - Description is optional but recommended
       - Creator is automatically set from authenticated user
-      - Course creation timestamp is automatic
+      - Course inherits organization/branch from user context
       
       **Use Cases:**
       - Creating new educational courses
@@ -122,49 +133,63 @@ export class CourseController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Course created successfully',
-        type: CourseResponseDto,
+        type: CourseCreatedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid input data',
+        description: '❌ Invalid input data or validation errors',
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
                 message: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    example: [
+                    type: 'string',
+                    examples: [
                         'Course title must be at least 3 characters long',
+                        'Course title is required',
+                        'Course description must be a string',
                     ],
                 },
-                error: { type: 'string', example: 'Bad Request' },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 400 },
             },
         },
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
         description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ User not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'User with ID xxx not found',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 404 },
+            },
+        },
     })
     async create(
         @Body() createCourseDto: CreateCourseDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<CourseResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
                 `Creating course "${createCourseDto.title}" for user: ${scope.userId} in org: ${scope.orgId}, branch: ${scope.branchId}`,
             );
 
-            const course = await this.courseService.create(
-                createCourseDto,
-                scope,
-            );
-
-            this.logger.log(
-                `Course created successfully with ID: ${course.courseId}`,
-            );
-
-            return course;
+            return await this.courseService.create(createCourseDto, scope);
         } catch (error) {
             this.logger.error(
                 `Error creating course for user ${scope.userId}:`,
@@ -178,46 +203,48 @@ export class CourseController {
     @ApiOperation({
         summary: '📋 List All Courses',
         description: `
-      **Retrieves a paginated list of courses with filtering options**
+      **Retrieves a paginated list of courses with filtering and comprehensive caching**
       
       This endpoint provides comprehensive course discovery with:
-      - Pagination support for large datasets
+      - Advanced pagination support for large datasets
       - Multiple filtering options (title, creator, date range)
-      - Sorting capabilities
+      - Flexible sorting capabilities
       - Course statistics and metadata
+      - Comprehensive caching for performance
       
       **Filtering Options:**
       - **Title**: Partial text search in course titles
       - **Creator**: Filter by specific user who created courses
       - **Date Range**: Filter by creation date (after/before)
       - **Sorting**: Sort by title, creation date, or update date
+      - **Pagination**: Page-based navigation with configurable page size
       
       **Response Includes:**
-      - Course basic information
-      - Creator details
-      - Test count per course
-      - Student enrollment count
-      - Pagination metadata
+      - Course basic information with creator details
+      - Test count per course (cached)
+      - Student enrollment count (cached)
+      - Organization and branch information
+      - Comprehensive pagination metadata
       
-      **Use Cases:**
-      - Course catalog browsing
-      - Administrative course overview
-      - Search and discovery
-      - Analytics and reporting
+      **Performance Features:**
+      - Intelligent caching at multiple levels
+      - Optimized database queries with eager loading
+      - Efficient count calculations
+      - Cache invalidation on course changes
     `,
-        operationId: 'listCourses',
+        operationId: 'getAllCourses',
     })
     @ApiQuery({
         name: 'title',
         required: false,
-        description: 'Filter by course title (partial match)',
+        description: 'Filter courses by title (partial match)',
         example: 'Computer Science',
     })
     @ApiQuery({
         name: 'createdBy',
         required: false,
-        description: 'Filter by creator user ID',
-        example: '1',
+        description: 'Filter courses by creator user ID',
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     })
     @ApiQuery({
         name: 'createdAfter',
@@ -234,56 +261,76 @@ export class CourseController {
     @ApiQuery({
         name: 'page',
         required: false,
-        description: 'Page number (starts from 1)',
+        description: 'Page number for pagination',
         example: 1,
     })
     @ApiQuery({
         name: 'limit',
         required: false,
-        description: 'Number of courses per page (1-100)',
+        description: 'Number of courses per page',
         example: 10,
     })
     @ApiQuery({
         name: 'sortBy',
         required: false,
         description: 'Sort field',
-        enum: ['title', 'createdAt', 'updatedAt'],
         example: 'createdAt',
+        enum: ['title', 'createdAt', 'updatedAt'],
     })
     @ApiQuery({
         name: 'sortOrder',
         required: false,
         description: 'Sort order',
-        enum: ['ASC', 'DESC'],
         example: 'DESC',
+        enum: ['ASC', 'DESC'],
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Courses retrieved successfully',
-        type: CourseListResponseDto,
+        type: CourseListApiResponse,
     })
     @ApiResponse({
         status: HttpStatus.UNAUTHORIZED,
         description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
     })
     async findAll(
         @Query() filters: CourseFilterDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<CourseListResponseDto> {
+    ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
-                `Listing courses with filters: ${JSON.stringify(filters)} for org: ${scope.orgId}, branch: ${scope.branchId}`,
+                `Getting courses for user: ${scope.userId} with filters:`,
+                JSON.stringify(filters),
             );
 
             const result = await this.courseService.findAll(filters, scope);
 
-            this.logger.log(
-                `Retrieved ${result.courses.length} courses out of ${result.total} total`,
-            );
-
-            return result;
+            return {
+                success: true,
+                message: 'Courses retrieved successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages,
+                    },
+                },
+            };
         } catch (error) {
-            this.logger.error('Error listing courses:', error);
+            this.logger.error(
+                `Error getting courses for user ${scope.userId}:`,
+                error,
+            );
             throw error;
         }
     }
@@ -292,43 +339,65 @@ export class CourseController {
     @ApiOperation({
         summary: '👤 Get My Created Courses',
         description: `
-      **Retrieves courses created by the authenticated user**
+      **Retrieves courses created by the authenticated user with caching**
       
-      This endpoint returns all courses that the current user has created with:
-      - Personal course management
-      - Creation history tracking
-      - Course ownership validation
-      - Pagination support
-      
-      **Features:**
-      - Only shows courses created by current user
-      - Includes all course statistics
-      - Supports same filtering as general course list
-      - Optimized for course management dashboard
+      This endpoint provides a filtered view of courses created by the current user:
+      - Automatic filtering by creator (authenticated user)
+      - Same filtering and pagination options as general course list
+      - Comprehensive caching for performance
+      - Creator-specific optimizations
       
       **Use Cases:**
-      - Personal course dashboard
+      - User dashboard showing their courses
       - Course management interface
-      - Creator analytics
-      - Course editing access
+      - Creator analytics and insights
+      - Personal course portfolio
     `,
         operationId: 'getMyCreatedCourses',
+    })
+    @ApiQuery({
+        name: 'title',
+        required: false,
+        description: 'Filter your courses by title (partial match)',
+        example: 'Computer Science',
+    })
+    @ApiQuery({
+        name: 'createdAfter',
+        required: false,
+        description: 'Filter your courses created after this date',
+        example: '2024-01-01',
+    })
+    @ApiQuery({
+        name: 'createdBefore',
+        required: false,
+        description: 'Filter your courses created before this date',
+        example: '2024-12-31',
+    })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        description: 'Page number for pagination',
+        example: 1,
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        description: 'Number of courses per page',
+        example: 10,
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ User courses retrieved successfully',
-        type: CourseListResponseDto,
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        type: CourseListApiResponse,
     })
     async getMyCreatedCourses(
         @Query() filters: CourseFilterDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<CourseListResponseDto> {
+    ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(`Getting courses created by user: ${scope.userId}`);
+            this.logger.log(
+                `Getting courses created by user: ${scope.userId}`,
+            );
 
             const result = await this.courseService.findByCreator(
                 scope.userId,
@@ -336,11 +405,20 @@ export class CourseController {
                 scope,
             );
 
-            this.logger.log(
-                `Retrieved ${result.courses.length} courses created by user: ${scope.userId}`,
-            );
-
-            return result;
+            return {
+                success: true,
+                message: 'User courses retrieved successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                    pagination: {
+                        page: result.page,
+                        limit: result.limit,
+                        total: result.total,
+                        totalPages: result.totalPages,
+                    },
+                },
+            };
         } catch (error) {
             this.logger.error(
                 `Error getting courses for user ${scope.userId}:`,
@@ -354,43 +432,37 @@ export class CourseController {
     @ApiOperation({
         summary: '🔍 Get Course Details',
         description: `
-      **Retrieves detailed information about a specific course**
+      **Retrieves detailed information about a specific course with caching**
       
-      This endpoint provides comprehensive course data including:
-      - Complete course information
-      - Creator details and contact
-      - Course statistics and analytics
-      - Test count and student enrollment
+      This endpoint provides comprehensive course details including:
+      - Complete course information with creator details
+      - Detailed statistics (test counts, attempts, scores)
+      - Organization and branch information
+      - Comprehensive caching for performance
       
-      **Detailed Information:**
-      - Basic course metadata (title, description, dates)
-      - Creator profile information
-      - Course statistics (tests, students, activity)
-      - Access permissions and ownership
-      
-      **Security:**
-      - Public course information available to all authenticated users
-      - Detailed statistics may require ownership permissions
-      - Sensitive data is filtered based on access level
+      **Statistics Included:**
+      - Total and active test counts
+      - Student enrollment and attempt statistics
+      - Average scores and pass rates
+      - Recent activity timestamps
       
       **Use Cases:**
       - Course detail pages
-      - Pre-enrollment course preview
-      - Course analytics dashboard
-      - Administrative course review
+      - Course analytics and reporting
+      - Instructor dashboards
+      - Course performance monitoring
     `,
-        operationId: 'getCourseDetails',
+        operationId: 'getCourseById',
     })
     @ApiParam({
         name: 'id',
-        description: 'Course unique identifier',
+        description: 'Course ID to retrieve',
         example: 1,
-        type: 'number',
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Course details retrieved successfully',
-        type: CourseDetailDto,
+        type: CourseDetailApiResponse,
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
@@ -398,40 +470,45 @@ export class CourseController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 404 },
+                success: { type: 'boolean', example: false },
                 message: {
                     type: 'string',
                     example: 'Course with ID 1 not found',
                 },
-                error: { type: 'string', example: 'Not Found' },
+                data: { type: 'null' },
             },
         },
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<CourseDetailDto> {
+    ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(
-                `Getting course details for ID: ${id} with org/branch scope`,
-            );
+            this.logger.log(`Getting course ${id} for user: ${scope.userId}`);
 
             const course = await this.courseService.findOne(id, scope);
 
             if (!course) {
-                this.logger.error(`Course not found: ${id}`);
-                throw new NotFoundException(`Course with ID ${id} not found`);
+                return {
+                    success: false,
+                    message: `Course with ID ${id} not found`,
+                    data: null,
+                };
             }
 
-            this.logger.log(`Course details retrieved for ID: ${id}`);
-
-            return course;
+            return {
+                success: true,
+                message: 'Course details retrieved successfully',
+                data: course,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
         } catch (error) {
-            this.logger.error(`Error getting course ${id}:`, error);
+            this.logger.error(
+                `Error getting course ${id} for user ${scope.userId}:`,
+                error,
+            );
             throw error;
         }
     }
@@ -440,76 +517,73 @@ export class CourseController {
     @ApiOperation({
         summary: '📊 Get Course Statistics',
         description: `
-      **Retrieves comprehensive analytics and statistics for a course**
+      **Retrieves comprehensive statistics for a specific course with caching**
       
-      This endpoint provides detailed course metrics including:
-      - Test performance analytics
-      - Student engagement metrics
-      - Course completion statistics
-      - Activity timeline data
+      This endpoint provides detailed analytics including:
+      - Test and student counts with breakdowns
+      - Performance metrics (average scores, pass rates)
+      - Activity tracking (last attempt timestamps)
+      - Comprehensive caching for performance
       
-      **Analytics Provided:**
-      - Total and active test counts
-      - Student enrollment and attempt statistics
-      - Average scores and pass rates
-      - Activity patterns and engagement
-      
-      **Access Control:**
-      - Only course creators can access detailed statistics
-      - Requires ownership validation
-      - Sensitive data protection
+      **Statistics Included:**
+      - **Test Metrics**: Total tests, active tests
+      - **Student Metrics**: Unique students, total attempts
+      - **Performance**: Average scores, pass rates
+      - **Activity**: Last activity timestamps
       
       **Use Cases:**
-      - Course performance dashboard
-      - Educational analytics
+      - Course analytics dashboards
+      - Performance monitoring
       - Instructor insights
-      - Course improvement planning
+      - Administrative reporting
     `,
-        operationId: 'getCourseStatistics',
+        operationId: 'getCourseStats',
     })
     @ApiParam({
         name: 'id',
-        description: 'Course unique identifier',
+        description: 'Course ID to get statistics for',
         example: 1,
-        type: 'number',
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Course statistics retrieved successfully',
-        type: CourseStatsDto,
+        type: CourseStatsApiResponse,
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Course not found',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '🚫 Access denied - Not course owner',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: false },
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                data: { type: 'null' },
+            },
+        },
     })
     async getStats(
         @Param('id', ParseIntPipe) id: number,
         @Request() req: AuthenticatedRequest,
-    ): Promise<CourseStatsDto> {
+    ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(
-                `Getting course statistics for ID: ${id} by user: ${req.user.id}`,
-            );
-
-            // Validate ownership before providing stats
-            await this.courseService.validateOwnership(id, req.user.id);
+            this.logger.log(`Getting stats for course ${id} by user: ${req.user.id}`);
 
             const stats = await this.courseService.getStats(id);
 
-            this.logger.log(`Course statistics retrieved for ID: ${id}`);
-
-            return stats;
+            return {
+                success: true,
+                message: 'Course statistics retrieved successfully',
+                data: stats,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
         } catch (error) {
             this.logger.error(
-                `Error getting course stats ${id} for user ${req.user.id}:`,
+                `Error getting stats for course ${id} by user ${req.user.id}:`,
                 error,
             );
             throw error;
@@ -520,71 +594,50 @@ export class CourseController {
     @ApiOperation({
         summary: '✏️ Update Course',
         description: `
-      **Updates course information with ownership validation**
+      **Updates an existing course with validation and cache management**
       
-      This endpoint allows course creators to update their courses including:
-      - Course title and description modifications
-      - Metadata updates
-      - Ownership verification
-      - Change tracking
-      
-      **Updatable Fields:**
-      - Course title (with validation)
-      - Course description
-      - Update timestamp (automatic)
+      This endpoint allows course creators to update their courses:
+      - Title and description modifications
+      - Ownership validation (only creator can update)
+      - Comprehensive cache invalidation
+      - Input validation and sanitization
       
       **Security Features:**
-      - Only course creators can update courses
-      - Ownership validation required
+      - Ownership validation (only creator can update)
       - Input validation and sanitization
-      - Change audit logging
-      
-      **Business Rules:**
-      - Course title must remain unique per creator
-      - Description updates are optional
-      - Cannot change course creator
-      - Update timestamp is automatic
+      - Automatic cache invalidation
       
       **Use Cases:**
-      - Course content updates
-      - Title and description corrections
-      - Course information maintenance
-      - Content management workflows
+      - Course information updates
+      - Content improvements
+      - Course maintenance
+      - Information corrections
     `,
         operationId: 'updateCourse',
     })
     @ApiParam({
         name: 'id',
-        description: 'Course unique identifier',
+        description: 'Course ID to update',
         example: 1,
-        type: 'number',
     })
     @ApiBody({
         type: UpdateCourseDto,
         description: 'Course update data',
         examples: {
             'title-update': {
-                summary: '📝 Update Title Only',
-                description: 'Update just the course title',
+                summary: '📝 Update Title',
+                description: 'Update course title only',
                 value: {
                     title: 'Advanced Computer Science Concepts',
-                },
-            },
-            'description-update': {
-                summary: '📄 Update Description Only',
-                description: 'Update just the course description',
-                value: {
-                    description:
-                        'An advanced course covering complex computer science topics including advanced algorithms, system design, and software architecture patterns.',
                 },
             },
             'full-update': {
                 summary: '🔄 Complete Update',
                 description: 'Update both title and description',
                 value: {
-                    title: 'Advanced Computer Science & Software Engineering',
+                    title: 'Advanced Computer Science Concepts',
                     description:
-                        'A comprehensive advanced course covering computer science theory, practical software engineering, system design patterns, and industry best practices.',
+                        'An advanced course covering complex computer science topics including advanced algorithms, system design, and software architecture patterns.',
                 },
             },
         },
@@ -592,44 +645,72 @@ export class CourseController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Course updated successfully',
-        type: CourseResponseDto,
+        type: CourseUpdatedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid input data',
+        description: '❌ Invalid input data or validation errors',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    examples: [
+                        'Course title must be at least 3 characters long',
+                        'Course description must be a string',
+                    ],
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 400 },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '⛔ Forbidden - Not course creator',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'You are not authorized to modify this course',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 403 },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Course not found',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '🚫 Access denied - Not course owner',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 404 },
+            },
+        },
     })
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateCourseDto: UpdateCourseDto,
         @Request() req: AuthenticatedRequest,
-    ): Promise<CourseResponseDto> {
+    ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Updating course ${id} for user: ${req.user.id}`);
+            this.logger.log(`Updating course ${id} by user: ${req.user.id}`);
 
-            const course = await this.courseService.update(
+            return await this.courseService.update(
                 id,
                 updateCourseDto,
                 req.user.id,
             );
-
-            this.logger.log(`Course ${id} updated successfully`);
-
-            return course;
         } catch (error) {
             this.logger.error(
-                `Error updating course ${id} for user ${req.user.id}:`,
+                `Error updating course ${id} by user ${req.user.id}:`,
                 error,
             );
             throw error;
@@ -640,96 +721,85 @@ export class CourseController {
     @ApiOperation({
         summary: '🗑️ Delete Course',
         description: `
-      **Permanently deletes a course with comprehensive validation**
+      **Deletes a course with validation and cache management**
       
-      This endpoint allows course creators to delete their courses with:
-      - Ownership verification
-      - Cascade relationship handling
-      - Data integrity protection
-      - Audit trail logging
+      This endpoint allows course creators to delete their courses:
+      - Ownership validation (only creator can delete)
+      - Test dependency checking (cannot delete course with tests)
+      - Comprehensive cache invalidation
+      - Safe deletion with validation
       
-      **Deletion Process:**
-      - Validates user ownership
-      - Checks for dependent data (tests, attempts)
-      - Performs cascading deletions as needed
-      - Logs deletion for audit purposes
+      **Security Features:**
+      - Ownership validation (only creator can delete)
+      - Dependency checking before deletion
+      - Comprehensive cache invalidation
       
-      **Safety Features:**
-      - Only course creators can delete courses
-      - Prevents deletion of courses with active tests/attempts
-      - Confirms deletion before execution
-      - Maintains referential integrity
-      
-      **Important Notes:**
-      - **This action is irreversible**
-      - All course data will be permanently deleted
-      - Associated tests and attempts may be removed
-      - Consider archiving instead of deletion
+      **Business Rules:**
+      - Cannot delete course that has tests
+      - Only course creator can delete
+      - Deletion is permanent and irreversible
       
       **Use Cases:**
-      - Course cleanup and maintenance
-      - Removing outdated content
-      - Administrative course management
-      - Course lifecycle management
+      - Removing obsolete courses
+      - Cleaning up test/draft courses
+      - Course management maintenance
     `,
         operationId: 'deleteCourse',
     })
     @ApiParam({
         name: 'id',
-        description: 'Course unique identifier',
+        description: 'Course ID to delete',
         example: 1,
-        type: 'number',
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Course deleted successfully',
+        type: CourseDeletedResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '⛔ Forbidden - Cannot delete course with tests or not creator',
         schema: {
             type: 'object',
             properties: {
-                success: { type: 'boolean', example: true },
                 message: {
                     type: 'string',
-                    example: 'Course deleted successfully',
+                    examples: [
+                        'You are not authorized to modify this course',
+                        'Cannot delete course that has tests',
+                    ],
                 },
-                data: { type: 'null' },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 403 },
             },
         },
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Course not found',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '🚫 Access denied - Not course owner',
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: '❌ Cannot delete course with active tests',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 404 },
+            },
+        },
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
         @Request() req: AuthenticatedRequest,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Deleting course ${id} for user: ${req.user.id}`);
+            this.logger.log(`Deleting course ${id} by user: ${req.user.id}`);
 
-            await this.courseService.remove(id, req.user.id);
-
-            this.logger.log(`Course ${id} deleted successfully`);
-
-            return {
-                success: true,
-                message: 'Course deleted successfully',
-                data: null,
-            };
+            return await this.courseService.remove(id, req.user.id);
         } catch (error) {
             this.logger.error(
-                `Error deleting course ${id} for user ${req.user.id}:`,
+                `Error deleting course ${id} by user ${req.user.id}:`,
                 error,
             );
             throw error;

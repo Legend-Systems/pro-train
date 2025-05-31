@@ -13,6 +13,10 @@ import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 import { User } from '../../user/entities/user.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { TrainingProgress } from 'src/training_progress/entities/training_progress.entity';
+import { Result } from 'src/results/entities/result.entity';
+import { Leaderboard } from 'src/leaderboard/entities/leaderboard.entity';
+import { Test } from 'src/test/entities/test.entity';
 
 @Entity('courses')
 export class Course {
@@ -86,18 +90,17 @@ export class Course {
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
     creator: User;
 
-    @OneToMany('Test', 'course')
-    tests: any[];
+    @OneToMany(() => Test, 'course')
+    tests: Test[];
 
-    // Note: These relations will be added as we implement other entities
-    // @OneToMany(() => Result, result => result.course)
-    // results: Result[];
+    @OneToMany(() => Result, result => result.course)
+    results: Result[];
 
-    // @OneToMany(() => Leaderboard, leaderboard => leaderboard.course)
-    // leaderboards: Leaderboard[];
+    @OneToMany(() => Leaderboard, leaderboard => leaderboard.course)
+    leaderboards: Leaderboard[];
 
-    // @OneToMany(() => TrainingProgress, progress => progress.course)
-    // trainingProgress: TrainingProgress[];
+    @OneToMany(() => TrainingProgress, progress => progress.course)
+    trainingProgress: TrainingProgress[];
 
     constructor(partial: Partial<Course>) {
         Object.assign(this, partial);

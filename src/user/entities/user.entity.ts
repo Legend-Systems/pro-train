@@ -14,6 +14,12 @@ import {
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
 import { MediaFile } from '../../media-manager/entities/media-manager.entity';
+import { TestAttempt } from 'src/test_attempts/entities/test_attempt.entity';
+import { Result } from 'src/results/entities/result.entity';
+import { Leaderboard } from 'src/leaderboard/entities/leaderboard.entity';
+import { Answer } from 'src/answers/entities/answer.entity';
+import { TrainingProgress } from 'src/training_progress/entities/training_progress.entity';
+import { Course } from 'src/course/entities/course.entity';
 
 export enum UserRole {
     BRANDON = 'brandon',
@@ -141,25 +147,23 @@ export class User {
     })
     branchId?: Branch;
 
-    // Relations - using string references to avoid circular dependencies
-    @OneToMany('Course', 'creator')
-    createdCourses: any[];
+    @OneToMany(() => Course, 'creator')
+    createdCourses: Course[];
 
-    // Note: These relations will be added as we implement other entities
-    // @OneToMany('TestAttempt', 'user')
-    // testAttempts: any[];
+    @OneToMany(() => TestAttempt, 'user')
+    testAttempts: TestAttempt[];
 
-    // @OneToMany('Result', 'user')
-    // results: any[];
+    @OneToMany(() => Result, 'user')
+    results: Result[];
 
-    // @OneToMany('Answer', 'markedByUser')
-    // markedAnswers: any[];
+    @OneToMany(() => Answer, 'markedByUser')
+    markedAnswers: Answer[];
 
-    // @OneToMany('Leaderboard', 'user')
-    // leaderboardEntries: any[];
+    @OneToMany(() => Leaderboard, 'user')
+    leaderboardEntries: Leaderboard[];
 
-    // @OneToMany('TrainingProgress', 'user')
-    // trainingProgress: any[];
+    @OneToMany(() => TrainingProgress, 'user')
+    trainingProgress: TrainingProgress[];
 
     constructor(partial: Partial<User>) {
         Object.assign(this, partial);

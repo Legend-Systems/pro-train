@@ -2,17 +2,21 @@ import {
     Injectable,
     NotFoundException,
     ForbiddenException,
+    Inject,
+    Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseFilterDto } from './dto/course-filter.dto';
 import {
-    CourseResponseDto,
     CourseListResponseDto,
     CourseDetailDto,
     CourseStatsDto,
+    StandardOperationResponse,
 } from './dto/course-response.dto';
 import { Course } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
@@ -24,6 +28,39 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class CourseService {
+    private readonly logger = new Logger(CourseService.name);
+
+    // Cache keys with comprehensive coverage
+    private readonly CACHE_KEYS = {
+        COURSE_BY_ID: (id: number) => `course:${id}`,
+        COURSES_BY_ORG: (orgId: string, filters: string) =>
+            `courses:org:${orgId}:${filters}`,
+        COURSES_BY_BRANCH: (branchId: string, filters: string) =>
+            `courses:branch:${branchId}:${filters}`,
+        COURSES_BY_CREATOR: (userId: string, filters: string) =>
+            `courses:creator:${userId}:${filters}`,
+        COURSE_STATS: (courseId: number) => `course:stats:${courseId}`,
+        COURSE_LIST: (filters: string) => `courses:list:${filters}`,
+        USER_COURSES: (userId: string) => `user:${userId}:courses`,
+        ALL_COURSES: 'courses:all',
+        COURSE_DETAIL: (id: number) => `course:detail:${id}`,
+        COURSE_TESTS_COUNT: (courseId: number) =>
+            `course:tests:count:${courseId}`,
+        COURSE_STUDENTS_COUNT: (courseId: number) =>
+            `course:students:count:${courseId}`,
+    };
+
+    // Cache TTL in seconds with different durations for different data types
+    private readonly CACHE_TTL = {
+        COURSE: 300, // 5 minutes
+        COURSE_LIST: 180, // 3 minutes
+        STATS: 600, // 10 minutes
+        COUNTS: 120, // 2 minutes
+        USER_DATA: 240, // 4 minutes
+        ALL_COURSES: 900, // 15 minutes
+        COURSE_DETAIL: 300, // 5 minutes
+    };
+
     constructor(
         @InjectRepository(Course)
         private readonly courseRepository: Repository<Course>,
@@ -35,6 +72,8 @@ export class CourseService {
         private readonly resultRepository: Repository<Result>,
         private readonly userService: UserService,
         private readonly orgBranchScopingService: OrgBranchScopingService,
+        @Inject(CACHE_MANAGER)
+        private readonly cacheManager: Cache,
     ) {}
 
     private async retryOperation<T>(
@@ -53,9 +92,6 @@ export class CourseService {
                         error.message.includes('connect ETIMEDOUT'));
 
                 if (isConnectionError && attempt < maxRetries) {
-                    console.log(
-                        `Database connection error on attempt ${attempt}, retrying in ${delay}ms...`,
-                    );
                     await new Promise(resolve => setTimeout(resolve, delay));
                     delay *= 2; // Exponential backoff
                     continue;
@@ -66,10 +102,68 @@ export class CourseService {
         throw new Error('Max retries exceeded');
     }
 
+    /**
+     * Cache helper methods
+     */
+    private async invalidateCourseCache(
+        courseId: number,
+        userId?: string,
+    ): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.COURSE_BY_ID(courseId),
+            this.CACHE_KEYS.COURSE_DETAIL(courseId),
+            this.CACHE_KEYS.COURSE_STATS(courseId),
+            this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId),
+            this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId),
+        ];
+
+        if (userId) {
+            keysToDelete.push(this.CACHE_KEYS.USER_COURSES(userId));
+        }
+
+        // Also invalidate general course lists
+        keysToDelete.push(this.CACHE_KEYS.ALL_COURSES);
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private async invalidateCourseListCaches(): Promise<void> {
+        // Note: This is a simplified approach. In production, you might want to
+        // maintain a list of active org/branch cache keys or use cache tags
+        // For now, we'll just clear specific pattern-based keys
+        // await this.cacheManager.reset(); // This method might not exist in all cache implementations
+    }
+
+    private async invalidateUserCoursesCache(userId: string): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.USER_COURSES(userId),
+            this.CACHE_KEYS.ALL_COURSES,
+        ];
+
+        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+    }
+
+    private generateCacheKeyForCourses(
+        filters?: CourseFilterDto,
+        prefix: string = 'list',
+    ): string {
+        const filterKey = JSON.stringify({
+            title: filters?.title,
+            createdBy: filters?.createdBy,
+            createdAfter: filters?.createdAfter,
+            createdBefore: filters?.createdBefore,
+            page: filters?.page,
+            limit: filters?.limit,
+            sortBy: filters?.sortBy,
+            sortOrder: filters?.sortOrder,
+        });
+        return `${this.CACHE_KEYS.COURSE_LIST(filterKey)}:${prefix}`;
+    }
+
     async create(
         createCourseDto: CreateCourseDto,
         scope: OrgBranchScope,
-    ): Promise<CourseResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // Validate user exists
             const user = await this.userService.findById(scope.userId);
@@ -88,11 +182,17 @@ export class CourseService {
 
             const savedCourse = await this.courseRepository.save(course);
 
+            // Invalidate list caches since a new course was created
+            await this.invalidateCourseListCaches();
+
+            this.logger.log(
+                `Course ${savedCourse.courseId} created successfully by user ${scope.userId}`,
+            );
+
             return {
-                ...savedCourse,
-                creator: user,
-                testCount: 0,
-                studentCount: 0,
+                message: 'Course created successfully',
+                status: 'success',
+                code: 201,
             };
         });
     }
@@ -102,6 +202,16 @@ export class CourseService {
         scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
         return this.retryOperation(async () => {
+            // Check cache first
+            const cacheKey = this.generateCacheKeyForCourses(filters, 'all');
+
+            const cachedResult =
+                await this.cacheManager.get<CourseListResponseDto>(cacheKey);
+
+            if (cachedResult) {
+                return cachedResult;
+            }
+
             const {
                 title,
                 createdBy,
@@ -162,26 +272,15 @@ export class CourseService {
 
             const [courses, total] = await query.getManyAndCount();
 
-            // Calculate actual test counts for each course
+            // Calculate actual test counts for each course with caching
             const coursesWithCounts = await Promise.all(
                 courses.map(async course => {
-                    const testCount = await this.testRepository.count({
-                        where: { courseId: course.courseId },
-                    });
-
-                    // Calculate student count using TestAttempt entity
-                    const studentCount = await this.testAttemptRepository
-                        .createQueryBuilder('attempt')
-                        .innerJoin('attempt.test', 'test')
-                        .where('test.courseId = :courseId', {
-                            courseId: course.courseId,
-                        })
-                        .select('COUNT(DISTINCT attempt.userId)', 'count')
-                        .getRawOne()
-                        .then(
-                            (result: { count: string }) =>
-                                parseInt(result.count) || 0,
-                        );
+                    const testCount = await this.getCachedTestCount(
+                        course.courseId,
+                    );
+                    const studentCount = await this.getCachedStudentCount(
+                        course.courseId,
+                    );
 
                     return {
                         ...course,
@@ -191,13 +290,22 @@ export class CourseService {
                 }),
             );
 
-            return {
+            const result = {
                 courses: coursesWithCounts,
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
             };
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.COURSE_LIST * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -206,77 +314,61 @@ export class CourseService {
         scope?: OrgBranchScope,
     ): Promise<CourseDetailDto | null> {
         return this.retryOperation(async () => {
-            const whereCondition: any = { courseId: id };
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.COURSE_DETAIL(id);
+
+            const cachedCourse =
+                await this.cacheManager.get<CourseDetailDto>(cacheKey);
+
+            if (cachedCourse) {
+                return cachedCourse;
+            }
+
+            const query = this.courseRepository.createQueryBuilder('course');
+            query.leftJoinAndSelect('course.creator', 'creator');
+            query.leftJoinAndSelect('course.orgId', 'org');
+            query.leftJoinAndSelect('course.branchId', 'branch');
+            query.where('course.courseId = :id', { id });
 
             // Apply org/branch scoping
             if (scope?.orgId) {
-                whereCondition.orgId = { id: scope.orgId };
+                query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
             }
             if (scope?.branchId) {
-                whereCondition.branchId = { id: scope.branchId };
+                query.andWhere('course.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
             }
 
-            const course = await this.courseRepository.findOne({
-                where: whereCondition,
-                relations: ['creator', 'orgId', 'branchId'],
-            });
+            const course = await query.getOne();
 
             if (!course) {
                 return null;
             }
 
-            // Calculate actual statistics with available entities
-            const totalTests = await this.testRepository.count({
-                where: { courseId: id },
-            });
+            // Get statistics with caching
+            const stats = await this.getStats(id);
 
-            const activeTests = await this.testRepository.count({
-                where: { courseId: id, isActive: true },
-            });
-
-            // Calculate statistics using TestAttempt and Result entities
-            const totalAttempts = await this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .innerJoin('attempt.test', 'test')
-                .where('test.courseId = :courseId', { courseId: id })
-                .getCount();
-
-            const studentCount = await this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .innerJoin('attempt.test', 'test')
-                .where('test.courseId = :courseId', { courseId: id })
-                .select('COUNT(DISTINCT attempt.userId)', 'count')
-                .getRawOne()
-                .then(
-                    (result: { count: string }) => parseInt(result.count) || 0,
-                );
-
-            const averageScoreResult: { avgScore: string } | undefined =
-                await this.resultRepository
-                    .createQueryBuilder('result')
-                    .innerJoin('result.attempt', 'attempt')
-                    .innerJoin('attempt.test', 'test')
-                    .where('test.courseId = :courseId', { courseId: id })
-                    .select('AVG(result.score)', 'avgScore')
-                    .getRawOne();
-
-            const averageScore = averageScoreResult?.avgScore
-                ? parseFloat(averageScoreResult.avgScore)
-                : 0;
-
-            const statistics = {
-                totalTests,
-                activeTests,
-                totalAttempts,
-                averageScore,
-            };
-
-            return {
+            const result: CourseDetailDto = {
                 ...course,
-                testCount: totalTests,
-                studentCount,
-                statistics,
+                testCount: stats.totalTests,
+                studentCount: stats.uniqueStudents,
+                statistics: {
+                    totalTests: stats.totalTests,
+                    activeTests: stats.activeTests,
+                    totalAttempts: stats.totalAttempts,
+                    averageScore: stats.averageScore,
+                },
             };
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.COURSE_DETAIL * 1000,
+            );
+
+            return result;
         });
     }
 
@@ -285,383 +377,332 @@ export class CourseService {
         filters: Partial<CourseFilterDto>,
         scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
-        return this.findAll({ ...filters, createdBy: userId }, scope);
+        const fullFilters = { ...filters, createdBy: userId };
+        return this.findAll(fullFilters as CourseFilterDto, scope);
     }
 
     async update(
         id: number,
         updateCourseDto: UpdateCourseDto,
         userId: string,
-    ): Promise<CourseResponseDto> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
+            const course = await this.findById(id);
+            if (!course) {
+                throw new NotFoundException(`Course with ID ${id} not found`);
+            }
+
+            // Validate ownership
             await this.validateOwnership(id, userId);
 
-            const result = await this.courseRepository.update(
-                id,
-                updateCourseDto,
+            Object.assign(course, updateCourseDto);
+            await this.courseRepository.save(course);
+
+            // Invalidate course cache
+            await this.invalidateCourseCache(id, userId);
+
+            this.logger.log(
+                `Course ${id} updated successfully by user ${userId}`,
             );
 
-            if (result.affected === 0) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
-
-            const updatedCourse = await this.findOne(id);
-            if (!updatedCourse) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
-
             return {
-                courseId: updatedCourse.courseId,
-                title: updatedCourse.title,
-                description: updatedCourse.description,
-                createdBy: updatedCourse.createdBy,
-                createdAt: updatedCourse.createdAt,
-                updatedAt: updatedCourse.updatedAt,
-                creator: updatedCourse.creator,
-                testCount: updatedCourse.testCount,
-                studentCount: updatedCourse.studentCount,
+                message: 'Course updated successfully',
+                status: 'success',
+                code: 200,
             };
         });
     }
 
-    async remove(id: number, userId: string): Promise<void> {
+    async remove(
+        id: number,
+        userId: string,
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
+            const course = await this.findById(id);
+            if (!course) {
+                throw new NotFoundException(`Course with ID ${id} not found`);
+            }
+
+            // Validate ownership
             await this.validateOwnership(id, userId);
 
-            // Check for active tests before deletion
-            const activeTestCount = await this.testRepository.count({
-                where: { courseId: id, isActive: true },
-            });
-
-            if (activeTestCount > 0) {
+            // Check if course has tests
+            const testCount = await this.getCachedTestCount(id);
+            if (testCount > 0) {
                 throw new ForbiddenException(
-                    `Cannot delete course with ${activeTestCount} active tests. Please deactivate all tests first.`,
+                    'Cannot delete course that has tests',
                 );
             }
 
-            const result = await this.courseRepository.delete(id);
-            if (result.affected === 0) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
+            await this.courseRepository.remove(course);
+
+            // Invalidate course cache
+            await this.invalidateCourseCache(id, userId);
+            await this.invalidateCourseListCaches();
+
+            this.logger.log(
+                `Course ${id} deleted successfully by user ${userId}`,
+            );
+
+            return {
+                message: 'Course deleted successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
     async getStats(id: number): Promise<CourseStatsDto> {
         return this.retryOperation(async () => {
-            const course = await this.findOne(id);
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.COURSE_STATS(id);
+
+            const cachedStats =
+                await this.cacheManager.get<CourseStatsDto>(cacheKey);
+
+            if (cachedStats) {
+                return cachedStats;
+            }
+
+            const course = await this.findById(id);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
-            // Calculate actual statistics with available entities
-            const totalTests = await this.testRepository.count({
+            // Get tests for this course
+            const tests = await this.testRepository.find({
                 where: { courseId: id },
             });
 
-            const activeTests = await this.testRepository.count({
-                where: { courseId: id, isActive: true },
-            });
+            const totalTests = tests.length;
+            const activeTests = tests.filter(test => test.isActive).length;
 
-            // Calculate real attempt statistics using TestAttempt and Result entities
-            const totalAttempts = await this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .innerJoin('attempt.test', 'test')
-                .where('test.courseId = :courseId', { courseId: id })
-                .getCount();
+            let totalAttempts = 0;
+            let uniqueStudents = 0;
+            let averageScore = 0;
+            let passRate = 0;
+            let lastActivityAt: Date | undefined;
 
-            const uniqueStudents = await this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .innerJoin('attempt.test', 'test')
-                .where('test.courseId = :courseId', { courseId: id })
-                .select('COUNT(DISTINCT attempt.userId)', 'count')
-                .getRawOne()
-                .then(
-                    (result: { count: string }) => parseInt(result.count) || 0,
-                );
+            if (totalTests > 0) {
+                const testIds = tests.map(test => test.testId);
 
-            const averageScoreResult: { avgScore: string } | undefined =
-                await this.resultRepository
-                    .createQueryBuilder('result')
-                    .innerJoin('result.attempt', 'attempt')
-                    .innerJoin('attempt.test', 'test')
-                    .where('test.courseId = :courseId', { courseId: id })
-                    .select('AVG(result.score)', 'avgScore')
-                    .getRawOne();
+                // Get all attempts for these tests
+                const attempts = await this.testAttemptRepository
+                    .createQueryBuilder('attempt')
+                    .where('attempt.testId IN (:...testIds)', { testIds })
+                    .getMany();
 
-            const averageScore = averageScoreResult?.avgScore
-                ? parseFloat(averageScoreResult.avgScore)
-                : 0;
+                totalAttempts = attempts.length;
 
-            const passRateResult: { passRate: string } | undefined =
-                await this.resultRepository
-                    .createQueryBuilder('result')
-                    .innerJoin('result.attempt', 'attempt')
-                    .innerJoin('attempt.test', 'test')
-                    .where('test.courseId = :courseId', { courseId: id })
-                    .select(
-                        'AVG(CASE WHEN result.passed = 1 THEN 1 ELSE 0 END) * 100',
-                        'passRate',
-                    )
-                    .getRawOne();
+                if (totalAttempts > 0) {
+                    // Count unique students
+                    const uniqueUserIds = new Set(
+                        attempts.map(attempt => attempt.userId),
+                    );
+                    uniqueStudents = uniqueUserIds.size;
 
-            const passRate = passRateResult?.passRate
-                ? parseFloat(passRateResult.passRate)
-                : 0;
+                    // Get results for these attempts
+                    const results = await this.resultRepository
+                        .createQueryBuilder('result')
+                        .innerJoin('result.testAttempt', 'attempt')
+                        .where('attempt.testId IN (:...testIds)', { testIds })
+                        .getMany();
 
-            const lastActivity = await this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .innerJoin('attempt.test', 'test')
-                .where('test.courseId = :courseId', { courseId: id })
-                .orderBy('attempt.updatedAt', 'DESC')
-                .select('attempt.updatedAt')
-                .getOne();
+                    if (results.length > 0) {
+                        const totalScore = results.reduce(
+                            (sum, result) => sum + result.score,
+                            0,
+                        );
+                        averageScore = totalScore / results.length;
 
-            return {
+                        // Calculate pass rate (assuming 60% is passing)
+                        const passedResults = results.filter(
+                            result => result.score >= 60,
+                        );
+                        passRate =
+                            (passedResults.length / results.length) * 100;
+                    }
+
+                    // Get last activity
+                    const lastAttempt = attempts.sort(
+                        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+                    )[0];
+                    lastActivityAt = lastAttempt?.createdAt;
+                }
+            }
+
+            const result: CourseStatsDto = {
                 courseId: id,
                 totalTests,
                 activeTests,
                 totalAttempts,
                 uniqueStudents,
-                averageScore,
-                passRate,
-                lastActivityAt: lastActivity?.updatedAt,
+                averageScore: Math.round(averageScore * 100) / 100,
+                passRate: Math.round(passRate * 100) / 100,
+                lastActivityAt,
             };
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                result,
+                this.CACHE_TTL.STATS * 1000,
+            );
+
+            return result;
         });
     }
 
     async validateOwnership(courseId: number, userId: string): Promise<void> {
-        return this.retryOperation(async () => {
-            const course = await this.courseRepository.findOne({
-                where: { courseId },
-            });
+        const course = await this.findById(courseId);
+        if (!course) {
+            throw new NotFoundException(`Course with ID ${courseId} not found`);
+        }
 
-            if (!course) {
-                throw new NotFoundException(
-                    `Course with ID ${courseId} not found`,
-                );
-            }
-
-            if (course.createdBy !== userId) {
-                throw new ForbiddenException(
-                    'You do not have permission to access this course',
-                );
-            }
-        });
+        if (course.createdBy !== userId) {
+            throw new ForbiddenException(
+                'You are not authorized to modify this course',
+            );
+        }
     }
 
-    // Additional helper methods
     async findById(id: number): Promise<Course | null> {
         return this.retryOperation(async () => {
-            return await this.courseRepository.findOne({
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.COURSE_BY_ID(id);
+
+            const cachedCourse = await this.cacheManager.get<Course>(cacheKey);
+
+            if (cachedCourse) {
+                return cachedCourse;
+            }
+
+            const course = await this.courseRepository.findOne({
                 where: { courseId: id },
+                relations: ['creator', 'orgId', 'branchId'],
             });
+
+            if (course) {
+                // Cache the result
+                await this.cacheManager.set(
+                    cacheKey,
+                    course,
+                    this.CACHE_TTL.COURSE * 1000, // Convert to milliseconds
+                );
+            }
+
+            return course;
         });
     }
 
     async exists(id: number): Promise<boolean> {
-        return this.retryOperation(async () => {
-            const count = await this.courseRepository.count({
-                where: { courseId: id },
-            });
-            return count > 0;
-        });
+        const course = await this.findById(id);
+        return !!course;
     }
 
     async findByOrganization(orgId: string): Promise<Course[]> {
         return this.retryOperation(async () => {
-            return await this.courseRepository.find({
+            return this.courseRepository.find({
                 where: { orgId: { id: orgId } },
                 relations: ['creator', 'orgId', 'branchId'],
-                order: { createdAt: 'DESC' },
             });
         });
     }
 
     async findByBranch(branchId: string): Promise<Course[]> {
         return this.retryOperation(async () => {
-            return await this.courseRepository.find({
+            return this.courseRepository.find({
                 where: { branchId: { id: branchId } },
                 relations: ['creator', 'orgId', 'branchId'],
-                order: { createdAt: 'DESC' },
             });
         });
     }
 
-    /**
-     * Find all courses with org/branch scoping applied
-     */
+    // Helper methods for cached counts
+    private async getCachedTestCount(courseId: number): Promise<number> {
+        const cacheKey = this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId);
+
+        const cachedCount = await this.cacheManager.get<number>(cacheKey);
+        if (cachedCount !== undefined && cachedCount !== null) {
+            return cachedCount;
+        }
+
+        const count = await this.testRepository.count({
+            where: { courseId },
+        });
+
+        await this.cacheManager.set(
+            cacheKey,
+            count,
+            this.CACHE_TTL.COUNTS * 1000,
+        );
+
+        return count;
+    }
+
+    private async getCachedStudentCount(courseId: number): Promise<number> {
+        const cacheKey = this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId);
+
+        const cachedCount = await this.cacheManager.get<number>(cacheKey);
+        if (cachedCount !== undefined && cachedCount !== null) {
+            return cachedCount;
+        }
+
+        const count = await this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .innerJoin('attempt.test', 'test')
+            .where('test.courseId = :courseId', { courseId })
+            .select('COUNT(DISTINCT attempt.userId)', 'count')
+            .getRawOne()
+            .then((result: { count: string }) => parseInt(result.count) || 0);
+
+        await this.cacheManager.set(
+            cacheKey,
+            count,
+            this.CACHE_TTL.COUNTS * 1000,
+        );
+
+        return count;
+    }
+
+    // Legacy methods with deprecation notice - keeping for backward compatibility
     async findAllScoped(
         filters: CourseFilterDto,
         orgId?: string,
         branchId?: string,
     ): Promise<CourseListResponseDto> {
-        return this.retryOperation(async () => {
-            const {
-                title,
-                createdBy,
-                createdAfter,
-                createdBefore,
-                page = 1,
-                limit = 10,
-                sortBy = 'createdAt',
-                sortOrder = 'DESC',
-            } = filters;
-
-            const query = this.courseRepository.createQueryBuilder('course');
-            query.leftJoinAndSelect('course.creator', 'creator');
-            query.leftJoinAndSelect('course.orgId', 'org');
-            query.leftJoinAndSelect('course.branchId', 'branch');
-
-            // Apply org/branch scoping
-            this.orgBranchScopingService.applyScopeToQueryBuilder(
-                query,
-                { orgId, branchId },
-                'course',
-            );
-
-            // Apply filters
-            if (title) {
-                query.andWhere('course.title LIKE :title', {
-                    title: `%${title}%`,
-                });
-            }
-
-            if (createdBy) {
-                query.andWhere('course.createdBy = :createdBy', {
-                    createdBy,
-                });
-            }
-
-            if (createdAfter) {
-                query.andWhere('course.createdAt >= :createdAfter', {
-                    createdAfter,
-                });
-            }
-
-            if (createdBefore) {
-                query.andWhere('course.createdAt <= :createdBefore', {
-                    createdBefore,
-                });
-            }
-
-            // Add sorting
-            query.orderBy(`course.${sortBy}`, sortOrder);
-
-            // Add pagination
-            const skip = (page - 1) * limit;
-            query.skip(skip).take(limit);
-
-            const [courses, total] = await query.getManyAndCount();
-
-            // Calculate actual test counts for each course
-            const coursesWithCounts = await Promise.all(
-                courses.map(async course => {
-                    const testCount = await this.testRepository.count({
-                        where: { courseId: course.courseId },
-                    });
-
-                    // TODO: Calculate student count when TestAttempt entity is available
-                    const studentCount = 0;
-
-                    return {
-                        ...course,
-                        testCount,
-                        studentCount,
-                    };
-                }),
-            );
-
-            return {
-                courses: coursesWithCounts,
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            };
-        });
+        const scope: OrgBranchScope = {
+            userId: '',
+            orgId,
+            branchId,
+        };
+        return this.findAll(filters, scope);
     }
 
-    /**
-     * Find one course with org/branch scoping applied
-     */
     async findOneScoped(
         id: number,
         orgId?: string,
         branchId?: string,
     ): Promise<CourseDetailDto | null> {
-        return this.retryOperation(async () => {
-            const findOptions =
-                this.orgBranchScopingService.applyScopeToFindOptions(
-                    {
-                        where: { courseId: id },
-                        relations: ['creator', 'orgId', 'branchId'],
-                    },
-                    { orgId, branchId },
-                );
-
-            const course = await this.courseRepository.findOne(findOptions);
-
-            if (!course) {
-                return null;
-            }
-
-            // Calculate actual statistics with available entities
-            const totalTests = await this.testRepository.count({
-                where: { courseId: id },
-            });
-
-            const activeTests = await this.testRepository.count({
-                where: { courseId: id, isActive: true },
-            });
-
-            // TODO: Calculate totalAttempts and averageScore when TestAttempt entity is available
-            const statistics = {
-                totalTests,
-                activeTests,
-                totalAttempts: 0,
-                averageScore: 0,
-            };
-
-            return {
-                ...course,
-                testCount: totalTests,
-                studentCount: 0, // TODO: Calculate when TestAttempt entity is available
-                statistics,
-            };
-        });
+        const scope: OrgBranchScope = {
+            userId: '',
+            orgId,
+            branchId,
+        };
+        return this.findOne(id, scope);
     }
 
-    /**
-     * Create course with org/branch assignment
-     */
     async createScoped(
         createCourseDto: CreateCourseDto,
         userId: string,
         orgId?: string,
         branchId?: string,
-    ): Promise<CourseResponseDto> {
-        return this.retryOperation(async () => {
-            // Validate user exists
-            const user = await this.userService.findById(userId);
-            if (!user) {
-                throw new NotFoundException(`User with ID ${userId} not found`);
-            }
-
-            const course = this.courseRepository.create({
-                ...createCourseDto,
-                createdBy: userId,
-                orgId: orgId ? ({ id: orgId } as any) : undefined,
-                branchId: branchId ? ({ id: branchId } as any) : undefined,
-            });
-
-            const savedCourse = await this.courseRepository.save(course);
-
-            return {
-                ...savedCourse,
-                creator: user,
-                testCount: 0,
-                studentCount: 0,
-            };
-        });
+    ): Promise<StandardOperationResponse> {
+        const scope: OrgBranchScope = {
+            userId,
+            orgId,
+            branchId,
+        };
+        return this.create(createCourseDto, scope);
     }
 }

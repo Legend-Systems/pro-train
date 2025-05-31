@@ -21,6 +21,10 @@ import {
 import { Course } from '../../course/entities/course.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { TestAttempt } from 'src/test_attempts/entities/test_attempt.entity';
+import { Result } from 'src/results/entities/result.entity';
+import { TrainingProgress } from 'src/training_progress/entities/training_progress.entity';
+import { Question } from 'src/questions/entities/question.entity';
 
 export enum TestType {
     EXAM = 'exam',
@@ -149,18 +153,18 @@ export class Test {
     @ManyToOne(() => Course, { onDelete: 'CASCADE' })
     course: Course;
 
-    @OneToMany('Question', 'test')
+    @OneToMany(() => Question, 'test')
     questions: any[];
 
     // Note: These relations will be added as we implement other entities
-    // @OneToMany(() => TestAttempt, attempt => attempt.test)
-    // testAttempts: TestAttempt[];
+    @OneToMany(() => TestAttempt, attempt => attempt.test)
+    testAttempts: TestAttempt[];
 
-    // @OneToMany(() => Result, result => result.test)
-    // results: Result[];
+    @OneToMany(() => Result, result => result.test)
+    results: Result[];
 
-    // @OneToMany(() => TrainingProgress, progress => progress.test)
-    // trainingProgress: TrainingProgress[];
+    @OneToMany(() => TrainingProgress, progress => progress.test)
+    trainingProgress: TrainingProgress[];
 
     constructor(partial: Partial<Test>) {
         Object.assign(this, partial);

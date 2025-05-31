@@ -161,7 +161,6 @@ export class Answer {
     })
     branchId?: Branch;
 
-    // Relations
     @ManyToOne(() => TestAttempt, { onDelete: 'CASCADE' })
     attempt: TestAttempt;
 
