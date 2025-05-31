@@ -4,6 +4,7 @@ import {
     Column,
     CreateDateColumn,
     UpdateDateColumn,
+    ManyToOne,
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
@@ -15,6 +16,8 @@ import {
     IsDateString,
     IsObject,
 } from 'class-validator';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 export enum EmailType {
     WELCOME = 'welcome',
@@ -230,4 +233,23 @@ export class Communication {
         example: '2024-01-01T00:00:00.000Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this communication belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this communication belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
+
+    constructor(partial: Partial<Communication>) {
+        Object.assign(this, partial);
+    }
 }

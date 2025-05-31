@@ -19,6 +19,8 @@ import {
     Min,
 } from 'class-validator';
 import { Course } from '../../course/entities/course.entity';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 export enum TestType {
     EXAM = 'exam',
@@ -127,6 +129,21 @@ export class Test {
         example: '2024-01-15T10:30:45.123Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this test belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this test belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations
     @ManyToOne(() => Course, { onDelete: 'CASCADE' })

@@ -57,19 +57,46 @@ export class UserService {
 
     async findOne(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({ where: { id } });
+            return await this.userRepository.findOne({
+                where: { id },
+                relations: ['orgId', 'branchId'],
+            });
         });
     }
 
     async findByEmail(email: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({ where: { email } });
+            return await this.userRepository.findOne({
+                where: { email },
+                relations: ['orgId', 'branchId'],
+            });
         });
     }
 
     async findById(id: string): Promise<User | null> {
         return this.retryOperation(async () => {
-            return await this.userRepository.findOne({ where: { id } });
+            return await this.userRepository.findOne({
+                where: { id },
+                relations: ['orgId', 'branchId'],
+            });
+        });
+    }
+
+    async findByOrganization(orgId: string): Promise<User[]> {
+        return this.retryOperation(async () => {
+            return await this.userRepository.find({
+                where: { orgId: { id: orgId } },
+                relations: ['orgId', 'branchId'],
+            });
+        });
+    }
+
+    async findByBranch(branchId: string): Promise<User[]> {
+        return this.retryOperation(async () => {
+            return await this.userRepository.find({
+                where: { branchId: { id: branchId } },
+                relations: ['orgId', 'branchId'],
+            });
         });
     }
 

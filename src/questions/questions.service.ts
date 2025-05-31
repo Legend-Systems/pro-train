@@ -1,7 +1,6 @@
 import {
     Injectable,
     NotFoundException,
-    BadRequestException,
     ForbiddenException,
     ConflictException,
     Logger,
@@ -72,6 +71,18 @@ export class QuestionsService {
             // Validate test access
             await this.validateTestAccess(createQuestionDto.testId, userId);
 
+            // Get test information to inherit org and branch
+            const test = await this.testRepository.findOne({
+                where: { testId: createQuestionDto.testId },
+                relations: ['orgId', 'branchId'],
+            });
+
+            if (!test) {
+                throw new NotFoundException(
+                    `Test with ID ${createQuestionDto.testId} not found`,
+                );
+            }
+
             // Auto-increment order index if not provided
             if (!createQuestionDto.orderIndex) {
                 const maxOrder = await this.questionRepository
@@ -99,7 +110,11 @@ export class QuestionsService {
                 }
             }
 
-            const question = this.questionRepository.create(createQuestionDto);
+            const question = this.questionRepository.create({
+                ...createQuestionDto,
+                orgId: test.orgId,
+                branchId: test.branchId,
+            });
             const savedQuestion = await this.questionRepository.save(question);
 
             return this.mapToResponseDto(savedQuestion);
@@ -226,7 +241,14 @@ export class QuestionsService {
         return this.retryOperation(async () => {
             const question = await this.questionRepository.findOne({
                 where: { questionId: id },
-                relations: ['test'],
+                relations: [
+                    'test',
+                    'test.course',
+                    'test.course.orgId',
+                    'test.course.branchId',
+                    'orgId',
+                    'branchId',
+                ],
             });
 
             if (!question) {

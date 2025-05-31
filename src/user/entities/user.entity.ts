@@ -8,8 +8,11 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     OneToMany,
+    ManyToOne,
     Index,
 } from 'typeorm';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 export enum UserRole {
     BRANDON = 'brandon',
@@ -96,6 +99,22 @@ export class User {
         example: '2024-01-01T00:00:00.000Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: true })
+    @ApiProperty({
+        description: 'Organization this user belongs to',
+        type: () => Organization,
+        required: false,
+    })
+    orgId?: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this user belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations - using string references to avoid circular dependencies
     @OneToMany('Course', 'creator')

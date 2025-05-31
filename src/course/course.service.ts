@@ -166,7 +166,7 @@ export class CourseService {
         return this.retryOperation(async () => {
             const course = await this.courseRepository.findOne({
                 where: { courseId: id },
-                relations: ['creator'],
+                relations: ['creator', 'orgId', 'branchId'],
             });
 
             if (!course) {
@@ -329,6 +329,26 @@ export class CourseService {
                 where: { courseId: id },
             });
             return count > 0;
+        });
+    }
+
+    async findByOrganization(orgId: string): Promise<Course[]> {
+        return this.retryOperation(async () => {
+            return await this.courseRepository.find({
+                where: { orgId: { id: orgId } },
+                relations: ['creator', 'orgId', 'branchId'],
+                order: { createdAt: 'DESC' },
+            });
+        });
+    }
+
+    async findByBranch(branchId: string): Promise<Course[]> {
+        return this.retryOperation(async () => {
+            return await this.courseRepository.find({
+                where: { branchId: { id: branchId } },
+                relations: ['creator', 'orgId', 'branchId'],
+                order: { createdAt: 'DESC' },
+            });
         });
     }
 }

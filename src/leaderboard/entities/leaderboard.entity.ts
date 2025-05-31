@@ -12,6 +12,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsNumber, IsDateString } from 'class-validator';
 import { User } from '../../user/entities/user.entity';
 import { Course } from '../../course/entities/course.entity';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 @Entity('leaderboards')
 @Index('IDX_LEADERBOARD_COURSE', ['courseId'])
@@ -104,6 +106,21 @@ export class Leaderboard {
         example: '2024-01-01T12:00:00.000Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this leaderboard entry belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this leaderboard entry belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations
     @ManyToOne(() => Course, { onDelete: 'CASCADE' })

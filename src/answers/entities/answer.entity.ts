@@ -20,6 +20,8 @@ import {
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
 import { Question } from '../../questions/entities/question.entity';
 import { User } from '../../user/entities/user.entity';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 @Entity('answers')
 @Index('IDX_ANSWER_ATTEMPT', ['attemptId'])
@@ -143,6 +145,21 @@ export class Answer {
         example: '2024-01-01T11:00:00.000Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this answer belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this answer belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations
     @ManyToOne(() => TestAttempt, { onDelete: 'CASCADE' })

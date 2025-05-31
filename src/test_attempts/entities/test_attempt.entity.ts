@@ -19,6 +19,8 @@ import {
 } from 'class-validator';
 import { Test } from '../../test/entities/test.entity';
 import { User } from '../../user/entities/user.entity';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 export enum AttemptStatus {
     IN_PROGRESS = 'in_progress',
@@ -132,6 +134,21 @@ export class TestAttempt {
         example: '2024-01-01T10:15:30.123Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this test attempt belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this test attempt belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations
     @ManyToOne(() => Test, { onDelete: 'RESTRICT' })

@@ -66,17 +66,26 @@ export class TestService {
             // Validate course exists and user has ownership
             await this.validateCourseAccess(createTestDto.courseId, userId);
 
+            // Get course information to inherit org and branch
+            const course = await this.courseRepository.findOne({
+                where: { courseId: createTestDto.courseId },
+                relations: ['orgId', 'branchId'],
+            });
+
+            if (!course) {
+                throw new NotFoundException(
+                    `Course with ID ${createTestDto.courseId} not found`,
+                );
+            }
+
             const test = this.testRepository.create({
                 ...createTestDto,
                 maxAttempts: createTestDto.maxAttempts || 1,
+                orgId: course.orgId,
+                branchId: course.branchId,
             });
 
             const savedTest = await this.testRepository.save(test);
-
-            // Get course information for response
-            const course = await this.courseRepository.findOne({
-                where: { courseId: createTestDto.courseId },
-            });
 
             return {
                 ...savedTest,
@@ -207,7 +216,13 @@ export class TestService {
         return this.retryOperation(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
-                relations: ['course'],
+                relations: [
+                    'course',
+                    'course.orgId',
+                    'course.branchId',
+                    'orgId',
+                    'branchId',
+                ],
             });
 
             if (!test) {
@@ -241,6 +256,8 @@ export class TestService {
                           courseId: test.course.courseId,
                           title: test.course.title,
                           description: test.course.description,
+                          organization: test.course.orgId,
+                          branch: test.course.branchId,
                       }
                     : undefined,
                 questionCount: statistics.totalQuestions,

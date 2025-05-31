@@ -14,6 +14,8 @@ import { IsUUID, IsNumber, IsOptional } from 'class-validator';
 import { User } from '../../user/entities/user.entity';
 import { Course } from '../../course/entities/course.entity';
 import { Test } from '../../test/entities/test.entity';
+import { Organization } from '../../org/entities/org.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 
 @Entity('training_progress')
 @Index('IDX_PROGRESS_USER', ['userId'])
@@ -118,6 +120,21 @@ export class TrainingProgress {
         example: '2024-01-01T10:30:00.000Z',
     })
     updatedAt: Date;
+
+    @ManyToOne(() => Organization, { nullable: false })
+    @ApiProperty({
+        description: 'Organization this training progress belongs to',
+        type: () => Organization,
+    })
+    orgId: Organization;
+
+    @ManyToOne(() => Branch, { nullable: true })
+    @ApiProperty({
+        description: 'Branch this training progress belongs to',
+        type: () => Branch,
+        required: false,
+    })
+    branchId?: Branch;
 
     // Relations
     @ManyToOne(() => User, { onDelete: 'CASCADE' })

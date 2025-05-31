@@ -341,7 +341,17 @@ export class TestAttemptsService {
     ): Promise<TestAttempt> {
         const attempt = await this.testAttemptRepository.findOne({
             where: { attemptId },
-            relations: ['test', 'test.course', 'user', 'answers', 'results'],
+            relations: [
+                'test',
+                'test.course',
+                'test.course.orgId',
+                'test.course.branchId',
+                'user',
+                'user.orgId',
+                'user.branchId',
+                'answers',
+                'results',
+            ],
         });
 
         if (!attempt) {
