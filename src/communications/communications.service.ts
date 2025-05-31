@@ -65,7 +65,6 @@ export class CommunicationsService {
                 templateData,
             );
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: organizationEmail,
                 recipientName: organizationName,
@@ -161,7 +160,7 @@ export class CommunicationsService {
                 emailType: EmailType.WELCOME_BRANCH,
                 templateUsed: 'welcome-branch',
                 status: EmailStatus.PENDING,
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+
                 metadata: {
                     branchId,
                     branchName,
@@ -232,7 +231,6 @@ export class CommunicationsService {
                 templateData,
             );
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${firstName} ${lastName}`,
@@ -315,7 +313,6 @@ export class CommunicationsService {
                 templateData,
             );
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${firstName} ${lastName}`,
@@ -393,7 +390,6 @@ export class CommunicationsService {
                 templateData,
             );
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${firstName} ${lastName}`,
@@ -471,7 +467,6 @@ export class CommunicationsService {
                 templateData,
             );
 
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${firstName} ${lastName}`,

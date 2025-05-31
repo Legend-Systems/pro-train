@@ -163,6 +163,25 @@ export class UserService {
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`);
         }
+
+        // Emit user profile updated event
+        const updatedFields = Object.keys(updateData);
+        this.eventEmitter.emit(
+            'user.profile.updated',
+            new UserProfileUpdatedEvent(
+                user.id,
+                user.email,
+                user.firstName,
+                user.lastName,
+                user.orgId?.id,
+                user.orgId?.name,
+                user.branchId?.id,
+                user.branchId?.name,
+                user.avatar,
+                updatedFields,
+            ),
+        );
+
         return user;
     }
 
@@ -191,6 +210,22 @@ export class UserService {
 
         // Update password
         await this.userRepository.update(id, { password: hashedNewPassword });
+
+        // Emit password changed event
+        this.eventEmitter.emit(
+            'user.password.changed',
+            new UserPasswordChangedEvent(
+                user.id,
+                user.email,
+                user.firstName,
+                user.lastName,
+                user.orgId?.id,
+                user.orgId?.name,
+                user.branchId?.id,
+                user.branchId?.name,
+            ),
+        );
+
         return true;
     }
 
@@ -219,6 +254,24 @@ export class UserService {
             if (!user) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            // Emit user organization/branch assignment event
+            this.eventEmitter.emit(
+                'user.org.branch.assigned',
+                new UserOrgBranchAssignedEvent(
+                    user.id,
+                    user.email,
+                    user.firstName,
+                    user.lastName,
+                    user.orgId?.id,
+                    user.orgId?.name,
+                    user.branchId?.id,
+                    user.branchId?.name,
+                    user.avatar,
+                    // TODO: Add assignedBy parameter when authentication context is available
+                    undefined,
+                ),
+            );
 
             return user;
         });
