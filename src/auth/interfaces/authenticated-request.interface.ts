@@ -5,7 +5,14 @@ export interface AuthenticatedUser {
     email: string;
     firstName: string;
     lastName: string;
-    avatar?: string;
+    avatar?: {
+        id: number;
+        originalName?: string;
+        url?: string;
+        thumbnail?: string;
+        medium?: string;
+        original?: string;
+    };
     createdAt: Date;
     updatedAt: Date;
 }

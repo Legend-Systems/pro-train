@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { StandardOperationResponse } from './dto/common-response.dto';
 import { User, UserStatus } from './entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
 import {
@@ -53,7 +58,9 @@ export class UserService {
         throw new Error('Max retries exceeded');
     }
 
-    async create(createUserDto: CreateUserDto): Promise<User> {
+    async create(
+        createUserDto: CreateUserDto,
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const { avatar, ...userData } = createUserDto;
             const userToCreate: Partial<User> = { ...userData };
@@ -82,7 +89,11 @@ export class UserService {
                 ),
             );
 
-            return savedUser;
+            return {
+                message: 'User created successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
@@ -181,7 +192,10 @@ export class UserService {
     async findByOrganization(orgId: string): Promise<User[]> {
         return this.retryOperation(async () => {
             const users = await this.userRepository.find({
-                where: { orgId: { id: orgId } },
+                where: {
+                    orgId: { id: orgId },
+                    status: UserStatus.ACTIVE,
+                },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
@@ -195,7 +209,10 @@ export class UserService {
     async findByBranch(branchId: string): Promise<User[]> {
         return this.retryOperation(async () => {
             const users = await this.userRepository.find({
-                where: { branchId: { id: branchId } },
+                where: {
+                    branchId: { id: branchId },
+                    status: UserStatus.ACTIVE,
+                },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
@@ -206,7 +223,10 @@ export class UserService {
         });
     }
 
-    async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    async update(
+        id: string,
+        updateUserDto: UpdateUserDto,
+    ): Promise<StandardOperationResponse> {
         const { avatar, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
@@ -222,65 +242,95 @@ export class UserService {
         if (!user) {
             throw new NotFoundException(`User with ID ${id} not found`);
         }
-        return user;
+
+        return {
+            message: 'User updated successfully',
+            status: 'success',
+            code: 200,
+        };
     }
 
-    async remove(id: string): Promise<void> {
+    async remove(id: string): Promise<StandardOperationResponse> {
         const result = await this.userRepository.delete(id);
         if (result.affected === 0) {
             throw new NotFoundException(`User with ID ${id} not found`);
         }
+
+        return {
+            message: 'User deleted successfully',
+            status: 'success',
+            code: 200,
+        };
     }
 
     async updateProfile(
         id: string,
         updateData: Partial<UpdateUserDto>,
-    ): Promise<User> {
-        const { avatar, ...profileData } = updateData;
-        const dataToUpdate: Partial<User> = { ...profileData };
+    ): Promise<StandardOperationResponse> {
+        try {
+            const { avatar, ...profileData } = updateData;
+            const dataToUpdate: Partial<User> = { ...profileData };
 
-        // Convert avatar ID to MediaFile reference if provided
-        if (avatar !== undefined) {
-            dataToUpdate.avatar = avatar
-                ? ({ id: avatar } as MediaFile)
-                : undefined;
+            // Convert avatar ID to MediaFile reference if provided
+            if (avatar !== undefined) {
+                dataToUpdate.avatar = avatar
+                    ? ({ id: avatar } as MediaFile)
+                    : undefined;
+            }
+
+            await this.userRepository.update(id, dataToUpdate);
+            const user = await this.findById(id);
+            if (!user) {
+                throw new NotFoundException(`User with ID ${id} not found`);
+            }
+
+            // Emit user profile updated event
+            const updatedFields = Object.keys(updateData);
+            this.eventEmitter.emit(
+                'user.profile.updated',
+                new UserProfileUpdatedEvent(
+                    user.id,
+                    user.email,
+                    user.firstName,
+                    user.lastName,
+                    user.orgId?.id,
+                    user.orgId?.name,
+                    user.branchId?.id,
+                    user.branchId?.name,
+                    user.avatar?.id?.toString(),
+                    updatedFields,
+                ),
+            );
+
+            return {
+                message: 'Profile updated successfully',
+                status: 'success',
+                code: 200,
+            };
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                return {
+                    message: error.message,
+                    status: 'error',
+                    code: 404,
+                };
+            }
+            throw error;
         }
-
-        await this.userRepository.update(id, dataToUpdate);
-        const user = await this.findById(id);
-        if (!user) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
-
-        // Emit user profile updated event
-        const updatedFields = Object.keys(updateData);
-        this.eventEmitter.emit(
-            'user.profile.updated',
-            new UserProfileUpdatedEvent(
-                user.id,
-                user.email,
-                user.firstName,
-                user.lastName,
-                user.orgId?.id,
-                user.orgId?.name,
-                user.branchId?.id,
-                user.branchId?.name,
-                user.avatar?.id?.toString(),
-                updatedFields,
-            ),
-        );
-
-        return user;
     }
 
     async changePassword(
         id: string,
         currentPassword: string,
         newPassword: string,
-    ): Promise<boolean> {
+    ): Promise<StandardOperationResponse> {
         const user = await this.findById(id);
         if (!user) {
-            throw new NotFoundException(`User with ID ${id} not found`);
+            return {
+                message: `User with ID ${id} not found`,
+                status: 'error',
+                code: 404,
+            };
         }
 
         // Verify current password
@@ -289,7 +339,11 @@ export class UserService {
             user.password,
         );
         if (!isCurrentPasswordValid) {
-            return false;
+            return {
+                message: 'Current password is incorrect',
+                status: 'error',
+                code: 400,
+            };
         }
 
         // Hash new password
@@ -297,7 +351,9 @@ export class UserService {
         const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
 
         // Update password
-        await this.userRepository.update(id, { password: hashedNewPassword });
+        await this.userRepository.update(id, {
+            password: hashedNewPassword,
+        });
 
         // Emit password changed event
         this.eventEmitter.emit(
@@ -314,7 +370,11 @@ export class UserService {
             ),
         );
 
-        return true;
+        return {
+            message: 'Password changed successfully',
+            status: 'success',
+            code: 200,
+        };
     }
 
     /**
@@ -324,7 +384,7 @@ export class UserService {
         userId: string,
         orgId?: string,
         branchId?: string,
-    ): Promise<User> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const updateData: Record<string, any> = {};
 
@@ -361,7 +421,11 @@ export class UserService {
                 ),
             );
 
-            return user;
+            return {
+                message: 'Organization and branch assigned successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
@@ -371,7 +435,7 @@ export class UserService {
     async updatePassword(
         userId: string,
         hashedPassword: string,
-    ): Promise<void> {
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const result = await this.userRepository.update(userId, {
                 password: hashedPassword,
@@ -380,13 +444,19 @@ export class UserService {
             if (result.affected === 0) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            return {
+                message: 'Password updated successfully',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 
     /**
      * Mark user email as verified
      */
-    async verifyEmail(userId: string): Promise<void> {
+    async verifyEmail(userId: string): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const result = await this.userRepository.update(userId, {
                 emailVerified: true,
@@ -395,6 +465,128 @@ export class UserService {
             if (result.affected === 0) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            return {
+                message: 'Email verified successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Soft delete a user by setting status to DELETED
+     */
+    async softDelete(userId: string): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if user exists and is not already deleted
+            const user = await this.userRepository.findOne({
+                where: { id: userId },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
+            if (user.status === UserStatus.DELETED) {
+                throw new BadRequestException('User is already deleted');
+            }
+
+            // Update status to DELETED
+            await this.userRepository.update(userId, {
+                status: UserStatus.DELETED,
+            });
+
+            return {
+                message: 'User deleted successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Restore a soft-deleted user by setting status to ACTIVE
+     */
+    async restoreUser(userId: string): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if user exists and is deleted
+            const user = await this.userRepository.findOne({
+                where: { id: userId },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
+            if (user.status !== UserStatus.DELETED) {
+                throw new BadRequestException(
+                    'User is not deleted and cannot be restored',
+                );
+            }
+
+            // Update status to ACTIVE
+            await this.userRepository.update(userId, {
+                status: UserStatus.ACTIVE,
+            });
+
+            return {
+                message: 'User restored successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Find all soft-deleted users (for admin purposes)
+     */
+    async findDeleted(): Promise<User[]> {
+        return this.retryOperation(async () => {
+            const users = await this.userRepository.find({
+                where: { status: UserStatus.DELETED },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            // Load avatar variants for all users
+            return Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
+        });
+    }
+
+    /**
+     * Find all users with any status (for admin purposes)
+     */
+    async findAllWithDeleted(): Promise<User[]> {
+        return this.retryOperation(async () => {
+            const users = await this.userRepository.find({
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            // Load avatar variants for all users
+            return Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
+        });
+    }
+
+    /**
+     * Find user by ID including deleted users (for admin purposes)
+     */
+    async findByIdWithDeleted(id: string): Promise<User | null> {
+        return this.retryOperation(async () => {
+            const user = await this.userRepository.findOne({
+                where: { id },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            if (user) {
+                return this.loadAvatarVariants(user);
+            }
+            return user;
         });
     }
 }

@@ -217,7 +217,7 @@ export class CourseController {
         name: 'createdBy',
         required: false,
         description: 'Filter by creator user ID',
-        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        example: '1',
     })
     @ApiQuery({
         name: 'createdAfter',

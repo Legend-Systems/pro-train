@@ -139,7 +139,7 @@ export class LeaderboardController {
                                     },
                                     email: {
                                         type: 'string',
-                                        example: 'john.doe@example.com',
+                                        example: 'brandon@orrbit.co.za',
                                     },
                                     totalScore: {
                                         type: 'number',

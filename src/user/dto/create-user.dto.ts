@@ -16,7 +16,7 @@ export class CreateUserDto {
     @ApiProperty({
         description:
             'Unique email address for user authentication and communication',
-        example: 'john.doe@example.com',
+        example: 'brandon.new@orrbit.co.za',
         format: 'email',
         type: String,
         title: 'Email Address',
@@ -51,7 +51,7 @@ export class CreateUserDto {
     @ApiProperty({
         description:
             "User's first name for personalized communication and profile display",
-        example: 'John',
+        example: 'Brandon',
         type: String,
         title: 'First Name',
         maxLength: 50,
@@ -64,7 +64,7 @@ export class CreateUserDto {
     @ApiProperty({
         description:
             "User's last name for full identification and profile completion",
-        example: 'Doe',
+        example: 'Kawu',
         type: String,
         title: 'Last Name',
         maxLength: 50,

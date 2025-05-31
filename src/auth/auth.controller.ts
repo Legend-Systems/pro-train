@@ -97,21 +97,21 @@ export class AuthController {
                 summary: '✨ Basic Registration',
                 description: 'Minimal required fields for account creation',
                 value: {
-                    email: 'john.doe@example.com',
+                    email: 'brandon.new@orrbit.co.za',
                     password: 'SecurePass123!',
-                    name: 'John Doe',
+                    firstName: 'Brandon',
+                    lastName: 'Kawu',
                 },
             },
             'complete-registration': {
                 summary: '📋 Complete Profile Registration',
                 description: 'Full registration with all optional fields',
                 value: {
-                    email: 'jane.smith@company.com',
+                    email: 'jane.smith@legendsystems.co.za',
                     password: 'StrongPassword456@',
-                    name: 'Jane Smith',
                     firstName: 'Jane',
                     lastName: 'Smith',
-                    avatar: 'https://cdn.example.com/avatars/jane-smith.jpg',
+                    avatar: 1,
                 },
             },
         },
@@ -145,13 +145,12 @@ export class AuthController {
                             properties: {
                                 uid: {
                                     type: 'string',
-                                    example:
-                                        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    example: '1',
                                     description: 'Unique user identifier',
                                 },
                                 email: {
                                     type: 'string',
-                                    example: 'john.doe@example.com',
+                                    example: 'theguy@orrbit.co.za',
                                     description: 'User email address',
                                 },
                                 firstName: {
@@ -165,10 +164,47 @@ export class AuthController {
                                     description: 'User last name',
                                 },
                                 avatar: {
-                                    type: 'string',
-                                    example: 'https://example.com/avatar.jpg',
-                                    description: 'User avatar URL',
+                                    type: 'object',
+                                    description:
+                                        'User avatar with multiple size variants',
                                     nullable: true,
+                                    properties: {
+                                        id: {
+                                            type: 'number',
+                                            example: 1,
+                                            description: 'Avatar media file ID',
+                                        },
+                                        originalName: {
+                                            type: 'string',
+                                            example: 'profile-picture.jpg',
+                                            description: 'Original filename',
+                                        },
+                                        url: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/profile-picture.jpg',
+                                            description: 'Primary avatar URL',
+                                        },
+                                        thumbnail: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/thumbnail/profile-picture.jpg',
+                                            description:
+                                                'Thumbnail variant URL',
+                                        },
+                                        medium: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/medium/profile-picture.jpg',
+                                            description: 'Medium variant URL',
+                                        },
+                                        original: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/profile-picture.jpg',
+                                            description: 'Original size URL',
+                                        },
+                                    },
                                 },
                                 role: {
                                     type: 'string',
@@ -400,7 +436,7 @@ export class AuthController {
                 description:
                     'Regular user authentication with email and password',
                 value: {
-                    email: 'john.doe@example.com',
+                    email: 'theguy@orrbit.co.za',
                     password: 'SecurePass123!',
                 },
             },
@@ -408,7 +444,7 @@ export class AuthController {
                 summary: '🔄 Returning User Login',
                 description: 'Login for existing user with established account',
                 value: {
-                    email: 'jane.smith@company.com',
+                    email: 'brandon@legendsystems.co.za',
                     password: 'MyPassword456@',
                 },
             },
@@ -476,10 +512,47 @@ export class AuthController {
                                     description: 'User last name',
                                 },
                                 avatar: {
-                                    type: 'string',
-                                    example: 'https://example.com/avatar.jpg',
-                                    description: 'User avatar URL',
+                                    type: 'object',
+                                    description:
+                                        'User avatar with multiple size variants',
                                     nullable: true,
+                                    properties: {
+                                        id: {
+                                            type: 'number',
+                                            example: 1,
+                                            description: 'Avatar media file ID',
+                                        },
+                                        originalName: {
+                                            type: 'string',
+                                            example: 'profile-picture.jpg',
+                                            description: 'Original filename',
+                                        },
+                                        url: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/profile-picture.jpg',
+                                            description: 'Primary avatar URL',
+                                        },
+                                        thumbnail: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/thumbnail/profile-picture.jpg',
+                                            description:
+                                                'Thumbnail variant URL',
+                                        },
+                                        medium: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/medium/profile-picture.jpg',
+                                            description: 'Medium variant URL',
+                                        },
+                                        original: {
+                                            type: 'string',
+                                            example:
+                                                'https://cdn.example.com/media/1/profile-picture.jpg',
+                                            description: 'Original size URL',
+                                        },
+                                    },
                                 },
                                 role: {
                                     type: 'string',
@@ -1659,9 +1732,9 @@ export class AuthController {
             },
         },
     })
-    async validateInvitation(
+    validateInvitation(
         @Body() validateInvitationDto: ValidateInvitationDto,
-    ): Promise<StandardApiResponse<any>> {
+    ): StandardApiResponse<any> {
         this.logger.log(
             `Validating invitation token: ${validateInvitationDto.token.substring(0, 20)}...`,
         );

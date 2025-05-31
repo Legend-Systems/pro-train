@@ -12,7 +12,7 @@ import { CreateUserDto } from './create-user.dto';
 export class UpdateUserDto extends PartialType(CreateUserDto) {
     @ApiProperty({
         description: 'Updated email address for the user account',
-        example: 'newemail@example.com',
+        example: 'brandon.updated@orrbit.co.za',
         format: 'email',
         required: false,
         type: String,
@@ -25,7 +25,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
     @ApiProperty({
         description: 'Updated first name of the user',
-        example: 'Jane',
+        example: 'Brandon',
         required: false,
         type: String,
         title: 'First Name',
@@ -39,7 +39,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
 
     @ApiProperty({
         description: 'Updated last name of the user',
-        example: 'Smith',
+        example: 'Nhlanhla',
         required: false,
         type: String,
         title: 'Last Name',
@@ -54,7 +54,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     @ApiProperty({
         description:
             'Updated avatar image ID reference from media library for the user profile',
-        example: 1,
+        example: 2,
         required: false,
         type: Number,
         title: 'Avatar Media ID',

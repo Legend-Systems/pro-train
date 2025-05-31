@@ -10,6 +10,8 @@ import {
     BadRequestException,
     ConflictException,
     Patch,
+    Delete,
+    Param,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -24,7 +26,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { StandardApiResponse } from './dto/common-response.dto';
+import {
+    StandardApiResponse,
+    StandardOperationResponse,
+    ProfileUpdatedResponse,
+    PasswordChangedResponse,
+    OrgBranchAssignedResponse,
+    UserSoftDeletedResponse,
+    UserRestoredResponse,
+} from './dto/common-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AssignOrgBranchDto } from './dto/assign-org-branch.dto';
 
@@ -90,43 +100,52 @@ export class UserController {
                     properties: {
                         id: {
                             type: 'string',
-                            example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                            example: '1',
                             description: 'Unique user identifier',
                         },
                         email: {
                             type: 'string',
-                            example: 'john.doe@example.com',
+                            example: 'theguy@orrbit.co.za',
                             description: 'User email address',
                         },
                         name: {
                             type: 'string',
-                            example: 'John Doe',
+                            example: 'Brandon Nhlanhla',
                             description: 'Full display name',
                         },
                         firstName: {
                             type: 'string',
-                            example: 'John',
+                            example: 'Brandon',
                             description: 'First name (optional)',
                         },
                         lastName: {
                             type: 'string',
-                            example: 'Doe',
+                            example: 'Nhlanhla',
                             description: 'Last name (optional)',
                         },
                         avatar: {
-                            type: 'string',
-                            example:
-                                'https://cdn.example.com/avatars/john-doe.jpg',
-                            description: 'Profile picture URL (optional)',
+                            type: 'object',
+                            example: {
+                                id: 1,
+                                originalName: 'pexels-photo-577585.jpg',
+                                url: 'https://storage.googleapis.com/crmapplications/media/1/1/2025-05-31/9d8818a4-bb5f-4d82-acf8-120c1485c572-pexels-photo-577585.jpg',
+                                thumbnail:
+                                    'https://storage.googleapis.com/crmapplications/media/1/1/2025-05-31/9d8818a4-bb5f-4d82-acf8-120c1485c572-pexels-photo-577585-thumbnail.jpg',
+                                medium: 'https://storage.googleapis.com/crmapplications/media/1/1/2025-05-31/9d8818a4-bb5f-4d82-acf8-120c1485c572-pexels-photo-577585.jpg',
+                                original:
+                                    'https://storage.googleapis.com/crmapplications/media/1/1/2025-05-31/9d8818a4-bb5f-4d82-acf8-120c1485c572-pexels-photo-577585.jpg',
+                            },
+                            description:
+                                'Profile picture with variants (optional)',
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-01T00:00:00.000Z',
+                            example: '2025-05-30T16:40:02.055Z',
                             description: 'Account creation timestamp',
                         },
                         updatedAt: {
                             type: 'string',
-                            example: '2024-01-15T10:30:45.123Z',
+                            example: '2025-05-31T18:55:12.552Z',
                             description: 'Last profile update timestamp',
                         },
                     },
@@ -235,34 +254,32 @@ export class UserController {
                 summary: '🔄 Complete Profile Update',
                 description: 'Updates all available profile fields',
                 value: {
-                    email: 'jane.smith@example.com',
-                    name: 'Jane Smith',
-                    firstName: 'Jane',
-                    lastName: 'Smith',
-                    avatar: 'https://cdn.example.com/avatars/jane-smith-new.jpg',
+                    email: 'brandon.updated@orrbit.co.za',
+                    firstName: 'Brandon',
+                    lastName: 'Nhlanhla',
+                    avatar: 2,
                 },
             },
             'name-only': {
                 summary: '📝 Name Update Only',
                 description: 'Updates only name-related fields',
                 value: {
-                    name: 'Jane Smith-Johnson',
-                    firstName: 'Jane',
-                    lastName: 'Smith-Johnson',
+                    firstName: 'Brandon',
+                    lastName: 'Kawu-Nhlanhla',
                 },
             },
             'email-change': {
                 summary: '📧 Email Address Change',
                 description: 'Updates email with validation',
                 value: {
-                    email: 'jane.new-email@example.com',
+                    email: 'brandon.new-email@legendsystems.co.za',
                 },
             },
             'avatar-update': {
                 summary: '🖼️ Avatar Picture Update',
-                description: 'Updates profile picture URL',
+                description: 'Updates profile picture ID',
                 value: {
-                    avatar: 'https://cdn.example.com/profiles/new-avatar-2024.jpg',
+                    avatar: 3,
                 },
             },
         },
@@ -270,63 +287,7 @@ export class UserController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Profile updated successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Update operation success status',
-                },
-                message: {
-                    type: 'string',
-                    example: 'Profile updated successfully',
-                    description: 'Human-readable success message',
-                },
-                data: {
-                    type: 'object',
-                    description: 'Updated user profile data',
-                    properties: {
-                        id: {
-                            type: 'string',
-                            example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                            description: 'User unique identifier',
-                        },
-                        email: {
-                            type: 'string',
-                            example: 'jane.smith@example.com',
-                            description: 'Updated email address',
-                        },
-                        name: {
-                            type: 'string',
-                            example: 'Jane Smith',
-                            description: 'Updated full name',
-                        },
-                        firstName: {
-                            type: 'string',
-                            example: 'Jane',
-                            description: 'Updated first name',
-                        },
-                        lastName: {
-                            type: 'string',
-                            example: 'Smith',
-                            description: 'Updated last name',
-                        },
-                        avatar: {
-                            type: 'string',
-                            example:
-                                'https://cdn.example.com/avatars/jane-smith-new.jpg',
-                            description: 'Updated avatar URL',
-                        },
-                        updatedAt: {
-                            type: 'string',
-                            example: '2024-01-15T10:45:30.567Z',
-                            description: 'Profile update timestamp',
-                        },
-                    },
-                },
-            },
-        },
+        type: ProfileUpdatedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -334,7 +295,6 @@ export class UserController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
                 message: {
                     type: 'string',
                     examples: [
@@ -343,7 +303,14 @@ export class UserController {
                         'Please provide a valid email address',
                     ],
                 },
-                error: { type: 'string', example: 'Bad Request' },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
             },
         },
     })
@@ -353,12 +320,18 @@ export class UserController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 409 },
                 message: {
                     type: 'string',
                     example: 'Email address already in use',
                 },
-                error: { type: 'string', example: 'Conflict' },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 409,
+                },
             },
         },
     })
@@ -376,7 +349,7 @@ export class UserController {
     async updateProfile(
         @Request() req: AuthenticatedRequest,
         @Body() updateUserDto: UpdateUserDto,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Updating profile for user: ${req.user.id}`);
 
@@ -394,7 +367,6 @@ export class UserController {
             }
 
             // Remove password from update data (use separate endpoint)
-
             const { password, ...updateData } = updateUserDto;
 
             if (password) {
@@ -406,35 +378,16 @@ export class UserController {
                 );
             }
 
-            const updatedUser = await this.userService.updateProfile(
+            const result = await this.userService.updateProfile(
                 req.user.id,
                 updateData,
             );
-
-            if (!updatedUser) {
-                this.logger.error(
-                    `Failed to update profile for user: ${req.user.id}`,
-                );
-                return {
-                    success: false,
-                    message: 'Failed to update profile',
-                    data: null,
-                };
-            }
-
-            // Remove sensitive data
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { password: _, ...userProfile } = updatedUser;
 
             this.logger.log(
                 `Profile updated successfully for user: ${req.user.id}`,
             );
 
-            return {
-                success: true,
-                message: 'Profile updated successfully',
-                data: userProfile,
-            };
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error updating profile for user ${req.user.id}:`,
@@ -504,25 +457,7 @@ export class UserController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Password changed successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Password change success status',
-                },
-                message: {
-                    type: 'string',
-                    example: 'Password changed successfully',
-                    description: 'Success confirmation message',
-                },
-                data: {
-                    type: 'null',
-                    description: 'No additional data returned for security',
-                },
-            },
-        },
+        type: PasswordChangedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -530,7 +465,6 @@ export class UserController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
                 message: {
                     type: 'string',
                     examples: [
@@ -539,7 +473,14 @@ export class UserController {
                         'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
                     ],
                 },
-                error: { type: 'string', example: 'Bad Request' },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
             },
         },
     })
@@ -557,7 +498,7 @@ export class UserController {
     async changePassword(
         @Request() req: AuthenticatedRequest,
         @Body() changePasswordDto: ChangePasswordDto,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Changing password for user: ${req.user.id}`);
 
@@ -567,22 +508,20 @@ export class UserController {
                 changePasswordDto.newPassword,
             );
 
-            if (!result) {
+            if (result.status === 'error') {
                 this.logger.warn(
-                    `Invalid current password for user: ${req.user.id}`,
+                    `Password change failed for user: ${req.user.id} - ${result.message}`,
                 );
-                throw new BadRequestException('Current password is incorrect');
+                if (result.code === 400) {
+                    throw new BadRequestException(result.message);
+                }
             }
 
             this.logger.log(
                 `Password changed successfully for user: ${req.user.id}`,
             );
 
-            return {
-                success: true,
-                message: 'Password changed successfully',
-                data: null,
-            };
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error changing password for user ${req.user.id}:`,
@@ -627,47 +566,7 @@ export class UserController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Organization and branch assigned successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Operation success status',
-                },
-                message: {
-                    type: 'string',
-                    example: 'Organization and branch assigned successfully',
-                    description: 'Success confirmation message',
-                },
-                data: {
-                    type: 'object',
-                    description: 'Updated user profile data',
-                    properties: {
-                        id: {
-                            type: 'string',
-                            example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                            description: 'User unique identifier',
-                        },
-                        organization: {
-                            type: 'string',
-                            example: 'Example Organization',
-                            description: 'Assigned organization',
-                        },
-                        branch: {
-                            type: 'string',
-                            example: 'Example Branch',
-                            description: 'Assigned branch',
-                        },
-                        updatedAt: {
-                            type: 'string',
-                            example: '2024-01-15T10:45:30.567Z',
-                            description: 'Profile update timestamp',
-                        },
-                    },
-                },
-            },
-        },
+        type: OrgBranchAssignedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -675,12 +574,18 @@ export class UserController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
                 message: {
                     type: 'string',
-                    example: 'Invalid input data',
+                    example: 'Failed to assign organization',
                 },
-                error: { type: 'string', example: 'Bad Request' },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
             },
         },
     })
@@ -698,39 +603,386 @@ export class UserController {
     async assignOrganization(
         @Request() req: AuthenticatedRequest,
         @Body() assignOrgBranchDto: AssignOrgBranchDto,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Assigning organization to user: ${req.user.id}`);
 
-            const updatedUser = await this.userService.assignOrgAndBranch(
+            const result = await this.userService.assignOrgAndBranch(
                 req.user.id,
                 assignOrgBranchDto.orgId,
                 assignOrgBranchDto.branchId,
             );
 
-            if (!updatedUser) {
-                this.logger.error(
-                    `Failed to assign organization to user: ${req.user.id}`,
-                );
-                return {
-                    success: false,
-                    message: 'Failed to assign organization',
-                    data: null,
-                };
-            }
-
             this.logger.log(
                 `Organization assigned successfully to user: ${req.user.id}`,
             );
 
-            return {
-                success: true,
-                message: 'Organization assigned successfully',
-                data: updatedUser,
-            };
+            return result;
         } catch (error) {
             this.logger.error(
                 `Error assigning organization to user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Delete('soft-delete')
+    @ApiOperation({
+        summary: '🗑️ Soft Delete User Account',
+        description: `
+      **Soft deletes the authenticated user's account by setting status to DELETED**
+      
+      This endpoint performs a soft delete of the user account:
+      - Sets user status to DELETED instead of removing the record
+      - Preserves user data for potential restoration
+      - User will no longer appear in normal queries
+      - Account can be restored later using the restore endpoint
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - User can only soft delete their own account
+      - Checks if user is already deleted before proceeding
+      
+      **Use Cases:**
+      - Account deactivation
+      - Temporary account suspension
+      - GDPR compliance (soft deletion)
+      - User-initiated account closure
+    `,
+        operationId: 'softDeleteUser',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User account soft deleted successfully',
+        type: UserSoftDeletedResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ User is already deleted',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'User is already deleted',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    async softDeleteUser(
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Soft deleting user: ${req.user.id}`);
+
+            const result = await this.userService.softDelete(req.user.id);
+
+            this.logger.log(`User soft deleted successfully: ${req.user.id}`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error soft deleting user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch('restore')
+    @ApiOperation({
+        summary: '♻️ Restore Soft Deleted User Account',
+        description: `
+      **Restores a soft-deleted user account by setting status to ACTIVE**
+      
+      This endpoint restores a previously soft-deleted user account:
+      - Sets user status back to ACTIVE
+      - Makes the account accessible again
+      - User will appear in normal queries again
+      - Validates that user is currently in DELETED status
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - User can only restore their own account
+      - Checks if user is actually deleted before proceeding
+      
+      **Use Cases:**
+      - Account reactivation
+      - Undoing accidental deletion
+      - User returning after temporary deactivation
+      - Admin-assisted account recovery
+    `,
+        operationId: 'restoreUser',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User account restored successfully',
+        type: UserRestoredResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ User is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'User is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    async restoreUser(
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Restoring user: ${req.user.id}`);
+
+            const result = await this.userService.restoreUser(req.user.id);
+
+            this.logger.log(`User restored successfully: ${req.user.id}`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(`Error restoring user ${req.user.id}:`, error);
+            throw error;
+        }
+    }
+
+    @Get('admin/deleted')
+    @ApiOperation({
+        summary: '📋 Get Deleted Users (Admin)',
+        description: `
+      **Retrieves all soft-deleted users (for administrative purposes)**
+      
+      This endpoint returns all users with DELETED status:
+      - Shows users who have been soft-deleted
+      - Includes full user profile data
+      - Intended for administrative use
+      - Helps with account recovery operations
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      
+      **Use Cases:**
+      - Administrative user management
+      - Account recovery operations
+      - Audit trails and reporting
+      - Bulk restoration operations
+    `,
+        operationId: 'adminGetDeletedUsers',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Deleted users retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Deleted users retrieved successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'array',
+                    description: 'List of soft-deleted users',
+                    items: {
+                        type: 'object',
+                        description: 'Deleted user profile data',
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    async adminGetDeletedUsers(
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(`Getting deleted users for admin: ${req.user.id}`);
+
+            const deletedUsers = await this.userService.findDeleted();
+
+            // Remove sensitive data from all users
+            const sanitizedUsers = deletedUsers.map(user => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { password, ...userProfile } = user;
+                return userProfile;
+            });
+
+            this.logger.log(
+                `Retrieved ${deletedUsers.length} deleted users for admin: ${req.user.id}`,
+            );
+
+            return {
+                success: true,
+                message: 'Deleted users retrieved successfully',
+                data: sanitizedUsers,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting deleted users for admin ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch('admin/restore/:userId')
+    @ApiOperation({
+        summary: '♻️ Restore User by ID (Admin)',
+        description: `
+      **Restores a soft-deleted user account by user ID (for administrative use)**
+      
+      This endpoint allows administrators to restore any soft-deleted user:
+      - Sets specified user status back to ACTIVE
+      - Makes the account accessible again
+      - Validates that target user exists and is deleted
+      - Returns success confirmation only
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      - Validates target user exists and is deleted
+      
+      **Use Cases:**
+      - Administrative account recovery
+      - Bulk user restoration
+      - Customer support operations
+      - Data recovery procedures
+    `,
+        operationId: 'adminRestoreUser',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User account restored successfully by admin',
+        type: UserRestoredResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ User is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'User is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ User not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'User with ID xxx not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    async adminRestoreUser(
+        @Request() req: AuthenticatedRequest,
+        @Param('userId') userId: string,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Admin ${req.user.id} restoring user: ${userId}`);
+
+            const result = await this.userService.restoreUser(userId);
+
+            this.logger.log(
+                `User ${userId} restored successfully by admin: ${req.user.id}`,
+            );
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error restoring user ${userId} by admin ${req.user.id}:`,
                 error,
             );
             throw error;
