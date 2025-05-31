@@ -64,6 +64,8 @@ export class AuthService {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            orgId: user.orgId?.id,
+            branchId: user.branchId?.id,
         });
 
         // Return user without password
@@ -113,6 +115,8 @@ export class AuthService {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            orgId: user.orgId?.id,
+            branchId: user.branchId?.id,
         });
 
         // Get user leaderboard stats
@@ -281,6 +285,8 @@ export class AuthService {
                         email: user.email,
                         firstName: user.firstName,
                         lastName: user.lastName,
+                        orgId: user.orgId?.id,
+                        branchId: user.branchId?.id,
                     },
                 );
 
@@ -299,5 +305,42 @@ export class AuthService {
             }
             throw new UnauthorizedException('Invalid refresh token');
         }
+    }
+
+    /**
+     * Get token information for authenticated user
+     */
+    getTokenInfo(user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        avatar?: string;
+        orgId?: string;
+        branchId?: string;
+        createdAt: Date;
+        updatedAt: Date;
+    }): StandardApiResponse<any> {
+        return {
+            success: true,
+            data: {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    avatar: user.avatar,
+                    orgId: user.orgId,
+                    branchId: user.branchId,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt,
+                },
+                scope: {
+                    orgId: user.orgId,
+                    branchId: user.branchId,
+                },
+            },
+            message: 'Token information retrieved successfully',
+        };
     }
 }

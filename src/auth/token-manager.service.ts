@@ -8,6 +8,8 @@ export interface TokenPayload {
     email: string;
     firstName: string;
     lastName: string;
+    orgId?: string;
+    branchId?: string;
     iat?: number;
     exp?: number;
 }
@@ -37,12 +39,16 @@ export class TokenManagerService {
         email: string;
         firstName: string;
         lastName: string;
+        orgId?: string;
+        branchId?: string;
     }): Promise<TokenPair> {
         const payload: TokenPayload = {
             sub: user.id,
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
+            orgId: user.orgId,
+            branchId: user.branchId,
         };
 
         const accessToken = await this.jwtService.signAsync(payload, {
@@ -109,6 +115,8 @@ export class TokenManagerService {
             email: string;
             firstName: string;
             lastName: string;
+            orgId?: string;
+            branchId?: string;
         },
     ): Promise<TokenPair> {
         const validation = this.validateRefreshToken(refreshToken);

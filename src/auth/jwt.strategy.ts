@@ -9,6 +9,8 @@ export interface JwtPayload {
     email: string;
     firstName: string;
     lastName: string;
+    orgId?: string;
+    branchId?: string;
     iat?: number;
     exp?: number;
 }
@@ -40,6 +42,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             firstName: user.firstName,
             lastName: user.lastName,
             avatar: user.avatar,
+            orgId: payload.orgId,
+            branchId: payload.branchId,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         };

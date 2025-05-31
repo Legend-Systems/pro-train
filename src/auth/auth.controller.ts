@@ -7,8 +7,17 @@ import {
     UsePipes,
     ValidationPipe,
     Logger,
+    Get,
+    UseGuards,
+    Request,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+    ApiTags,
+    ApiOperation,
+    ApiResponse,
+    ApiBody,
+    ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
@@ -22,6 +31,7 @@ import {
     SessionResponseDto,
     StandardApiResponse,
 } from '../user/dto/session-response.dto';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('🔐 Authentication & Account Management')
 @Controller('auth')
@@ -1013,5 +1023,135 @@ export class AuthController {
             `Resend verification requested for email: ${resendVerificationDto.email}`,
         );
         return this.authService.resendVerification(resendVerificationDto);
+    }
+
+    @Get('token-info')
+    @UseGuards(JwtAuthGuard)
+    @ApiOperation({
+        summary: '🔑 Get Token Information',
+        description: `
+      **Retrieves information about the authenticated user's token**
+      
+      This endpoint handles token information retrieval:
+      - Token validation
+      - User information extraction
+      - Token expiration check
+      - Token type identification
+      
+      **Security Features:**
+      - Token validation
+      - User information extraction
+      - Token expiration check
+      - Token type identification
+      
+      **Token Information:**
+      - Token type
+      - Token expiration
+      - User information
+      
+      **Use Cases:**
+      - Token information retrieval
+      - Security token validation
+      - User information access
+    `,
+        operationId: 'getTokenInfo',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Token information retrieved',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Token information retrieval success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Token information retrieved successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Token information',
+                    properties: {
+                        tokenType: {
+                            type: 'string',
+                            example: 'Bearer',
+                            description: 'Token type',
+                        },
+                        expiresIn: {
+                            type: 'number',
+                            example: 3600,
+                            description: 'Token expiration time in seconds',
+                        },
+                        user: {
+                            type: 'object',
+                            description: 'Authenticated user information',
+                            properties: {
+                                id: {
+                                    type: 'string',
+                                    example:
+                                        'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+                                    description: 'User unique identifier',
+                                },
+                                email: {
+                                    type: 'string',
+                                    example: 'john.doe@example.com',
+                                    description: 'User email address',
+                                },
+                                name: {
+                                    type: 'string',
+                                    example: 'John Doe',
+                                    description: 'User display name',
+                                },
+                                createdAt: {
+                                    type: 'string',
+                                    example: '2024-01-15T10:30:00.000Z',
+                                    description: 'Account creation timestamp',
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Invalid or expired token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: {
+                    type: 'string',
+                    example: 'Invalid or expired token',
+                },
+                error: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid token format',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    examples: [['Invalid token format']],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiBearerAuth()
+    getTokenInfo(@Request() req: { user: any }): StandardApiResponse<any> {
+        this.logger.log('Token information retrieval request received');
+        return this.authService.getTokenInfo(req.user);
     }
 }

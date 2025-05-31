@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { TokenManagerService } from './token-manager.service';
+import { OrgBranchScopingService } from './services/org-branch-scoping.service';
 import { UserModule } from '../user/user.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 
@@ -27,7 +28,12 @@ import { LeaderboardModule } from '../leaderboard/leaderboard.module';
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, JwtStrategy, TokenManagerService],
-    exports: [AuthService, TokenManagerService],
+    providers: [
+        AuthService,
+        JwtStrategy,
+        TokenManagerService,
+        OrgBranchScopingService,
+    ],
+    exports: [AuthService, TokenManagerService, OrgBranchScopingService],
 })
 export class AuthModule {}
