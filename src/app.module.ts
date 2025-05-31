@@ -32,6 +32,9 @@ import { Communication } from './communications/entities/communication.entity';
 import { CommunicationsModule } from './communications/communications.module';
 import { OrgModule } from './org/org.module';
 import { BranchModule } from './branch/branch.module';
+import { MediaManagerModule } from './media-manager/media-manager.module';
+import { MediaFile } from './media-manager/entities/media-manager.entity';
+import { RewardsModule } from './rewards/rewards.module';
 
 @Module({
     imports: [
@@ -85,6 +88,7 @@ import { BranchModule } from './branch/branch.module';
                     Leaderboard,
                     TrainingProgress,
                     Communication,
+                    MediaFile,
                 ],
                 synchronize: true,
                 logging: false,
@@ -124,6 +128,8 @@ import { BranchModule } from './branch/branch.module';
         CommunicationsModule,
         OrgModule,
         BranchModule,
+        MediaManagerModule,
+        RewardsModule,
     ],
     controllers: [AppController],
     providers: [

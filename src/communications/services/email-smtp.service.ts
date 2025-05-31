@@ -91,7 +91,7 @@ export class EmailSMTPService {
     private async verifyConnection(): Promise<void> {
         try {
             await this.transporter.verify();
-            this.logger.log('SMTP connection verified successfully');
+            this.logger.log('✅ SMTP');
         } catch (error: unknown) {
             const errorMessage = this.getErrorMessage(error);
             this.logger.error('SMTP connection verification failed:', error);

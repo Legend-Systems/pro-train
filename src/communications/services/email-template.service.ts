@@ -307,7 +307,7 @@ export class EmailTemplateService {
                     await this.loadTemplate(config.textFile);
                 }
             }
-            this.logger.log('All templates preloaded successfully');
+            this.logger.log('✅ Email Templates');
         } catch (error) {
             this.logger.warn('Some templates failed to preload', error);
             // Don't throw - templates can be loaded on demand
