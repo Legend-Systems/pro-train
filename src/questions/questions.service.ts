@@ -22,24 +22,40 @@ import { Question } from './entities/question.entity';
 import { Test } from '../test/entities/test.entity';
 import { TestService } from '../test/test.service';
 
+// Type definitions for query results
+interface MaxOrderResult {
+    maxOrder: number | null;
+}
+
+interface TotalPointsResult {
+    total: string | null;
+}
+
 @Injectable()
 export class QuestionsService {
     private readonly logger = new Logger(QuestionsService.name);
 
-    // Cache keys
+    // Cache keys with comprehensive coverage
     private readonly CACHE_KEYS = {
         QUESTION_BY_ID: (id: number) => `question:${id}`,
         QUESTIONS_BY_TEST: (testId: number, filters: string) =>
             `questions:test:${testId}:${filters}`,
         QUESTION_STATS: (testId: number) => `question:stats:${testId}`,
-        TEST_QUESTIONS_LIST: (filters: string) => `questions:list:${filters}`,
+        QUESTION_LIST: (filters: string) => `questions:list:${filters}`,
+        QUESTION_COUNT: (testId: number) => `question:count:${testId}`,
+        TEST_QUESTIONS_CACHE: (testId: number) => `test:${testId}:questions`,
+        USER_QUESTIONS: (userId: string) => `user:${userId}:questions`,
+        ALL_QUESTIONS: 'questions:all',
     };
 
-    // Cache TTL in seconds
+    // Cache TTL in seconds with different durations for different data types
     private readonly CACHE_TTL = {
         QUESTION: 300, // 5 minutes
         QUESTION_LIST: 180, // 3 minutes
         STATS: 600, // 10 minutes
+        COUNT: 120, // 2 minutes
+        USER_DATA: 240, // 4 minutes
+        ALL_QUESTIONS: 900, // 15 minutes
     };
 
     constructor(
@@ -51,46 +67,6 @@ export class QuestionsService {
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
-
-    /**
-     * Cache helper methods
-     */
-    private async invalidateQuestionCache(
-        questionId: number,
-        testId?: number,
-    ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.QUESTION_BY_ID(questionId)];
-
-        if (testId) {
-            // Invalidate all test-related caches - we can't predict all filter combinations
-            const pattern = `questions:test:${testId}:*`;
-            keysToDelete.push(this.CACHE_KEYS.QUESTION_STATS(testId));
-            // Note: In production, you might want to use a more sophisticated cache invalidation strategy
-        }
-
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
-    }
-
-    private async invalidateTestQuestionsCache(testId: number): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.QUESTION_STATS(testId)];
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
-    }
-
-    private generateCacheKeyForTestQuestions(
-        testId: number,
-        filters?: QuestionFilterDto,
-    ): string {
-        const filterKey = JSON.stringify({
-            questionType: filters?.questionType,
-            minPoints: filters?.minPoints,
-            maxPoints: filters?.maxPoints,
-            createdFrom: filters?.createdFrom,
-            createdTo: filters?.createdTo,
-            page: filters?.page,
-            pageSize: filters?.pageSize,
-        });
-        return this.CACHE_KEYS.QUESTIONS_BY_TEST(testId, filterKey);
-    }
 
     /**
      * Retry database operations with exponential backoff
@@ -107,7 +83,7 @@ export class QuestionsService {
                 if (attempt === maxRetries) {
                     this.logger.error(
                         `Operation failed after ${maxRetries} attempts`,
-                        error.stack,
+                        error instanceof Error ? error.stack : String(error),
                     );
                     throw error;
                 }
@@ -120,6 +96,103 @@ export class QuestionsService {
             }
         }
         throw new Error('Retry operation failed unexpectedly');
+    }
+
+    /**
+     * Comprehensive cache invalidation methods
+     */
+    private async invalidateQuestionCache(
+        questionId: number,
+        testId?: number,
+    ): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.QUESTION_BY_ID(questionId)];
+
+        if (testId) {
+            // Invalidate all test-related caches
+            keysToDelete.push(
+                this.CACHE_KEYS.QUESTION_STATS(testId),
+                this.CACHE_KEYS.QUESTION_COUNT(testId),
+                this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId),
+            );
+
+            // Invalidate pattern-based keys for test questions with different filters
+            // Note: In production, you might want to use Redis SCAN or similar for pattern-based deletion
+            this.logger.debug(`Invalidating cache patterns for test ${testId}`);
+        }
+
+        // Also invalidate general question lists
+        keysToDelete.push(this.CACHE_KEYS.ALL_QUESTIONS);
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async invalidateTestQuestionsCache(testId: number): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.QUESTION_STATS(testId),
+            this.CACHE_KEYS.QUESTION_COUNT(testId),
+            this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId),
+            this.CACHE_KEYS.ALL_QUESTIONS,
+        ];
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async invalidateUserQuestionsCache(userId: string): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.USER_QUESTIONS(userId),
+            this.CACHE_KEYS.ALL_QUESTIONS,
+        ];
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private generateCacheKeyForTestQuestions(
+        testId: number,
+        filters?: QuestionFilterDto,
+    ): string {
+        const filterKey = JSON.stringify({
+            questionType: filters?.questionType,
+            minPoints: filters?.minPoints,
+            maxPoints: filters?.maxPoints,
+            createdFrom: filters?.createdFrom,
+            createdTo: filters?.createdTo,
+            page: filters?.page,
+            pageSize: filters?.pageSize,
+        });
+        return this.CACHE_KEYS.QUESTIONS_BY_TEST(testId, filterKey);
     }
 
     /**
@@ -156,7 +229,7 @@ export class QuestionsService {
                     .where('question.testId = :testId', {
                         testId: createQuestionDto.testId,
                     })
-                    .getRawOne();
+                    .getRawOne<MaxOrderResult>();
 
                 createQuestionDto.orderIndex = (maxOrder?.maxOrder || 0) + 1;
             } else {
@@ -180,10 +253,17 @@ export class QuestionsService {
                 orgId: test.orgId,
                 branchId: test.branchId,
             });
-            await this.questionRepository.save(question);
+            const savedQuestion = await this.questionRepository.save(question);
 
-            // Invalidate caches
-            await this.invalidateTestQuestionsCache(createQuestionDto.testId);
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateTestQuestionsCache(createQuestionDto.testId),
+                this.invalidateUserQuestionsCache(scope.userId),
+            ]);
+
+            this.logger.log(
+                `Question ${savedQuestion.questionId} created successfully`,
+            );
 
             return {
                 message: 'Question created successfully',
@@ -226,11 +306,16 @@ export class QuestionsService {
 
                 await queryRunner.commitTransaction();
 
-                // Invalidate caches for all affected tests
-                await Promise.all(
-                    Array.from(testIds).map(testId =>
+                // Comprehensive cache invalidation for all affected tests
+                await Promise.all([
+                    ...Array.from(testIds).map(testId =>
                         this.invalidateTestQuestionsCache(testId),
                     ),
+                    this.invalidateUserQuestionsCache(scope.userId),
+                ]);
+
+                this.logger.log(
+                    `${createdQuestions.length} questions created successfully in bulk`,
                 );
 
                 return {
@@ -248,7 +333,7 @@ export class QuestionsService {
     }
 
     /**
-     * Find questions by test with optional filters
+     * Find questions by test with optional filters and comprehensive caching
      */
     async findByTest(
         testId: number,
@@ -261,11 +346,24 @@ export class QuestionsService {
                 testId,
                 filters,
             );
-            const cachedResult =
-                await this.cacheManager.get<QuestionListResponseDto>(cacheKey);
 
-            if (cachedResult) {
-                return cachedResult;
+            try {
+                const cachedResult =
+                    await this.cacheManager.get<QuestionListResponseDto>(
+                        cacheKey,
+                    );
+
+                if (cachedResult) {
+                    this.logger.debug(
+                        `Cache hit for test questions: ${cacheKey}`,
+                    );
+                    return cachedResult;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             // Validate test access if userId provided
@@ -318,11 +416,11 @@ export class QuestionsService {
                 .take(pageSize)
                 .getManyAndCount();
 
-            const totalPoints = await this.questionRepository
+            const totalPointsResult = await this.questionRepository
                 .createQueryBuilder('question')
                 .select('SUM(question.points)', 'total')
                 .where('question.testId = :testId', { testId })
-                .getRawOne();
+                .getRawOne<TotalPointsResult>();
 
             const result = {
                 questions: questions.map(q => this.mapToResponseDto(q)),
@@ -330,32 +428,49 @@ export class QuestionsService {
                 page,
                 pageSize,
                 totalPages: Math.ceil(total / pageSize),
-                totalPoints: parseInt(totalPoints?.total || '0'),
+                totalPoints: parseInt(totalPointsResult?.total || '0'),
             };
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.QUESTION_LIST * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.QUESTION_LIST * 1000,
+                );
+                this.logger.debug(`Cache set for test questions: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
     }
 
     /**
-     * Find a single question by ID
+     * Find a single question by ID with comprehensive caching
      */
     async findOne(id: number, userId?: string): Promise<QuestionResponseDto> {
         return this.retryOperation(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.QUESTION_BY_ID(id);
-            const cachedQuestion =
-                await this.cacheManager.get<QuestionResponseDto>(cacheKey);
 
-            if (cachedQuestion) {
-                return cachedQuestion;
+            try {
+                const cachedQuestion =
+                    await this.cacheManager.get<QuestionResponseDto>(cacheKey);
+
+                if (cachedQuestion) {
+                    this.logger.debug(`Cache hit for question: ${cacheKey}`);
+                    return cachedQuestion;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const question = await this.questionRepository.findOne({
@@ -381,19 +496,27 @@ export class QuestionsService {
 
             const result = this.mapToResponseDto(question);
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.QUESTION * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.QUESTION * 1000,
+                );
+                this.logger.debug(`Cache set for question: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
     }
 
     /**
-     * Update a question
+     * Update a question with comprehensive cache invalidation
      */
     async update(
         id: number,
@@ -435,8 +558,13 @@ export class QuestionsService {
             Object.assign(question, updateQuestionDto);
             await this.questionRepository.save(question);
 
-            // Invalidate caches
-            await this.invalidateQuestionCache(id, question.testId);
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateQuestionCache(id, question.testId),
+                this.invalidateUserQuestionsCache(userId),
+            ]);
+
+            this.logger.log(`Question ${id} updated successfully`);
 
             return {
                 message: 'Question updated successfully',
@@ -447,7 +575,7 @@ export class QuestionsService {
     }
 
     /**
-     * Reorder questions in a test
+     * Reorder questions in a test with cache invalidation
      */
     async reorder(
         testId: number,
@@ -473,8 +601,19 @@ export class QuestionsService {
 
                 await queryRunner.commitTransaction();
 
-                // Invalidate caches
-                await this.invalidateTestQuestionsCache(testId);
+                // Comprehensive cache invalidation
+                await Promise.all([
+                    this.invalidateTestQuestionsCache(testId),
+                    this.invalidateUserQuestionsCache(userId),
+                    // Invalidate individual question caches
+                    ...reorderData.map(({ questionId }) =>
+                        this.invalidateQuestionCache(questionId, testId),
+                    ),
+                ]);
+
+                this.logger.log(
+                    `Questions reordered successfully in test ${testId}`,
+                );
 
                 return {
                     message: 'Questions reordered successfully',
@@ -491,7 +630,7 @@ export class QuestionsService {
     }
 
     /**
-     * Delete a question
+     * Delete a question with comprehensive cache invalidation
      */
     async remove(
         id: number,
@@ -519,14 +658,64 @@ export class QuestionsService {
             const testId = question.testId;
             await this.questionRepository.remove(question);
 
-            // Invalidate caches
-            await this.invalidateQuestionCache(id, testId);
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateQuestionCache(id, testId),
+                this.invalidateUserQuestionsCache(userId),
+            ]);
+
+            this.logger.log(`Question ${id} deleted successfully`);
 
             return {
                 message: 'Question deleted successfully',
                 status: 'success',
                 code: 200,
             };
+        });
+    }
+
+    /**
+     * Get question count for a test with caching
+     */
+    async getQuestionCount(testId: number): Promise<number> {
+        return this.retryOperation(async () => {
+            const cacheKey = this.CACHE_KEYS.QUESTION_COUNT(testId);
+
+            try {
+                const cachedCount =
+                    await this.cacheManager.get<number>(cacheKey);
+                if (cachedCount !== undefined && cachedCount !== null) {
+                    this.logger.debug(
+                        `Cache hit for question count: ${cacheKey}`,
+                    );
+                    return cachedCount;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            const count = await this.questionRepository.count({
+                where: { testId },
+            });
+
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    count,
+                    this.CACHE_TTL.COUNT * 1000,
+                );
+                this.logger.debug(`Cache set for question count: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            return count;
         });
     }
 
@@ -562,7 +751,7 @@ export class QuestionsService {
                 .where('question.testId = :testId', {
                     testId: createQuestionDto.testId,
                 })
-                .getRawOne();
+                .getRawOne<MaxOrderResult>();
 
             createQuestionDto.orderIndex = (maxOrder?.maxOrder || 0) + 1;
         }

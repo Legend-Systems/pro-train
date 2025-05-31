@@ -2,7 +2,6 @@ import {
     Controller,
     Get,
     Post,
-    Put,
     Delete,
     Patch,
     Body,
@@ -13,6 +12,7 @@ import {
     HttpStatus,
     HttpCode,
     Logger,
+    Request,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -27,13 +27,22 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { QuestionsService } from './questions.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionFilterDto } from './dto/question-filter.dto';
-import { QuestionResponseDto } from './dto/question-response.dto';
-import { QuestionListResponseDto } from './dto/question-list-response.dto';
 import { BulkCreateQuestionsDto } from './dto/bulk-create-questions.dto';
+import {
+    StandardApiResponse,
+    QuestionApiResponse,
+    QuestionListApiResponse,
+    QuestionCreatedResponse,
+    QuestionUpdatedResponse,
+    QuestionDeletedResponse,
+    QuestionsReorderedResponse,
+    BulkQuestionsCreatedResponse,
+} from './dto/question-response.dto';
 import { StandardOperationResponse } from '../user/dto/common-response.dto';
 
 @ApiTags('❓ Questions Management')
@@ -55,47 +64,41 @@ export class QuestionsController {
     @Post()
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({
-        summary: '❓ Create New Question',
+        summary: '➕ Create New Question',
         description: `
       **Creates a new question for a test with comprehensive validation**
       
-      This endpoint allows test creators to add questions including:
-      - Question text and content
-      - Question type specification (multiple choice, true/false, etc.)
-      - Point value assignment
-      - Order positioning within test
+      This endpoint allows authorized users to create questions for tests within their organization scope:
+      - Validates test access and permissions
+      - Automatically assigns organization and branch context
+      - Supports various question types (multiple choice, true/false, etc.)
+      - Auto-increments order index if not provided
+      - Comprehensive caching invalidation
       
-      **Authorization Requirements:**
-      - Must be the owner of the test
-      - Valid JWT authentication required
-      
-      **Business Rules:**
-      - Test must exist and be accessible to the user
-      - Question type determines available answer options
-      - Points must be positive (minimum 1)
-      - Order index is auto-assigned if not provided
-      - Question text is required and cannot be empty
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Organization/branch scope validation
+      - Test ownership verification
       
       **Use Cases:**
-      - Building test question banks
-      - Creating exam content
-      - Setting up quiz questions
-      - Preparing training assessments
+      - Test content creation
+      - Question bank building
+      - Educational content management
+      - Assessment development
     `,
         operationId: 'createQuestion',
     })
     @ApiBody({
         type: CreateQuestionDto,
-        description: 'Question creation data with test assignment',
+        description: 'Question creation data',
         examples: {
             'multiple-choice': {
-                summary: '🔢 Multiple Choice Question',
-                description:
-                    'Create a multiple choice question with several options',
+                summary: '🔘 Multiple Choice Question',
+                description: 'Creates a multiple choice question',
                 value: {
                     testId: 1,
                     questionText:
-                        'What is the time complexity of binary search algorithm?',
+                        'What is the time complexity of binary search?',
                     questionType: 'multiple_choice',
                     points: 5,
                     orderIndex: 1,
@@ -103,24 +106,12 @@ export class QuestionsController {
             },
             'true-false': {
                 summary: '✅ True/False Question',
-                description: 'Create a simple true or false question',
+                description: 'Creates a true/false question',
                 value: {
                     testId: 1,
-                    questionText: 'Arrays in JavaScript are zero-indexed.',
+                    questionText: 'Binary search works only on sorted arrays.',
                     questionType: 'true_false',
-                    points: 2,
-                    orderIndex: 2,
-                },
-            },
-            essay: {
-                summary: '📝 Essay Question',
-                description: 'Create an open-ended essay question',
-                value: {
-                    testId: 1,
-                    questionText:
-                        'Explain the differences between procedural and object-oriented programming paradigms. Provide examples.',
-                    questionType: 'essay',
-                    points: 15,
+                    points: 3,
                 },
             },
         },
@@ -128,7 +119,7 @@ export class QuestionsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Question created successfully',
-        type: StandardOperationResponse,
+        type: QuestionCreatedResponse,
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -136,58 +127,65 @@ export class QuestionsController {
         schema: {
             type: 'object',
             properties: {
-                statusCode: { type: 'number', example: 400 },
                 message: {
-                    type: 'array',
-                    items: { type: 'string' },
-                    example: [
-                        'Question text cannot be empty',
-                        'Points must be at least 1',
+                    type: 'string',
+                    examples: [
+                        'Question text is required',
+                        'Points must be a positive number',
+                        'Invalid question type',
                     ],
                 },
-                error: { type: 'string', example: 'Bad Request' },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 400 },
             },
         },
     })
     @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No access to the specified test',
-    })
-    @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Test not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Test with ID 1 not found',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 404 },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.CONFLICT,
-        description: '🔄 Question with this order index already exists',
+        description: '⚠️ Order index conflict',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example:
+                        'Question with order index 1 already exists in this test',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 409 },
+            },
+        },
     })
     async create(
         @Body() createQuestionDto: CreateQuestionDto,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @OrgBranchScope() scope: any,
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Creating question for test ${createQuestionDto.testId} by user: ${scope.userId}`,
+                `Creating question for test ${createQuestionDto.testId} by user: ${req.user.id}`,
             );
 
-            const result = await this.questionsService.create(
-                createQuestionDto,
-                scope,
-            );
-
-            this.logger.log(
-                `Question created successfully for test ${createQuestionDto.testId}`,
-            );
-
-            return result;
+            return await this.questionsService.create(createQuestionDto, scope);
         } catch (error) {
             this.logger.error(
-                `Error creating question for user ${scope.userId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error creating question for user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
@@ -196,132 +194,48 @@ export class QuestionsController {
     @Post('bulk')
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({
-        summary: '📋 Create Multiple Questions in Bulk',
+        summary: '📦 Create Multiple Questions in Bulk',
         description: `
-      **Creates multiple questions for tests in a single operation**
+      **Creates multiple questions simultaneously with transaction safety**
       
-      This endpoint enables efficient bulk creation of questions:
-      - Single transaction for all questions
-      - Automatic order index assignment
-      - Comprehensive validation for all questions
-      - Rollback on any validation failure
-      
-      **Performance Features:**
-      - Batch processing for improved performance
-      - Transaction-based integrity
-      - Bulk validation processing
-      - Optimized database operations
-      
-      **Business Rules:**
-      - All questions must pass validation
-      - User must have access to all referenced tests
-      - Order indices are automatically assigned per test
-      - Points must be positive for all questions
+      This endpoint allows batch creation of questions for efficient content management:
+      - All questions created in a single transaction
+      - Rollback on any failure ensures data consistency
+      - Validates all questions before creation
+      - Comprehensive cache invalidation for all affected tests
       
       **Use Cases:**
-      - Importing questions from external sources
-      - Creating complete test question sets
-      - Migrating question banks
-      - Rapid test development
+      - Bulk content import
+      - Test template creation
+      - Educational content migration
+      - Batch question uploads
     `,
-        operationId: 'createQuestionsInBulk',
+        operationId: 'createBulkQuestions',
     })
     @ApiBody({
         type: BulkCreateQuestionsDto,
-        description: 'Bulk question creation data',
-        examples: {
-            'mixed-types': {
-                summary: '🎯 Mixed Question Types',
-                description: 'Create various types of questions in bulk',
-                value: {
-                    questions: [
-                        {
-                            testId: 1,
-                            questionText: 'What is the capital of France?',
-                            questionType: 'multiple_choice',
-                            points: 2,
-                        },
-                        {
-                            testId: 1,
-                            questionText: 'JavaScript is a compiled language.',
-                            questionType: 'true_false',
-                            points: 1,
-                        },
-                        {
-                            testId: 1,
-                            questionText:
-                                'Explain the concept of closures in JavaScript.',
-                            questionType: 'short_answer',
-                            points: 5,
-                        },
-                    ],
-                },
-            },
-            'exam-questions': {
-                summary: '🎓 Complete Exam Questions',
-                description: 'Create a full set of exam questions',
-                value: {
-                    questions: [
-                        {
-                            testId: 2,
-                            questionText:
-                                'Which sorting algorithm has O(n log n) average time complexity?',
-                            questionType: 'multiple_choice',
-                            points: 3,
-                        },
-                        {
-                            testId: 2,
-                            questionText:
-                                'Describe the advantages and disadvantages of using recursive algorithms.',
-                            questionType: 'essay',
-                            points: 10,
-                        },
-                    ],
-                },
-            },
-        },
+        description: 'Bulk questions creation data',
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Questions created successfully in bulk',
-        type: StandardOperationResponse,
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description:
-            '❌ Invalid input data or validation errors for one or more questions',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No access to one or more specified tests',
+        type: BulkQuestionsCreatedResponse,
     })
     async createBulk(
         @Body() bulkCreateDto: BulkCreateQuestionsDto,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @OrgBranchScope() scope: any,
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Creating ${bulkCreateDto.questions.length} questions in bulk for user: ${scope.userId}`,
+                `Creating ${bulkCreateDto.questions.length} questions in bulk by user: ${req.user.id}`,
             );
 
-            const result = await this.questionsService.createBulk(
-                bulkCreateDto,
-                scope,
-            );
-
-            this.logger.log(
-                `${bulkCreateDto.questions.length} questions created successfully in bulk`,
-            );
-
-            return result;
+            return await this.questionsService.createBulk(bulkCreateDto, scope);
         } catch (error) {
             this.logger.error(
-                `Error creating questions in bulk for user ${scope.userId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error creating bulk questions for user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
@@ -329,129 +243,98 @@ export class QuestionsController {
 
     @Get('test/:testId')
     @ApiOperation({
-        summary: '📝 Get Questions for Specific Test',
+        summary: '📋 Get Questions by Test',
         description: `
       **Retrieves all questions for a specific test with filtering and pagination**
       
-      This endpoint provides comprehensive question listings:
-      - All questions within the specified test
-      - Advanced filtering capabilities
-      - Pagination for large question sets
-      - Ordered by question index
+      This endpoint provides comprehensive question listing with:
+      - Advanced filtering by question type, points range, creation date
+      - Pagination support for large question sets
+      - Total points calculation for the test
+      - Comprehensive caching for performance
       
       **Filtering Options:**
-      - Question type filtering
-      - Point value range filtering
-      - Creation date range filtering
-      - Pagination controls
-      
-      **Authorization:**
-      - Test access validation
-      - Ownership verification for full details
-      
-      **Response Includes:**
-      - Complete question information
-      - Option counts and statistics
-      - Answer submission counts
-      - Test context information
-      
-      **Use Cases:**
-      - Test preview and review
-      - Question management interfaces
-      - Student test display
-      - Academic content analysis
+      - Question type (multiple_choice, true_false, etc.)
+      - Points range (minimum and maximum)
+      - Creation date range
+      - Pagination (page, pageSize)
     `,
         operationId: 'getQuestionsByTest',
     })
     @ApiParam({
         name: 'testId',
-        type: Number,
-        description: 'Test identifier to retrieve questions for',
+        description: 'Test ID to retrieve questions for',
         example: 1,
     })
     @ApiQuery({
         name: 'questionType',
         required: false,
-        enum: [
-            'multiple_choice',
-            'true_false',
-            'short_answer',
-            'essay',
-            'fill_in_blank',
-        ],
         description: 'Filter by question type',
         example: 'multiple_choice',
     })
     @ApiQuery({
         name: 'minPoints',
         required: false,
-        type: Number,
-        description: 'Filter by minimum point value',
+        description: 'Minimum points filter',
         example: 1,
     })
     @ApiQuery({
         name: 'maxPoints',
         required: false,
-        type: Number,
-        description: 'Filter by maximum point value',
+        description: 'Maximum points filter',
         example: 10,
     })
     @ApiQuery({
         name: 'page',
         required: false,
-        type: Number,
         description: 'Page number for pagination',
         example: 1,
     })
     @ApiQuery({
         name: 'pageSize',
         required: false,
-        type: Number,
         description: 'Number of questions per page',
         example: 10,
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Test questions retrieved successfully',
-        type: QuestionListResponseDto,
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No access to the specified test',
-    })
-    @ApiResponse({
-        status: HttpStatus.NOT_FOUND,
-        description: '❌ Test not found',
+        description: '✅ Questions retrieved successfully',
+        type: QuestionListApiResponse,
     })
     async findByTest(
         @Param('testId', ParseIntPipe) testId: number,
         @Query() filters: QuestionFilterDto,
-        @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<QuestionListResponseDto> {
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
-                `Getting questions for test ${testId} with filters: ${JSON.stringify(filters)}`,
+                `Getting questions for test ${testId} by user: ${req.user.id}`,
             );
 
             const result = await this.questionsService.findByTest(
                 testId,
-                scope.userId,
+                req.user.id,
                 filters,
             );
 
-            this.logger.log(
-                `Retrieved ${result.questions.length} questions out of ${result.total} total for test ${testId}`,
-            );
-
-            return result;
+            return {
+                success: true,
+                message: 'Questions retrieved successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                    pagination: {
+                        page: result.page,
+                        limit: result.pageSize,
+                        total: result.total,
+                        totalPages: result.totalPages,
+                    },
+                },
+            };
         } catch (error) {
             this.logger.error(
-                `Error getting questions for test ${testId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error getting questions for test ${testId} by user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
@@ -459,450 +342,298 @@ export class QuestionsController {
 
     @Get(':id')
     @ApiOperation({
-        summary: '🔍 Get Question Details',
+        summary: '🔍 Get Question by ID',
         description: `
-      **Retrieves detailed information about a specific question**
+      **Retrieves a single question with comprehensive details**
       
-      This endpoint provides comprehensive question data including:
-      - Complete question information
-      - Associated answer options
-      - Question statistics and analytics
-      - Test context information
-      
-      **Detailed Information:**
-      - Question text and type
-      - Point value and order position
-      - Creation and modification timestamps
-      - Associated test information
-      - Answer option counts
-      - Submission statistics
-      
-      **Security:**
-      - Question access validation
-      - Test ownership verification
-      - Proper permission checks
-      
-      **Use Cases:**
-      - Question editing interfaces
-      - Detailed question preview
-      - Question analytics dashboard
-      - Content review and approval
+      This endpoint provides detailed question information including:
+      - Complete question data with test context
+      - Related options count (when implemented)
+      - Answer statistics (when implemented)
+      - Comprehensive caching for performance
     `,
-        operationId: 'getQuestionDetails',
+        operationId: 'getQuestionById',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question unique identifier',
-        type: 'number',
+        description: 'Question ID to retrieve',
         example: 1,
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Question details retrieved successfully',
-        type: QuestionResponseDto,
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No access to this question',
+        description: '✅ Question retrieved successfully',
+        type: QuestionApiResponse,
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Question not found',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: false },
+                message: {
+                    type: 'string',
+                    example: 'Question with ID 1 not found',
+                },
+                data: { type: 'null' },
+            },
+        },
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
-        @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<QuestionResponseDto> {
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(`Getting question details for ID: ${id}`);
+            this.logger.log(`Getting question ${id} by user: ${req.user.id}`);
 
             const question = await this.questionsService.findOne(
                 id,
-                scope.userId,
+                req.user.id,
             );
 
-            this.logger.log(`Question details retrieved for ID: ${id}`);
-
-            return question;
+            return {
+                success: true,
+                message: 'Question retrieved successfully',
+                data: question,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
         } catch (error) {
             this.logger.error(
-                `Error getting question ${id}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error getting question ${id} by user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
     }
 
-    @Put(':id')
+    @Patch(':id')
     @ApiOperation({
         summary: '✏️ Update Question',
         description: `
-      **Updates question information with comprehensive validation**
+      **Updates an existing question with validation and cache management**
       
-      This endpoint allows question owners to update questions including:
-      - Question text modifications
-      - Point value adjustments
-      - Order index changes
-      - Question type updates (with caution)
-      
-      **Updatable Fields:**
-      - Question text content
-      - Point value (must remain positive)
-      - Order index within test
-      - Question type (use with caution)
-      
-      **Security Features:**
-      - Only test owners can update questions
-      - Ownership validation required
-      - Input validation and sanitization
-      - Change audit logging
-      
-      **Business Rules:**
-      - Cannot change question's test assignment
-      - Point value must remain positive
-      - Order index must be unique within test
-      - Question type changes may affect existing options
-      
-      **Use Cases:**
-      - Question content improvements
-      - Point value adjustments
-      - Question reordering
-      - Content maintenance workflows
+      This endpoint allows updating question properties including:
+      - Question text and type modifications
+      - Points value adjustments
+      - Order index changes (with conflict checking)
+      - Comprehensive cache invalidation
     `,
         operationId: 'updateQuestion',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question unique identifier',
-        type: 'number',
+        description: 'Question ID to update',
         example: 1,
     })
     @ApiBody({
         type: UpdateQuestionDto,
         description: 'Question update data',
-        examples: {
-            'text-update': {
-                summary: '📝 Update Question Text',
-                description: 'Update just the question text content',
-                value: {
-                    questionText:
-                        'What is the average time complexity of binary search algorithm?',
-                },
-            },
-            'points-update': {
-                summary: '🎯 Update Point Value',
-                description: 'Adjust the point value for the question',
-                value: {
-                    points: 7,
-                },
-            },
-            'full-update': {
-                summary: '🔄 Complete Update',
-                description: 'Update multiple question properties',
-                value: {
-                    questionText:
-                        'Explain the time and space complexity of the binary search algorithm.',
-                    points: 8,
-                    orderIndex: 3,
-                },
-            },
-        },
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Question updated successfully',
-        type: StandardOperationResponse,
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid input data or validation errors',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No permission to update this question',
-    })
-    @ApiResponse({
-        status: HttpStatus.NOT_FOUND,
-        description: '❌ Question not found',
-    })
-    @ApiResponse({
-        status: HttpStatus.CONFLICT,
-        description: '🔄 Question with this order index already exists',
+        type: QuestionUpdatedResponse,
     })
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionDto: UpdateQuestionDto,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(
-                `Updating question ${id} for user: ${scope.userId}`,
-            );
+            this.logger.log(`Updating question ${id} by user: ${req.user.id}`);
 
-            const result = await this.questionsService.update(
+            return await this.questionsService.update(
                 id,
                 updateQuestionDto,
-                scope.userId,
+                req.user.id,
             );
-
-            this.logger.log(`Question ${id} updated successfully`);
-
-            return result;
         } catch (error) {
             this.logger.error(
-                `Error updating question ${id} for user ${scope.userId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error updating question ${id} by user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
     }
 
-    @Patch('reorder')
-    @HttpCode(HttpStatus.OK)
+    @Patch('reorder/:testId')
     @ApiOperation({
         summary: '🔄 Reorder Questions in Test',
         description: `
-      **Reorders questions within a test by updating their order indices**
+      **Reorders questions within a test with transaction safety**
       
-      This endpoint allows test creators to reorganize questions:
-      - Batch update of question order indices
-      - Maintains question integrity
-      - Validates new order positions
-      - Ensures no duplicate indices
-      
-      **Reordering Process:**
-      - Validates user access to test
-      - Checks all question IDs belong to the test
-      - Updates order indices in transaction
-      - Maintains referential integrity
-      
-      **Business Rules:**
-      - User must own the test
-      - All questions must belong to the specified test
-      - New order indices must be unique
-      - Order indices must be positive
-      
-      **Use Cases:**
-      - Question flow optimization
-      - Difficulty progression adjustment
-      - Content organization improvement
-      - Test structure refinement
+      This endpoint allows bulk reordering of questions for better test organization:
+      - Transaction-based updates ensure consistency
+      - Comprehensive cache invalidation
+      - Batch processing for efficiency
     `,
         operationId: 'reorderQuestions',
     })
+    @ApiParam({
+        name: 'testId',
+        description: 'Test ID to reorder questions for',
+        example: 1,
+    })
     @ApiBody({
-        description: 'Question reordering data',
+        description: 'Array of question reorder data',
         schema: {
-            type: 'object',
-            properties: {
-                testId: {
-                    type: 'number',
-                    example: 1,
-                    description: 'Test ID containing the questions to reorder',
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    questionId: { type: 'number', example: 1 },
+                    newOrderIndex: { type: 'number', example: 2 },
                 },
-                questions: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            questionId: {
-                                type: 'number',
-                                example: 5,
-                                description: 'Question ID to reorder',
-                            },
-                            newOrderIndex: {
-                                type: 'number',
-                                example: 2,
-                                description:
-                                    'New order position for the question',
-                            },
-                        },
-                    },
-                    example: [
-                        { questionId: 5, newOrderIndex: 1 },
-                        { questionId: 3, newOrderIndex: 2 },
-                        { questionId: 7, newOrderIndex: 3 },
-                    ],
-                    description: 'Array of question reordering instructions',
-                },
-            },
-        },
-        examples: {
-            'simple-reorder': {
-                summary: '🔄 Simple Reordering',
-                description: 'Reorder a few questions in a test',
-                value: {
-                    testId: 1,
-                    questions: [
-                        { questionId: 5, newOrderIndex: 1 },
-                        { questionId: 3, newOrderIndex: 2 },
-                        { questionId: 7, newOrderIndex: 3 },
-                    ],
-                },
-            },
-            'complete-reorganization': {
-                summary: '🎯 Complete Reorganization',
-                description: 'Completely reorganize all questions in a test',
-                value: {
-                    testId: 2,
-                    questions: [
-                        { questionId: 12, newOrderIndex: 1 },
-                        { questionId: 15, newOrderIndex: 2 },
-                        { questionId: 13, newOrderIndex: 3 },
-                        { questionId: 14, newOrderIndex: 4 },
-                        { questionId: 11, newOrderIndex: 5 },
-                    ],
-                },
+                required: ['questionId', 'newOrderIndex'],
             },
         },
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Questions reordered successfully',
-        type: StandardOperationResponse,
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid reorder data or duplicate indices',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No permission to modify this test',
-    })
-    @ApiResponse({
-        status: HttpStatus.NOT_FOUND,
-        description: '❌ Test or one or more questions not found',
+        type: QuestionsReorderedResponse,
     })
     async reorder(
-        @Body()
-        reorderData: {
-            testId: number;
-            questions: { questionId: number; newOrderIndex: number }[];
-        },
-        @OrgBranchScope() scope: OrgBranchScope,
+        @Param('testId', ParseIntPipe) testId: number,
+        @Body() reorderData: { questionId: number; newOrderIndex: number }[],
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Reordering ${reorderData.questions.length} questions in test ${reorderData.testId}`,
+                `Reordering questions in test ${testId} by user: ${req.user.id}`,
             );
 
-            const result = await this.questionsService.reorder(
-                reorderData.testId,
-                reorderData.questions,
-                scope.userId,
+            return await this.questionsService.reorder(
+                testId,
+                reorderData,
+                req.user.id,
             );
-
-            this.logger.log(
-                `Questions reordered successfully in test ${reorderData.testId}`,
-            );
-
-            return result;
         } catch (error) {
             this.logger.error(
-                `Error reordering questions in test ${reorderData.testId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error reordering questions in test ${testId} by user ${req.user.id}:`,
+                error,
             );
             throw error;
         }
     }
 
     @Delete(':id')
-    @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: '🗑️ Delete Question',
         description: `
-      **Permanently deletes a question with comprehensive validation**
+      **Deletes a question with validation and cache management**
       
-      This endpoint allows question owners to delete questions with:
-      - Ownership verification
-      - Cascade relationship handling
-      - Data integrity protection
-      - Audit trail logging
-      
-      **Deletion Process:**
-      - Validates user ownership of test
-      - Checks for existing answers
-      - Prevents deletion if answers exist
-      - Performs cascading deletions as needed
-      - Logs deletion for audit purposes
-      
-      **Safety Features:**
-      - Only test owners can delete questions
-      - Prevents deletion of questions with submitted answers
-      - Confirms deletion before execution
-      - Maintains referential integrity
-      
-      **Important Notes:**
-      - **This action is irreversible**
-      - All question data will be permanently deleted
-      - Associated options and answers may be removed
-      - Consider archiving instead of deletion
-      
-      **Use Cases:**
-      - Question cleanup and maintenance
-      - Removing outdated content
-      - Test content management
-      - Question lifecycle management
+      This endpoint safely removes questions with:
+      - Answer dependency checking (when implemented)
+      - Comprehensive cache invalidation
+      - Audit trail preservation
+      - Transaction safety
     `,
         operationId: 'deleteQuestion',
     })
     @ApiParam({
         name: 'id',
-        description: 'Question unique identifier',
-        type: 'number',
+        description: 'Question ID to delete',
         example: 1,
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Question deleted successfully',
-        type: StandardOperationResponse,
-    })
-    @ApiResponse({
-        status: HttpStatus.BAD_REQUEST,
-        description: '❌ Cannot delete question that has submitted answers',
-    })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-    })
-    @ApiResponse({
-        status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - No permission to delete this question',
-    })
-    @ApiResponse({
-        status: HttpStatus.NOT_FOUND,
-        description: '❌ Question not found',
+        type: QuestionDeletedResponse,
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(
-                `Deleting question ${id} for user: ${scope.userId}`,
-            );
+            this.logger.log(`Deleting question ${id} by user: ${req.user.id}`);
 
-            const result = await this.questionsService.remove(id, scope.userId);
-
-            this.logger.log(`Question ${id} deleted successfully`);
-
-            return result;
+            return await this.questionsService.remove(id, req.user.id);
         } catch (error) {
             this.logger.error(
-                `Error deleting question ${id} for user ${scope.userId}:`,
-                error instanceof Error ? error.message : String(error),
+                `Error deleting question ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('test/:testId/count')
+    @ApiOperation({
+        summary: '🔢 Get Question Count for Test',
+        description: `
+      **Retrieves the total number of questions in a test with caching**
+      
+      This endpoint provides efficient question counting with:
+      - Comprehensive caching for performance
+      - Fast count retrieval without full data loading
+      - Test validation and access control
+    `,
+        operationId: 'getQuestionCount',
+    })
+    @ApiParam({
+        name: 'testId',
+        description: 'Test ID to count questions for',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Question count retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Question count retrieved successfully',
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        count: { type: 'number', example: 15 },
+                        testId: { type: 'number', example: 1 },
+                    },
+                },
+                meta: {
+                    type: 'object',
+                    properties: {
+                        timestamp: {
+                            type: 'string',
+                            example: '2024-01-01T12:00:00.000Z',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    async getQuestionCount(
+        @Param('testId', ParseIntPipe) testId: number,
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(
+                `Getting question count for test ${testId} by user: ${req.user.id}`,
+            );
+
+            const count = await this.questionsService.getQuestionCount(testId);
+
+            return {
+                success: true,
+                message: 'Question count retrieved successfully',
+                data: {
+                    count,
+                    testId,
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting question count for test ${testId} by user ${req.user.id}:`,
+                error,
             );
             throw error;
         }

@@ -9,7 +9,7 @@ export class StandardApiResponse<T = any> {
 
     @ApiProperty({
         description: 'Human-readable message about the operation result',
-        example: 'Operation completed successfully',
+        example: 'Question option created successfully',
     })
     message: string;
 
@@ -38,7 +38,7 @@ export class StandardApiResponse<T = any> {
 export class StandardOperationResponse {
     @ApiProperty({
         description: 'Human-readable message about the operation result',
-        example: 'Operation completed successfully',
+        example: 'Question option created successfully',
     })
     message: string;
 

@@ -24,22 +24,31 @@ import { StandardOperationResponse } from '../user/dto/common-response.dto';
 export class QuestionsOptionsService {
     private readonly logger = new Logger(QuestionsOptionsService.name);
 
-    // Cache keys
+    // Cache keys with comprehensive coverage
     private readonly CACHE_KEYS = {
         OPTION_BY_ID: (id: number) => `question-option:${id}`,
         OPTIONS_BY_QUESTION: (questionId: number) =>
             `question-options:question:${questionId}`,
-        QUESTION_OPTIONS_LIST: (filters: string) =>
-            `question-options:list:${filters}`,
         OPTION_STATS: (questionId: number) =>
             `question-option:stats:${questionId}`,
+        OPTION_LIST: (filters: string) => `question-options:list:${filters}`,
+        QUESTION_OPTIONS_COUNT: (questionId: number) =>
+            `question:${questionId}:options:count`,
+        USER_OPTIONS: (userId: string) => `user:${userId}:options`,
+        ALL_OPTIONS: 'question-options:all',
+        CORRECT_OPTIONS: (questionId: number) =>
+            `question:${questionId}:correct-options`,
     };
 
-    // Cache TTL in seconds
+    // Cache TTL in seconds with different durations for different data types
     private readonly CACHE_TTL = {
         OPTION: 300, // 5 minutes
         OPTION_LIST: 180, // 3 minutes
         STATS: 600, // 10 minutes
+        COUNT: 120, // 2 minutes
+        USER_DATA: 240, // 4 minutes
+        ALL_OPTIONS: 900, // 15 minutes
+        CORRECT_OPTIONS: 300, // 5 minutes
     };
 
     constructor(
@@ -51,34 +60,6 @@ export class QuestionsOptionsService {
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
-
-    /**
-     * Cache helper methods
-     */
-    private async invalidateOptionCache(
-        optionId: number,
-        questionId?: number,
-    ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.OPTION_BY_ID(optionId)];
-
-        if (questionId) {
-            keysToDelete.push(this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId));
-            keysToDelete.push(this.CACHE_KEYS.OPTION_STATS(questionId));
-        }
-
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
-    }
-
-    private async invalidateQuestionOptionsCache(
-        questionId: number,
-    ): Promise<void> {
-        const keysToDelete = [
-            this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
-            this.CACHE_KEYS.OPTION_STATS(questionId),
-        ];
-
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
-    }
 
     /**
      * Retry database operations with exponential backoff
@@ -111,7 +92,87 @@ export class QuestionsOptionsService {
     }
 
     /**
-     * Create a new question option
+     * Comprehensive cache invalidation methods
+     */
+    private async invalidateOptionCache(
+        optionId: number,
+        questionId?: number,
+    ): Promise<void> {
+        const keysToDelete = [this.CACHE_KEYS.OPTION_BY_ID(optionId)];
+
+        if (questionId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
+                this.CACHE_KEYS.OPTION_STATS(questionId),
+                this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId),
+                this.CACHE_KEYS.CORRECT_OPTIONS(questionId),
+            );
+        }
+
+        // Also invalidate general option lists
+        keysToDelete.push(this.CACHE_KEYS.ALL_OPTIONS);
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async invalidateQuestionOptionsCache(
+        questionId: number,
+    ): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
+            this.CACHE_KEYS.OPTION_STATS(questionId),
+            this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId),
+            this.CACHE_KEYS.CORRECT_OPTIONS(questionId),
+            this.CACHE_KEYS.ALL_OPTIONS,
+        ];
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async invalidateUserOptionsCache(userId: string): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.USER_OPTIONS(userId),
+            this.CACHE_KEYS.ALL_OPTIONS,
+        ];
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    /**
+     * Create a new question option with comprehensive caching
      */
     async create(
         createQuestionOptionDto: CreateQuestionOptionDto,
@@ -129,11 +190,19 @@ export class QuestionsOptionsService {
             const option = this.questionOptionRepository.create(
                 createQuestionOptionDto,
             );
-            await this.questionOptionRepository.save(option);
+            const savedOption =
+                await this.questionOptionRepository.save(option);
 
-            // Invalidate caches
-            await this.invalidateQuestionOptionsCache(
-                createQuestionOptionDto.questionId,
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateQuestionOptionsCache(
+                    createQuestionOptionDto.questionId,
+                ),
+                this.invalidateUserOptionsCache(userId),
+            ]);
+
+            this.logger.log(
+                `Question option ${savedOption.optionId} created successfully`,
             );
 
             return {
@@ -145,7 +214,7 @@ export class QuestionsOptionsService {
     }
 
     /**
-     * Create multiple options in bulk
+     * Create multiple options in bulk with comprehensive caching
      */
     async createBulk(
         bulkCreateDto: BulkCreateOptionsDto,
@@ -165,6 +234,8 @@ export class QuestionsOptionsService {
             await queryRunner.startTransaction();
 
             try {
+                const createdOptions: QuestionOption[] = [];
+
                 for (const optionData of bulkCreateDto.options) {
                     const optionDto: CreateQuestionOptionDto = {
                         questionId: bulkCreateDto.questionId,
@@ -176,14 +247,22 @@ export class QuestionsOptionsService {
                         QuestionOption,
                         optionDto,
                     );
-                    await queryRunner.manager.save(option);
+                    const savedOption = await queryRunner.manager.save(option);
+                    createdOptions.push(savedOption);
                 }
 
                 await queryRunner.commitTransaction();
 
-                // Invalidate caches
-                await this.invalidateQuestionOptionsCache(
-                    bulkCreateDto.questionId,
+                // Comprehensive cache invalidation
+                await Promise.all([
+                    this.invalidateQuestionOptionsCache(
+                        bulkCreateDto.questionId,
+                    ),
+                    this.invalidateUserOptionsCache(userId),
+                ]);
+
+                this.logger.log(
+                    `${createdOptions.length} question options created successfully in bulk`,
                 );
 
                 return {
@@ -201,7 +280,7 @@ export class QuestionsOptionsService {
     }
 
     /**
-     * Find options by question
+     * Find options by question with comprehensive caching
      */
     async findByQuestion(
         questionId: number,
@@ -211,13 +290,24 @@ export class QuestionsOptionsService {
         return this.retryOperation(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId);
-            const cachedResult =
-                await this.cacheManager.get<QuestionOptionListResponseDto>(
-                    cacheKey,
-                );
 
-            if (cachedResult) {
-                return cachedResult;
+            try {
+                const cachedResult =
+                    await this.cacheManager.get<QuestionOptionListResponseDto>(
+                        cacheKey,
+                    );
+
+                if (cachedResult) {
+                    this.logger.debug(
+                        `Cache hit for question options: ${cacheKey}`,
+                    );
+                    return cachedResult;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             // Validate question access with scope
@@ -254,19 +344,29 @@ export class QuestionsOptionsService {
                     : undefined,
             };
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.OPTION_LIST * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.OPTION_LIST * 1000,
+                );
+                this.logger.debug(
+                    `Cache set for question options: ${cacheKey}`,
+                );
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
     }
 
     /**
-     * Find a single option by ID
+     * Find a single option by ID with comprehensive caching
      */
     async findOne(
         id: number,
@@ -276,13 +376,22 @@ export class QuestionsOptionsService {
         return this.retryOperation(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.OPTION_BY_ID(id);
-            const cachedOption =
-                await this.cacheManager.get<QuestionOptionResponseDto>(
-                    cacheKey,
-                );
 
-            if (cachedOption) {
-                return cachedOption;
+            try {
+                const cachedOption =
+                    await this.cacheManager.get<QuestionOptionResponseDto>(
+                        cacheKey,
+                    );
+
+                if (cachedOption) {
+                    this.logger.debug(`Cache hit for option: ${cacheKey}`);
+                    return cachedOption;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const option = await this.questionOptionRepository.findOne({
@@ -305,19 +414,27 @@ export class QuestionsOptionsService {
 
             const result = this.mapToResponseDto(option);
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.OPTION * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.OPTION * 1000,
+                );
+                this.logger.debug(`Cache set for option: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
     }
 
     /**
-     * Update a question option
+     * Update a question option with comprehensive cache invalidation
      */
     async update(
         id: number,
@@ -347,8 +464,13 @@ export class QuestionsOptionsService {
             Object.assign(option, updateQuestionOptionDto);
             await this.questionOptionRepository.save(option);
 
-            // Invalidate caches
-            await this.invalidateOptionCache(id, option.questionId);
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateOptionCache(id, option.questionId),
+                this.invalidateUserOptionsCache(userId),
+            ]);
+
+            this.logger.log(`Question option ${id} updated successfully`);
 
             return {
                 message: 'Question option updated successfully',
@@ -359,7 +481,7 @@ export class QuestionsOptionsService {
     }
 
     /**
-     * Delete a question option
+     * Delete a question option with comprehensive cache invalidation
      */
     async remove(
         id: number,
@@ -394,14 +516,110 @@ export class QuestionsOptionsService {
             const questionId = option.questionId;
             await this.questionOptionRepository.remove(option);
 
-            // Invalidate caches
-            await this.invalidateOptionCache(id, questionId);
+            // Comprehensive cache invalidation
+            await Promise.all([
+                this.invalidateOptionCache(id, questionId),
+                this.invalidateUserOptionsCache(userId),
+            ]);
+
+            this.logger.log(`Question option ${id} deleted successfully`);
 
             return {
                 message: 'Question option deleted successfully',
                 status: 'success',
                 code: 200,
             };
+        });
+    }
+
+    /**
+     * Get option count for a question with caching
+     */
+    async getOptionCount(questionId: number): Promise<number> {
+        return this.retryOperation(async () => {
+            const cacheKey = this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId);
+
+            try {
+                const cachedCount =
+                    await this.cacheManager.get<number>(cacheKey);
+                if (cachedCount !== undefined && cachedCount !== null) {
+                    this.logger.debug(
+                        `Cache hit for option count: ${cacheKey}`,
+                    );
+                    return cachedCount;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            const count = await this.questionOptionRepository.count({
+                where: { questionId },
+            });
+
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    count,
+                    this.CACHE_TTL.COUNT * 1000,
+                );
+                this.logger.debug(`Cache set for option count: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            return count;
+        });
+    }
+
+    /**
+     * Get correct options for a question with caching
+     */
+    async getCorrectOptions(questionId: number): Promise<QuestionOption[]> {
+        return this.retryOperation(async () => {
+            const cacheKey = this.CACHE_KEYS.CORRECT_OPTIONS(questionId);
+
+            try {
+                const cachedOptions =
+                    await this.cacheManager.get<QuestionOption[]>(cacheKey);
+                if (cachedOptions) {
+                    this.logger.debug(
+                        `Cache hit for correct options: ${cacheKey}`,
+                    );
+                    return cachedOptions;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            const correctOptions = await this.questionOptionRepository.find({
+                where: { questionId, isCorrect: true },
+                order: { optionId: 'ASC' },
+            });
+
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    correctOptions,
+                    this.CACHE_TTL.CORRECT_OPTIONS * 1000,
+                );
+                this.logger.debug(`Cache set for correct options: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            return correctOptions;
         });
     }
 
