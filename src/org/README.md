@@ -241,7 +241,7 @@ export interface OrganizationSettings {
       "userLimit": 5000,
       "currentUserCount": 0,
       "isActive": true,
-      "createdAt": "2024-01-15T10:00:00Z",
+      "createdAt": "2025-01-15T10:00:00Z",
       "settings": {
         "branding": {
           "primaryColor": "#1e40af",
@@ -281,8 +281,8 @@ export interface OrganizationSettings {
         "currentUserCount": 2485,
         "utilizationRate": 49.7,
         "isActive": true,
-        "createdAt": "2024-01-15T10:00:00Z",
-        "lastActivity": "2024-01-20T14:30:00Z"
+        "createdAt": "2025-01-15T10:00:00Z",
+        "lastActivity": "2025-01-20T14:30:00Z"
       }
     ],
     "pagination": {
@@ -324,11 +324,11 @@ export interface OrganizationSettings {
       "size": "large",
       "subscriptionStatus": "active",
       "subscriptionPlan": "enterprise",
-      "subscriptionExpiry": "2024-12-31T23:59:59Z",
+      "subscriptionExpiry": "2025-12-31T23:59:59Z",
       "userLimit": 5000,
       "currentUserCount": 2485,
       "isActive": true,
-      "createdAt": "2024-01-15T10:00:00Z",
+      "createdAt": "2025-01-15T10:00:00Z",
       "settings": {
         "branding": {
           "primaryColor": "#1e40af",
@@ -368,7 +368,7 @@ export interface OrganizationSettings {
     "billing": {
       "currentPlan": "enterprise",
       "monthlyFee": 2500.00,
-      "nextBillingDate": "2024-02-15T00:00:00Z",
+      "nextBillingDate": "2025-02-15T00:00:00Z",
       "paymentMethod": "credit_card",
       "billingContact": {
         "name": "Sarah Johnson",
@@ -435,9 +435,9 @@ export interface OrganizationSettings {
     },
     "userAnalytics": {
       "registrationTrend": [
-        { "date": "2024-01-01", "newUsers": 45 },
-        { "date": "2024-01-02", "newUsers": 52 },
-        { "date": "2024-01-03", "newUsers": 38 }
+        { "date": "2025-01-01", "newUsers": 45 },
+        { "date": "2025-01-02", "newUsers": 52 },
+        { "date": "2025-01-03", "newUsers": 38 }
       ],
       "activityMetrics": {
         "dailyActiveUsers": 847,
@@ -511,7 +511,7 @@ export interface OrganizationSettings {
     },
     "historicalUsage": [
       {
-        "month": "2024-01",
+        "month": "2025-01",
         "users": 2485,
         "storage": 47.2,
         "apiCalls": 125847,
@@ -624,7 +624,7 @@ export interface OrganizationSettings {
     "organization": {
       "orgId": 1,
       "isActive": true,
-      "activatedAt": "2024-01-15T16:30:00Z"
+      "activatedAt": "2025-01-15T16:30:00Z"
     }
   },
   "message": "Organization activated successfully"
@@ -648,8 +648,8 @@ export interface OrganizationSettings {
     "organization": {
       "orgId": 1,
       "isActive": false,
-      "deactivatedAt": "2024-01-15T16:30:00Z",
-      "gracePeriodEnds": "2024-01-22T16:30:00Z"
+      "deactivatedAt": "2025-01-15T16:30:00Z",
+      "gracePeriodEnds": "2025-01-22T16:30:00Z"
     }
   },
   "message": "Organization deactivated successfully"

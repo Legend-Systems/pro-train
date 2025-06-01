@@ -109,7 +109,7 @@ export class Result {
     @Column({ type: 'timestamp' })
     @ApiProperty({
         description: 'When the result was calculated',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @IsDateString()
     calculatedAt: Date;
@@ -117,14 +117,14 @@ export class Result {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Result creation timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Result last update timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     updatedAt: Date;
 

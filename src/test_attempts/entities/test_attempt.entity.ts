@@ -86,7 +86,7 @@ export class TestAttempt {
     @Column({ type: 'timestamp' })
     @ApiProperty({
         description: 'When the test attempt started',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     @IsDateString()
     startTime: Date;
@@ -94,7 +94,7 @@ export class TestAttempt {
     @Column({ type: 'timestamp', nullable: true })
     @ApiProperty({
         description: 'When the test attempt was submitted',
-        example: '2024-01-01T10:30:00.000Z',
+        example: '2025-01-01T10:30:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -104,7 +104,7 @@ export class TestAttempt {
     @Column({ type: 'timestamp', nullable: true })
     @ApiProperty({
         description: 'When the test attempt expires (based on duration)',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -124,14 +124,14 @@ export class TestAttempt {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Test attempt creation timestamp',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Test attempt last update timestamp',
-        example: '2024-01-01T10:15:30.123Z',
+        example: '2025-01-01T10:15:30.123Z',
     })
     updatedAt: Date;
 

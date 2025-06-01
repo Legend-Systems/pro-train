@@ -169,7 +169,7 @@ export enum AttemptStatus {
     "userId": "user-uuid",
     "attemptNumber": 1,
     "status": "in_progress",
-    "startTime": "2024-01-15T10:30:00Z",
+    "startTime": "2025-01-15T10:30:00Z",
     "timeLimit": 120,
     "timeRemaining": 7200,
     "test": {
@@ -211,7 +211,7 @@ export enum AttemptStatus {
       "userId": "user-uuid",
       "attemptNumber": 1,
       "status": "in_progress",
-      "startTime": "2024-01-15T10:30:00Z",
+      "startTime": "2025-01-15T10:30:00Z",
       "timeSpent": 1800,
       "timeRemaining": 5400,
       "isCompleted": false,
@@ -291,7 +291,7 @@ export enum AttemptStatus {
       "isCorrect": true,
       "points": 4,
       "timeSpent": 45,
-      "submittedAt": "2024-01-15T10:35:00Z"
+      "submittedAt": "2025-01-15T10:35:00Z"
     },
     "progress": {
       "questionsAnswered": 16,
@@ -327,8 +327,8 @@ export enum AttemptStatus {
     "attempt": {
       "attemptId": "uuid-attempt-id",
       "status": "submitted",
-      "submittedAt": "2024-01-15T12:15:00Z",
-      "endTime": "2024-01-15T12:15:00Z",
+      "submittedAt": "2025-01-15T12:15:00Z",
+      "endTime": "2025-01-15T12:15:00Z",
       "timeSpent": 6300,
       "score": 85.5,
       "maxScore": 100,
@@ -455,7 +455,7 @@ export enum AttemptStatus {
 **Get All Attempts for Test**
 ```typescript
 // Query Parameters
-?page=1&limit=20&status=completed&userId=user-uuid&dateFrom=2024-01-01
+?page=1&limit=20&status=completed&userId=user-uuid&dateFrom=2025-01-01
 
 // Response
 {
@@ -472,8 +472,8 @@ export enum AttemptStatus {
         },
         "attemptNumber": 1,
         "status": "submitted",
-        "startTime": "2024-01-15T10:30:00Z",
-        "endTime": "2024-01-15T12:15:00Z",
+        "startTime": "2025-01-15T10:30:00Z",
+        "endTime": "2025-01-15T12:15:00Z",
         "timeSpent": 6300,
         "score": 85.5,
         "percentage": 85.5,
@@ -521,7 +521,7 @@ export enum AttemptStatus {
         "percentage": 85.5,
         "grade": "B+",
         "timeSpent": 6300,
-        "submittedAt": "2024-01-15T12:15:00Z",
+        "submittedAt": "2025-01-15T12:15:00Z",
         "canRetake": true,
         "attemptsRemaining": 2
       }
@@ -609,7 +609,7 @@ export enum AttemptStatus {
     "attemptId": "uuid-attempt-id",
     "newTimeLimit": 150,
     "timeAdded": 30,
-    "newEndTime": "2024-01-15T14:45:00Z",
+    "newEndTime": "2025-01-15T14:45:00Z",
     "reason": "Technical difficulties experienced by student"
   },
   "message": "Attempt time extended by 30 minutes"

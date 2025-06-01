@@ -172,7 +172,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Response generation timestamp',
                         },
                         cached: {
@@ -359,7 +359,7 @@ export class ReportsController {
                             date: {
                                 type: 'string',
                                 format: 'date',
-                                example: '2024-01-15',
+                                example: '2025-01-15',
                                 description: 'Date of enrollment record',
                             },
                             newEnrollments: {
@@ -864,7 +864,7 @@ export class ReportsController {
                     date: {
                         type: 'string',
                         format: 'date',
-                        example: '2024-01-15',
+                        example: '2025-01-15',
                     },
                     newRegistrations: {
                         type: 'number',
@@ -1084,7 +1084,7 @@ export class ReportsController {
                     date: {
                         type: 'string',
                         format: 'date',
-                        example: '2024-01-15',
+                        example: '2025-01-15',
                     },
                     attempts: {
                         type: 'number',
@@ -1273,7 +1273,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Analytics generation timestamp',
                         },
                         dataFreshness: {
@@ -1508,7 +1508,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Statistics generation timestamp',
                         },
                         dataRange: {
@@ -1534,7 +1534,7 @@ export class ReportsController {
                         'Unable to process global statistics due to system error',
                 },
                 error: { type: 'string', example: 'Internal Server Error' },
-                timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                timestamp: { type: 'string', example: '2025-01-15T10:30:00Z' },
                 path: {
                     type: 'string',
                     example: '/api/reports/results/global-stats',
@@ -1555,7 +1555,7 @@ export class ReportsController {
                         'Unauthorized access. Please provide a valid JWT token.',
                 },
                 error: { type: 'string', example: 'Unauthorized' },
-                timestamp: { type: 'string', example: '2024-01-15T10:30:00Z' },
+                timestamp: { type: 'string', example: '2025-01-15T10:30:00Z' },
                 path: {
                     type: 'string',
                     example: '/api/reports/results/global-stats',
@@ -1656,14 +1656,14 @@ export class ReportsController {
         name: 'startDate',
         required: false,
         description: 'Start date for trend analysis (ISO 8601 format)',
-        example: '2024-01-01',
+        example: '2025-01-01',
         type: 'string',
     })
     @ApiQuery({
         name: 'endDate',
         required: false,
         description: 'End date for trend analysis (ISO 8601 format)',
-        example: '2024-12-31',
+        example: '2025-12-31',
         type: 'string',
     })
     @ApiQuery({
@@ -1702,7 +1702,7 @@ export class ReportsController {
                                     date: {
                                         type: 'string',
                                         format: 'date',
-                                        example: '2024-01-15',
+                                        example: '2025-01-15',
                                         description: 'Data point date',
                                     },
                                     averageScore: {
@@ -1749,7 +1749,7 @@ export class ReportsController {
                                 },
                                 bestPeriod: {
                                     type: 'string',
-                                    example: '2024-01-22',
+                                    example: '2025-01-22',
                                     description: 'Date of best performance',
                                 },
                                 consistency: {
@@ -1767,7 +1767,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Analysis generation timestamp',
                         },
                         dataPoints: {
@@ -2001,7 +2001,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Analytics generation timestamp',
                         },
                         dataRange: {
@@ -2302,7 +2302,7 @@ export class ReportsController {
                     properties: {
                         timestamp: {
                             type: 'string',
-                            example: '2024-01-15T10:30:00Z',
+                            example: '2025-01-15T10:30:00Z',
                             description: 'Analytics generation timestamp',
                         },
                         dataPoints: {

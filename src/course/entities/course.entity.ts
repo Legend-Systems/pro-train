@@ -61,14 +61,14 @@ export class Course {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Course creation timestamp',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Course last update timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
     })
     updatedAt: Date;
 

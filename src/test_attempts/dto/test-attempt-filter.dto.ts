@@ -40,7 +40,7 @@ export class TestAttemptFilterDto {
 
     @ApiProperty({
         description: 'Filter by start date (from)',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -49,7 +49,7 @@ export class TestAttemptFilterDto {
 
     @ApiProperty({
         description: 'Filter by start date (to)',
-        example: '2024-01-31T23:59:59.999Z',
+        example: '2025-01-31T23:59:59.999Z',
         required: false,
     })
     @IsOptional()
@@ -58,7 +58,7 @@ export class TestAttemptFilterDto {
 
     @ApiProperty({
         description: 'Filter by submit date (from)',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -67,7 +67,7 @@ export class TestAttemptFilterDto {
 
     @ApiProperty({
         description: 'Filter by submit date (to)',
-        example: '2024-01-31T23:59:59.999Z',
+        example: '2025-01-31T23:59:59.999Z',
         required: false,
     })
     @IsOptional()

@@ -73,7 +73,7 @@ reports/
       "courseId": 1,
       "title": "Web Development Bootcamp",
       "description": "Comprehensive web development training program",
-      "createdAt": "2024-01-01T00:00:00Z",
+      "createdAt": "2025-01-01T00:00:00Z",
       "isActive": true,
       "totalMaterials": 25,
       "totalTests": 8
@@ -136,7 +136,7 @@ reports/
     }
   },
   "meta": {
-    "timestamp": "2024-01-20T15:30:00Z",
+    "timestamp": "2025-01-20T15:30:00Z",
     "cached": false,
     "dataFreshness": "real-time"
   }
@@ -152,19 +152,19 @@ reports/
   "message": "Course enrollment trends retrieved successfully",
   "data": [
     {
-      "date": "2024-01-01",
+      "date": "2025-01-01",
       "newEnrollments": 15,
       "cumulativeEnrollments": 15,
       "growthRate": 0.0
     },
     {
-      "date": "2024-01-02",
+      "date": "2025-01-02",
       "newEnrollments": 8,
       "cumulativeEnrollments": 23,
       "growthRate": 53.3
     },
     {
-      "date": "2024-01-03",
+      "date": "2025-01-03",
       "newEnrollments": 12,
       "cumulativeEnrollments": 35,
       "growthRate": 52.2
@@ -188,8 +188,8 @@ reports/
       "firstName": "John",
       "lastName": "Doe",
       "email": "john.doe@university.edu",
-      "registrationDate": "2024-01-01T00:00:00Z",
-      "lastActive": "2024-01-20T14:30:00Z"
+      "registrationDate": "2025-01-01T00:00:00Z",
+      "lastActive": "2025-01-20T14:30:00Z"
     },
     "learningMetrics": {
       "totalCoursesEnrolled": 5,
@@ -222,7 +222,7 @@ reports/
         {
           "badgeId": "quick-learner",
           "name": "Quick Learner",
-          "earnedAt": "2024-01-18T10:00:00Z"
+          "earnedAt": "2025-01-18T10:00:00Z"
         }
       ],
       "nextMilestones": [
@@ -254,7 +254,7 @@ reports/
       "totalQuestions": 25,
       "maxScore": 100,
       "timeLimit": 60,
-      "createdAt": "2024-01-01T00:00:00Z"
+      "createdAt": "2025-01-01T00:00:00Z"
     },
     "attemptMetrics": {
       "totalAttempts": 180,
@@ -411,7 +411,7 @@ reports/
       "overallProgress": 75.5,
       "coursesInProgress": 2,
       "coursesCompleted": 3,
-      "estimatedCompletion": "2024-03-15",
+      "estimatedCompletion": "2025-03-15",
       "learningVelocity": "above average"
     },
     "skillDevelopment": [

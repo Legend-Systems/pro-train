@@ -82,7 +82,7 @@ export class LeaderboardEntryDto {
 
     @ApiProperty({
         description: 'Last activity date',
-        example: '2024-01-15T14:30:00.000Z',
+        example: '2025-01-15T14:30:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -143,7 +143,7 @@ export class LeaderboardMetaDto {
 
     @ApiProperty({
         description: 'Last leaderboard update',
-        example: '2024-01-16T02:00:00.000Z',
+        example: '2025-01-16T02:00:00.000Z',
     })
     @IsDate()
     @Type(() => Date)

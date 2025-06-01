@@ -135,8 +135,8 @@ export class TrainingProgress {
       "timeSpentMinutes": 120,
       "questionsCompleted": 15,
       "totalQuestions": 20,
-      "lastUpdated": "2024-01-20T14:30:00Z",
-      "createdAt": "2024-01-15T09:00:00Z",
+      "lastUpdated": "2025-01-20T14:30:00Z",
+      "createdAt": "2025-01-15T09:00:00Z",
       "course": {
         "courseId": 1,
         "title": "Web Development Bootcamp",
@@ -198,7 +198,7 @@ export class TrainingProgress {
     "timeSpentMinutes": 135,
     "questionsCompleted": 16,
     "totalQuestions": 20,
-    "lastUpdated": "2024-01-20T15:45:00Z",
+    "lastUpdated": "2025-01-20T15:45:00Z",
     "progressChange": {
       "completionIncrease": 4.5,
       "timeAdded": 15,
@@ -210,7 +210,7 @@ export class TrainingProgress {
         "type": "milestone",
         "name": "80% Completion",
         "description": "Reached 80% completion in JavaScript Fundamentals",
-        "earnedAt": "2024-01-20T15:45:00Z"
+        "earnedAt": "2025-01-20T15:45:00Z"
       }
     ],
     "nextMilestones": [
@@ -243,14 +243,14 @@ export class TrainingProgress {
         "firstName": "John",
         "lastName": "Doe",
         "email": "john.doe@university.edu",
-        "enrollmentDate": "2024-01-01T00:00:00Z"
+        "enrollmentDate": "2025-01-01T00:00:00Z"
       },
       "courseId": 1,
       "completionPercentage": 75.5,
       "timeSpentMinutes": 1200,
       "questionsCompleted": 85,
       "totalQuestions": 120,
-      "lastUpdated": "2024-01-20T14:30:00Z",
+      "lastUpdated": "2025-01-20T14:30:00Z",
       "testProgress": [
         {
           "testId": 15,
@@ -347,7 +347,7 @@ export class TrainingProgress {
       "currentModule": "JavaScript Advanced Concepts",
       "nextModule": "React Fundamentals",
       "recommendedStudyTime": "3 hours/week",
-      "estimatedCompletion": "2024-03-15",
+      "estimatedCompletion": "2025-03-15",
       "adaptiveRecommendations": [
         "Focus on async programming concepts",
         "Practice more coding exercises",
@@ -406,13 +406,13 @@ export class TrainingProgress {
     ],
     "performanceTrends": {
       "weeklyProgress": [
-        { "week": "2024-W01", "progress": 5.2, "timeSpent": 180 },
-        { "week": "2024-W02", "progress": 8.1, "timeSpent": 210 },
-        { "week": "2024-W03", "progress": 6.8, "timeSpent": 195 }
+        { "week": "2025-W01", "progress": 5.2, "timeSpent": 180 },
+        { "week": "2025-W02", "progress": 8.1, "timeSpent": 210 },
+        { "week": "2025-W03", "progress": 6.8, "timeSpent": 195 }
       ],
       "improvementRate": 12.5,
       "learningCurve": "positive",
-      "projectedCompletion": "2024-03-15"
+      "projectedCompletion": "2025-03-15"
     }
   }
 }
@@ -436,8 +436,8 @@ export class TrainingProgress {
     "timeSpentMinutes": 120,
     "questionsCompleted": 15,
     "totalQuestions": 20,
-    "lastUpdated": "2024-01-20T14:30:00Z",
-    "createdAt": "2024-01-15T09:00:00Z",
+    "lastUpdated": "2025-01-20T14:30:00Z",
+    "createdAt": "2025-01-15T09:00:00Z",
     "user": {
       "firstName": "John",
       "lastName": "Doe",
@@ -454,17 +454,17 @@ export class TrainingProgress {
     },
     "progressHistory": [
       {
-        "date": "2024-01-15",
+        "date": "2025-01-15",
         "completion": 0.0,
         "timeSpent": 0
       },
       {
-        "date": "2024-01-16",
+        "date": "2025-01-16",
         "completion": 25.0,
         "timeSpent": 30
       },
       {
-        "date": "2024-01-20",
+        "date": "2025-01-20",
         "completion": 75.5,
         "timeSpent": 120
       }
@@ -492,7 +492,7 @@ export class TrainingProgress {
     "completionPercentage": 85.0,
     "timeSpentMinutes": 140,
     "questionsCompleted": 17,
-    "lastUpdated": "2024-01-20T16:00:00Z",
+    "lastUpdated": "2025-01-20T16:00:00Z",
     "changes": {
       "completionIncrease": 9.5,
       "timeAdded": 20,
@@ -511,7 +511,7 @@ export class TrainingProgress {
   "message": "Progress record deleted successfully",
   "data": {
     "deletedProgressId": 1,
-    "deletedAt": "2024-01-20T16:30:00Z",
+    "deletedAt": "2025-01-20T16:30:00Z",
     "backupCreated": true
   }
 }

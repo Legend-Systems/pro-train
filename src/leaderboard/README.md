@@ -137,7 +137,7 @@ export class Leaderboard {
         "achievementLevel": "expert",
         "badges": ["top_performer", "consistent_learner", "quiz_master"],
         "streakDays": 15,
-        "lastActive": "2024-01-20T16:45:00Z"
+        "lastActive": "2025-01-20T16:45:00Z"
       },
       {
         "leaderboardId": 2,
@@ -155,7 +155,7 @@ export class Leaderboard {
         "achievementLevel": "advanced",
         "badges": ["quick_learner", "high_achiever"],
         "streakDays": 8,
-        "lastActive": "2024-01-20T14:20:00Z"
+        "lastActive": "2025-01-20T14:20:00Z"
       }
     ],
     "metadata": {
@@ -167,11 +167,11 @@ export class Leaderboard {
       "topScore": 92.5,
       "medianScore": 74.8,
       "competitionPeriod": {
-        "startDate": "2024-01-01T00:00:00Z",
-        "endDate": "2024-03-31T23:59:59Z",
+        "startDate": "2025-01-01T00:00:00Z",
+        "endDate": "2025-03-31T23:59:59Z",
         "daysRemaining": 45
       },
-      "lastUpdated": "2024-01-20T17:00:00Z"
+      "lastUpdated": "2025-01-20T17:00:00Z"
     },
     "pagination": {
       "total": 150,
@@ -253,7 +253,7 @@ export class Leaderboard {
   "data": {
     "refreshInfo": {
       "courseId": 1,
-      "refreshedAt": "2024-01-20T17:30:00Z",
+      "refreshedAt": "2025-01-20T17:30:00Z",
       "entriesUpdated": 150,
       "rankChanges": 42,
       "newEntries": 3,
@@ -271,7 +271,7 @@ export class Leaderboard {
       "achievementsUnlocked": 8,
       "participationIncrease": 2.5
     },
-    "nextScheduledRefresh": "2024-01-20T18:00:00Z"
+    "nextScheduledRefresh": "2025-01-20T18:00:00Z"
   }
 }
 ```

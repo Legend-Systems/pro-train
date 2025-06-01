@@ -102,13 +102,13 @@ export class CourseMaterialResponseDto {
 
     @ApiProperty({
         description: '📅 Material creation timestamp',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 
     @ApiProperty({
         description: '📅 Material last update timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
     })
     updatedAt: Date;
 
@@ -214,14 +214,14 @@ export class CourseMaterialStatsDto {
 
     @ApiProperty({
         description: '📅 Most recent material addition timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
         required: false,
     })
     lastMaterialAddedAt?: Date;
 
     @ApiProperty({
         description: '📅 Most recent material update timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
         required: false,
     })
     lastMaterialUpdatedAt?: Date;

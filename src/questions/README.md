@@ -199,7 +199,7 @@ export enum QuestionDifficulty {
     "explanation": "Binary search divides the search space in half...",
     "difficulty": "medium",
     "tags": ["algorithms", "complexity", "search"],
-    "createdAt": "2024-01-15T10:30:00Z",
+    "createdAt": "2025-01-15T10:30:00Z",
     "test": {
       "testId": 15,
       "title": "Data Structures Quiz",
@@ -245,7 +245,7 @@ export enum QuestionDifficulty {
           "title": "Data Structures Quiz",
           "course": { "title": "Computer Science Fundamentals" }
         },
-        "createdAt": "2024-01-15T10:30:00Z"
+        "createdAt": "2025-01-15T10:30:00Z"
       }
     ],
     "pagination": {
@@ -335,8 +335,8 @@ export enum QuestionDifficulty {
       "hint": "Think about how the search space is reduced with each step",
       "difficulty": "medium",
       "tags": ["algorithms", "complexity", "search"],
-      "createdAt": "2024-01-15T10:30:00Z",
-      "updatedAt": "2024-01-15T10:30:00Z"
+      "createdAt": "2025-01-15T10:30:00Z",
+      "updatedAt": "2025-01-15T10:30:00Z"
     },
     "test": {
       "testId": 15,

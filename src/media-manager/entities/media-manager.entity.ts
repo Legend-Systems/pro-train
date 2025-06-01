@@ -57,7 +57,7 @@ export class MediaFile {
     @Column()
     @ApiProperty({
         description: 'Stored filename in GCS',
-        example: 'media/2024/01/15/uuid-course-image.jpg',
+        example: 'media/2025/01/15/uuid-course-image.jpg',
     })
     @IsString()
     @IsNotEmpty()
@@ -67,7 +67,7 @@ export class MediaFile {
     @ApiProperty({
         description: 'Full GCS URL for the file',
         example:
-            'https://storage.googleapis.com/bucket-name/media/2024/01/15/uuid-course-image.jpg',
+            'https://storage.googleapis.com/bucket-name/media/2025/01/15/uuid-course-image.jpg',
     })
     @IsString()
     @IsNotEmpty()
@@ -197,14 +197,14 @@ export class MediaFile {
     @CreateDateColumn()
     @ApiProperty({
         description: 'File upload timestamp',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'File last update timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
     })
     updatedAt: Date;
 

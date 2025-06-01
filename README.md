@@ -777,7 +777,7 @@ graph TD
             "lastName": "Doe",
             "avatar": { "id": 123, "url": "...", "thumbnail": "..." },
             "role": "user",
-            "createdAt": "2024-01-01T00:00:00.000Z"
+            "createdAt": "2025-01-01T00:00:00.000Z"
         },
         "organization": { "id": "org-id", "name": "Org Name" },
         "branch": { "id": "branch-id", "name": "Branch Name" }

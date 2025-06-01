@@ -5,7 +5,7 @@ import { IsNumber, IsString, IsArray, ValidateNested } from 'class-validator';
 export class LearningTrendDto {
     @ApiProperty({
         description: 'Time period (week/month)',
-        example: '2024-W03',
+        example: '2025-W03',
     })
     @IsString()
     period: string;

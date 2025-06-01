@@ -244,13 +244,13 @@ export class CourseController {
         name: 'createdAfter',
         required: false,
         description: 'Filter courses created after this date',
-        example: '2024-01-01',
+        example: '2025-01-01',
     })
     @ApiQuery({
         name: 'createdBefore',
         required: false,
         description: 'Filter courses created before this date',
-        example: '2024-12-31',
+        example: '2025-12-31',
     })
     @ApiQuery({
         name: 'page',
@@ -359,13 +359,13 @@ export class CourseController {
         name: 'createdAfter',
         required: false,
         description: 'Filter your courses created after this date',
-        example: '2024-01-01',
+        example: '2025-01-01',
     })
     @ApiQuery({
         name: 'createdBefore',
         required: false,
         description: 'Filter your courses created before this date',
-        example: '2024-12-31',
+        example: '2025-12-31',
     })
     @ApiQuery({
         name: 'page',

@@ -115,7 +115,7 @@ export class Answer {
     @Column({ type: 'timestamp', nullable: true })
     @ApiProperty({
         description: 'When this answer was marked/graded',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -135,14 +135,14 @@ export class Answer {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Answer submission timestamp',
-        example: '2024-01-01T09:30:00.000Z',
+        example: '2025-01-01T09:30:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Answer last update timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     updatedAt: Date;
 

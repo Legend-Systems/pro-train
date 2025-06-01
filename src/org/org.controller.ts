@@ -175,7 +175,7 @@ export class OrgController {
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-15T10:30:45.123Z',
+                            example: '2025-01-15T10:30:45.123Z',
                             description: 'Creation timestamp',
                         },
                     },
@@ -346,7 +346,7 @@ export class OrgController {
                             },
                             createdAt: {
                                 type: 'string',
-                                example: '2024-01-01T00:00:00.000Z',
+                                example: '2025-01-01T00:00:00.000Z',
                                 description: 'Creation timestamp',
                             },
                         },
@@ -521,14 +521,14 @@ export class OrgController {
                                     },
                                     createdAt: {
                                         type: 'string',
-                                        example: '2024-01-01T00:00:00.000Z',
+                                        example: '2025-01-01T00:00:00.000Z',
                                     },
                                 },
                             },
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-01T00:00:00.000Z',
+                            example: '2025-01-01T00:00:00.000Z',
                             description: 'Creation timestamp',
                         },
                     },
@@ -790,7 +790,7 @@ export class OrgController {
                 summary: '🎨 Branding Update',
                 description: 'Update logo and website information',
                 value: {
-                    logoUrl: 'https://cdn.stanford.edu/new-logo-2024.png',
+                    logoUrl: 'https://cdn.stanford.edu/new-logo-2025.png',
                     website: 'https://www.stanford.edu',
                 },
             },
@@ -854,7 +854,7 @@ export class OrgController {
                         logoUrl: {
                             type: 'string',
                             example:
-                                'https://cdn.stanford.edu/new-logo-2024.png',
+                                'https://cdn.stanford.edu/new-logo-2025.png',
                             description: 'Updated logo URL',
                         },
                         website: {
@@ -869,7 +869,7 @@ export class OrgController {
                         },
                         updatedAt: {
                             type: 'string',
-                            example: '2024-01-15T10:45:30.567Z',
+                            example: '2025-01-15T10:45:30.567Z',
                             description: 'Update timestamp',
                         },
                     },
@@ -1296,7 +1296,7 @@ export class OrgController {
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-15T10:30:45.123Z',
+                            example: '2025-01-15T10:30:45.123Z',
                             description: 'Creation timestamp',
                         },
                         organization: {

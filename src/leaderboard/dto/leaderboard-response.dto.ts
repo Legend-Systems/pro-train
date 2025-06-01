@@ -104,21 +104,21 @@ export class LeaderboardResponseDto {
 
     @ApiProperty({
         description: 'When the leaderboard entry was last updated',
-        example: '2024-01-01T12:00:00.000Z',
+        example: '2025-01-01T12:00:00.000Z',
     })
     @Expose()
     lastUpdated: Date;
 
     @ApiProperty({
         description: 'Leaderboard entry creation timestamp',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     @Expose()
     createdAt: Date;
 
     @ApiProperty({
         description: 'Leaderboard entry last update timestamp',
-        example: '2024-01-01T12:00:00.000Z',
+        example: '2025-01-01T12:00:00.000Z',
     })
     @Expose()
     updatedAt: Date;

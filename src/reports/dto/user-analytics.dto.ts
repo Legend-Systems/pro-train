@@ -101,7 +101,7 @@ export class UserEngagementDto {
 
     @ApiProperty({
         description: 'Last activity timestamp',
-        example: '2024-01-15T14:30:00.000Z',
+        example: '2025-01-15T14:30:00.000Z',
     })
     @IsDate()
     lastActivity: Date;
@@ -204,7 +204,7 @@ export class UserAnalyticsResponseDto {
 
     @ApiProperty({
         description: 'Timestamp when the report was generated',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
     })
     generatedAt: Date;
 

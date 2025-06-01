@@ -30,7 +30,7 @@ export class MediaFileResponseDto {
         description:
             'Processed filename stored in Google Cloud Storage with organization, date, and UUID for uniqueness',
         example:
-            'media/org-123/branch-456/2024/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
+            'media/org-123/branch-456/2025/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
         type: String,
         title: 'Stored Filename',
         maxLength: 500,
@@ -41,7 +41,7 @@ export class MediaFileResponseDto {
         description:
             'Full public URL for direct access to the file in Google Cloud Storage',
         example:
-            'https://storage.googleapis.com/crmapplications/media/org-123/branch-456/2024/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
+            'https://storage.googleapis.com/crmapplications/media/org-123/branch-456/2025/01/15/a1b2c3d4-e5f6-course-introduction-image.jpg',
         type: String,
         title: 'File URL',
         format: 'url',
@@ -191,7 +191,7 @@ export class MediaFileResponseDto {
     @ApiProperty({
         description:
             'Timestamp when the file was originally uploaded to the system',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
         type: String,
         title: 'Upload Date',
         format: 'date-time',
@@ -200,7 +200,7 @@ export class MediaFileResponseDto {
 
     @ApiProperty({
         description: 'Timestamp when the file metadata was last updated',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
         type: String,
         title: 'Last Updated',
         format: 'date-time',
@@ -356,7 +356,7 @@ export class MediaStatsDto {
 
     @ApiProperty({
         description: 'Most recent upload timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
         required: false,
     })
     lastUpload?: Date;

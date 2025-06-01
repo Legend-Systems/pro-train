@@ -163,7 +163,7 @@ export class LeaderboardFilterDto {
 
     @ApiPropertyOptional({
         description: 'Filter by activity after date',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     @IsOptional()
     @IsDate()
@@ -172,7 +172,7 @@ export class LeaderboardFilterDto {
 
     @ApiPropertyOptional({
         description: 'Filter by activity before date',
-        example: '2024-01-31T23:59:59.999Z',
+        example: '2025-01-31T23:59:59.999Z',
     })
     @IsOptional()
     @IsDate()

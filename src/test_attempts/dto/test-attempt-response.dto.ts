@@ -35,20 +35,20 @@ export class TestAttemptResponseDto {
 
     @ApiProperty({
         description: 'When the test attempt started',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     startTime: Date;
 
     @ApiProperty({
         description: 'When the test attempt was submitted',
-        example: '2024-01-01T10:30:00.000Z',
+        example: '2025-01-01T10:30:00.000Z',
         required: false,
     })
     submitTime?: Date;
 
     @ApiProperty({
         description: 'When the test attempt expires',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
         required: false,
     })
     expiresAt?: Date;
@@ -61,13 +61,13 @@ export class TestAttemptResponseDto {
 
     @ApiProperty({
         description: 'Test attempt creation timestamp',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     createdAt: Date;
 
     @ApiProperty({
         description: 'Test attempt last update timestamp',
-        example: '2024-01-01T10:15:30.123Z',
+        example: '2025-01-01T10:15:30.123Z',
     })
     updatedAt: Date;
 

@@ -149,7 +149,7 @@ export class BranchController {
                             },
                             createdAt: {
                                 type: 'string',
-                                example: '2024-01-01T00:00:00.000Z',
+                                example: '2025-01-01T00:00:00.000Z',
                                 description: 'Creation timestamp',
                             },
                         },
@@ -317,7 +317,7 @@ export class BranchController {
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-01T00:00:00.000Z',
+                            example: '2025-01-01T00:00:00.000Z',
                             description: 'Creation timestamp',
                         },
                     },
@@ -518,7 +518,7 @@ export class BranchController {
                         },
                         updatedAt: {
                             type: 'string',
-                            example: '2024-01-15T10:45:30.567Z',
+                            example: '2025-01-15T10:45:30.567Z',
                             description: 'Update timestamp',
                         },
                     },
@@ -658,7 +658,7 @@ export class BranchController {
                         },
                         deletedAt: {
                             type: 'string',
-                            example: '2024-01-15T10:45:30.567Z',
+                            example: '2025-01-15T10:45:30.567Z',
                             description: 'Deletion timestamp',
                         },
                         affectedRecords: {

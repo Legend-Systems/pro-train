@@ -37,7 +37,7 @@ export class PerformanceTrendLeaderboardDto {
         description: 'Date of the performance data',
         type: 'string',
         format: 'date',
-        example: '2024-01-15',
+        example: '2025-01-15',
     })
     date: string;
 
@@ -111,7 +111,7 @@ export class LeaderboardAnalyticsReportDto {
         description: 'Timestamp when the analytics were generated',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T10:30:00Z',
+        example: '2025-01-15T10:30:00Z',
     })
     generatedAt: Date;
 
@@ -248,7 +248,7 @@ export class GlobalLeaderboardStatsReportDto {
         description: 'Timestamp when the statistics were generated',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T10:30:00Z',
+        example: '2025-01-15T10:30:00Z',
     })
     generatedAt: Date;
 

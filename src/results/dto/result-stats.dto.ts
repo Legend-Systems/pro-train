@@ -27,7 +27,7 @@ export class ScoreDistributionDto {
 export class PerformanceTrendDto {
     @ApiProperty({
         description: 'Date/period identifier',
-        example: '2024-01-15',
+        example: '2025-01-15',
     })
     period: string;
 

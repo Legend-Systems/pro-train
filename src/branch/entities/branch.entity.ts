@@ -83,7 +83,7 @@ export class Branch {
     @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
     @ApiProperty({
         description: 'Branch creation date',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 

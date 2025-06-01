@@ -120,7 +120,7 @@ export interface OperatingHours {
         "name": "Stanford University",
         "isActive": true
       },
-      "createdAt": "2024-01-01T00:00:00.000Z"
+      "createdAt": "2025-01-01T00:00:00.000Z"
     }
   ]
 }
@@ -154,7 +154,7 @@ export interface OperatingHours {
         "isActive": true,
         "totalBranches": 8
       },
-      "createdAt": "2024-01-01T00:00:00.000Z",
+      "createdAt": "2025-01-01T00:00:00.000Z",
       "statistics": {
         "totalUsers": 1250,
         "activeCourses": 45,
@@ -202,11 +202,11 @@ export interface OperatingHours {
         "closing": "19:00",
         "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
       },
-      "updatedAt": "2024-01-15T10:30:00.000Z"
+      "updatedAt": "2025-01-15T10:30:00.000Z"
     },
     "changes": {
       "modifiedFields": ["name", "address", "operatingHours"],
-      "timestamp": "2024-01-15T10:30:00.000Z",
+      "timestamp": "2025-01-15T10:30:00.000Z",
       "modifiedBy": "admin@university.edu"
     }
   }
@@ -227,7 +227,7 @@ export interface OperatingHours {
       "organization": "Stanford University"
     },
     "deletionInfo": {
-      "deletedAt": "2024-01-15T10:30:00.000Z",
+      "deletedAt": "2025-01-15T10:30:00.000Z",
       "deletedBy": "admin@university.edu",
       "reason": "Branch consolidation",
       "dataRetention": "90 days"

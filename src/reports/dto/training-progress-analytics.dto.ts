@@ -37,7 +37,7 @@ export class LearningVelocityTrendDto {
         description: 'Date of the learning data',
         type: 'string',
         format: 'date',
-        example: '2024-01-15',
+        example: '2025-01-15',
     })
     date: string;
 
@@ -99,7 +99,7 @@ export class TrainingProgressAnalyticsReportDto {
         description: 'Timestamp when the analytics were generated',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T10:30:00Z',
+        example: '2025-01-15T10:30:00Z',
     })
     generatedAt: Date;
 
@@ -173,7 +173,7 @@ export class LearningVelocityGlobalTrendDto {
         description: 'Date of the velocity data',
         type: 'string',
         format: 'date',
-        example: '2024-01-15',
+        example: '2025-01-15',
     })
     date: string;
 
@@ -231,7 +231,7 @@ export class GlobalTrainingProgressStatsReportDto {
         description: 'Timestamp when the statistics were generated',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T10:30:00Z',
+        example: '2025-01-15T10:30:00Z',
     })
     generatedAt: Date;
 
@@ -277,7 +277,7 @@ export class LearningPathCompletionReportDto {
         description: 'Last activity timestamp',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T14:30:00Z',
+        example: '2025-01-15T14:30:00Z',
     })
     lastActivity: Date;
 
@@ -369,7 +369,7 @@ export class ProgressMilestoneReportDto {
         description: 'Last update timestamp',
         type: 'string',
         format: 'date-time',
-        example: '2024-01-15T16:45:00Z',
+        example: '2025-01-15T16:45:00Z',
     })
     lastUpdate: Date;
 }

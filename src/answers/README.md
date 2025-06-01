@@ -205,8 +205,8 @@ export enum GradingStatus {
     "isCorrect": true,
     "gradingStatus": "auto_graded",
     "timeSpent": 45,
-    "submittedAt": "2024-01-15T10:35:00Z",
-    "gradedAt": "2024-01-15T10:35:01Z",
+    "submittedAt": "2025-01-15T10:35:00Z",
+    "gradedAt": "2025-01-15T10:35:01Z",
     "feedback": "Correct! Binary search has logarithmic time complexity.",
     "question": {
       "questionId": 45,
@@ -237,8 +237,8 @@ export enum GradingStatus {
       "isCorrect": true,
       "gradingStatus": "auto_graded",
       "timeSpent": 45,
-      "submittedAt": "2024-01-15T10:35:00Z",
-      "gradedAt": "2024-01-15T10:35:01Z",
+      "submittedAt": "2025-01-15T10:35:00Z",
+      "gradedAt": "2025-01-15T10:35:01Z",
       "feedback": "Correct! Binary search has logarithmic time complexity.",
       "graderNotes": null,
       "rubricScores": null
@@ -313,7 +313,7 @@ export enum GradingStatus {
       "points": 3.5,
       "maxPoints": 4,
       "gradingStatus": "manually_graded",
-      "gradedAt": "2024-01-15T15:30:00Z",
+      "gradedAt": "2025-01-15T15:30:00Z",
       "gradedBy": "instructor-uuid",
       "feedback": "Good understanding shown, but missing some key details...",
       "graderNotes": "Student demonstrates concept knowledge but needs more depth",
@@ -361,7 +361,7 @@ export enum GradingStatus {
         },
         "answerText": "Object-oriented programming is a programming paradigm...",
         "timeSpent": 480,
-        "submittedAt": "2024-01-15T11:00:00Z",
+        "submittedAt": "2025-01-15T11:00:00Z",
         "gradingStatus": "pending",
         "attempt": {
           "test": { "title": "Programming Concepts Final" }
@@ -472,9 +472,9 @@ export enum GradingStatus {
     },
     "temporalAnalysis": {
       "performanceTrend": [
-        { "date": "2024-01-10", "correctRate": 70.2 },
-        { "date": "2024-01-11", "correctRate": 75.8 },
-        { "date": "2024-01-12", "correctRate": 73.6 }
+        { "date": "2025-01-10", "correctRate": 70.2 },
+        { "date": "2025-01-11", "correctRate": 75.8 },
+        { "date": "2025-01-12", "correctRate": 73.6 }
       ],
       "timeDistribution": {
         "0-30s": 25,
@@ -499,7 +499,7 @@ export enum GradingStatus {
       "userId": "user-uuid",
       "testId": 15,
       "totalQuestions": 25,
-      "completedAt": "2024-01-15T12:15:00Z"
+      "completedAt": "2025-01-15T12:15:00Z"
     },
     "scoreBreakdown": {
       "totalPoints": 85.5,
@@ -563,13 +563,13 @@ export enum GradingStatus {
     },
     "progressTrend": [
       {
-        "week": "2024-W01",
+        "week": "2025-W01",
         "correctRate": 78.2,
         "averageScore": 79.1,
         "answersSubmitted": 45
       },
       {
-        "week": "2024-W02",
+        "week": "2025-W02",
         "correctRate": 85.1,
         "averageScore": 84.7,
         "answersSubmitted": 52

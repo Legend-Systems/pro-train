@@ -99,7 +99,7 @@ export class ProgressEntryDto {
 
     @ApiProperty({
         description: 'Last updated date',
-        example: '2024-01-15T14:30:00.000Z',
+        example: '2025-01-15T14:30:00.000Z',
     })
     @IsDate()
     @Type(() => Date)

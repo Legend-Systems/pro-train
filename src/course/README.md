@@ -192,7 +192,7 @@ export enum CourseStatus {
           "averageScore": 87.2,
           "totalTests": 5
         },
-        "createdAt": "2024-01-01T00:00:00Z"
+        "createdAt": "2025-01-01T00:00:00Z"
       }
     ],
     "pagination": {
@@ -228,7 +228,7 @@ export enum CourseStatus {
       "difficulty": "beginner",
       "category": "programming",
       "isPublished": true,
-      "publishedAt": "2024-01-01T12:00:00Z",
+      "publishedAt": "2025-01-01T12:00:00Z",
       "creator": { /* Creator details */ },
       "organization": { /* Org details */ },
       "branch": { /* Branch details */ },
@@ -273,17 +273,17 @@ export enum CourseStatus {
         {
           "user": { "firstName": "Alice", "lastName": "Smith" },
           "score": 98.5,
-          "completedAt": "2024-01-10T15:30:00Z"
+          "completedAt": "2025-01-10T15:30:00Z"
         }
       ]
     },
     "userProgress": {
       "isEnrolled": true,
-      "enrolledAt": "2024-01-01T09:00:00Z",
+      "enrolledAt": "2025-01-01T09:00:00Z",
       "completionPercentage": 75,
       "testsCompleted": 3,
       "totalTests": 5,
-      "lastAccessed": "2024-01-15T14:20:00Z",
+      "lastAccessed": "2025-01-15T14:20:00Z",
       "estimatedCompletionTime": "2 hours"
     }
   }
@@ -358,7 +358,7 @@ export enum CourseStatus {
   "success": true,
   "data": {
     "course": { /* Published course */ },
-    "publishedAt": "2024-01-15T10:30:00Z"
+    "publishedAt": "2025-01-15T10:30:00Z"
   },
   "message": "Course published successfully"
 }
@@ -387,7 +387,7 @@ export enum CourseStatus {
       "id": "enrollment-uuid",
       "courseId": "course-uuid",
       "userId": "user-uuid",
-      "enrolledAt": "2024-01-15T10:30:00Z",
+      "enrolledAt": "2025-01-15T10:30:00Z",
       "status": "active"
     },
     "course": { /* Course details */ }
@@ -423,13 +423,13 @@ export enum CourseStatus {
           "email": "john@example.com",
           "avatar": { /* Avatar variants */ }
         },
-        "enrolledAt": "2024-01-01T09:00:00Z",
+        "enrolledAt": "2025-01-01T09:00:00Z",
         "status": "active",
         "progress": {
           "completionPercentage": 65,
           "testsCompleted": 2,
           "totalTests": 5,
-          "lastAccessed": "2024-01-15T14:20:00Z"
+          "lastAccessed": "2025-01-15T14:20:00Z"
         }
       }
     ],
@@ -469,7 +469,7 @@ export enum CourseStatus {
           }
         },
         "isActive": true,
-        "createdAt": "2024-01-01T12:00:00Z"
+        "createdAt": "2025-01-01T12:00:00Z"
       }
     ],
     "totalMaterials": 8
@@ -538,7 +538,7 @@ export enum CourseStatus {
     },
     "enrollmentTrends": [
       {
-        "date": "2024-01-01",
+        "date": "2025-01-01",
         "enrollments": 15,
         "completions": 8
       }
@@ -571,7 +571,7 @@ export enum CourseStatus {
         },
         "score": 98.5,
         "completionTime": "4.2 hours",
-        "completedAt": "2024-01-10T15:30:00Z"
+        "completedAt": "2025-01-10T15:30:00Z"
       }
     ],
     "materialEngagement": [
@@ -610,7 +610,7 @@ export enum CourseStatus {
     ],
     "monthlyTrends": [
       {
-        "month": "2024-01",
+        "month": "2025-01",
         "newCourses": 15,
         "newEnrollments": 1200,
         "completions": 650

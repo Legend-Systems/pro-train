@@ -449,7 +449,7 @@ export class UserController {
                     'Upgrade to stronger password for enhanced security',
                 value: {
                     currentPassword: 'OldWeakPass123',
-                    newPassword: 'SuperSecure2024!@#$',
+                    newPassword: 'SuperSecure2025!@#$',
                 },
             },
         },

@@ -29,7 +29,7 @@ export class CourseFilterDto {
 
     @ApiProperty({
         description: 'Filter courses created after this date',
-        example: '2024-01-01',
+        example: '2025-01-01',
         required: false,
     })
     @IsOptional()
@@ -38,7 +38,7 @@ export class CourseFilterDto {
 
     @ApiProperty({
         description: 'Filter courses created before this date',
-        example: '2024-12-31',
+        example: '2025-12-31',
         required: false,
     })
     @IsOptional()

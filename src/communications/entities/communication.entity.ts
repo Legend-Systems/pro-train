@@ -164,7 +164,7 @@ export class Communication {
     @Column({ type: 'datetime', nullable: true })
     @ApiProperty({
         description: 'Date and time when email was sent',
-        example: '2024-01-01T12:00:00.000Z',
+        example: '2025-01-01T12:00:00.000Z',
         required: false,
     })
     @IsDateString()
@@ -174,7 +174,7 @@ export class Communication {
     @Column({ type: 'datetime', nullable: true })
     @ApiProperty({
         description: 'Date and time when email was delivered',
-        example: '2024-01-01T12:00:30.000Z',
+        example: '2025-01-01T12:00:30.000Z',
         required: false,
     })
     @IsDateString()
@@ -211,7 +211,7 @@ export class Communication {
     @Column({ type: 'datetime', nullable: true })
     @ApiProperty({
         description: 'Next retry attempt time',
-        example: '2024-01-01T13:00:00.000Z',
+        example: '2025-01-01T13:00:00.000Z',
         required: false,
     })
     @IsDateString()
@@ -231,14 +231,14 @@ export class Communication {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Record creation date',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Record last update date',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     updatedAt: Date;
 

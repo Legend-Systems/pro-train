@@ -128,7 +128,7 @@ export class TrainingProgressController {
                             totalQuestions: { type: 'number', example: 20 },
                             lastUpdated: {
                                 type: 'string',
-                                example: '2024-01-15T14:30:00.000Z',
+                                example: '2025-01-15T14:30:00.000Z',
                             },
                             course: {
                                 type: 'object',

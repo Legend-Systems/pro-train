@@ -93,14 +93,14 @@ export class Question {
     @CreateDateColumn()
     @ApiProperty({
         description: 'Question creation timestamp',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     createdAt: Date;
 
     @UpdateDateColumn()
     @ApiProperty({
         description: 'Question last update timestamp',
-        example: '2024-01-15T10:30:45.123Z',
+        example: '2025-01-15T10:30:45.123Z',
     })
     updatedAt: Date;
 

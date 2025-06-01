@@ -136,21 +136,21 @@ export class TrainingProgressResponseDto {
 
     @ApiProperty({
         description: 'When progress was last updated',
-        example: '2024-01-01T10:30:00.000Z',
+        example: '2025-01-01T10:30:00.000Z',
     })
     @Expose()
     lastUpdated: Date;
 
     @ApiProperty({
         description: 'Progress tracking start timestamp',
-        example: '2024-01-01T09:00:00.000Z',
+        example: '2025-01-01T09:00:00.000Z',
     })
     @Expose()
     createdAt: Date;
 
     @ApiProperty({
         description: 'Progress last update timestamp',
-        example: '2024-01-01T10:30:00.000Z',
+        example: '2025-01-01T10:30:00.000Z',
     })
     @Expose()
     updatedAt: Date;

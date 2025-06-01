@@ -213,12 +213,12 @@ export class AuthController {
                                 },
                                 createdAt: {
                                     type: 'string',
-                                    example: '2024-01-15T10:30:00.000Z',
+                                    example: '2025-01-15T10:30:00.000Z',
                                     description: 'Account creation timestamp',
                                 },
                                 updatedAt: {
                                     type: 'string',
-                                    example: '2024-01-15T10:30:00.000Z',
+                                    example: '2025-01-15T10:30:00.000Z',
                                     description: 'Last update timestamp',
                                 },
                             },
@@ -561,12 +561,12 @@ export class AuthController {
                                 },
                                 createdAt: {
                                     type: 'string',
-                                    example: '2024-01-15T10:30:00.000Z',
+                                    example: '2025-01-15T10:30:00.000Z',
                                     description: 'Account creation timestamp',
                                 },
                                 updatedAt: {
                                     type: 'string',
-                                    example: '2024-01-15T10:30:00.000Z',
+                                    example: '2025-01-15T10:30:00.000Z',
                                     description: 'Last update timestamp',
                                 },
                             },
@@ -1346,7 +1346,7 @@ export class AuthController {
                                 },
                                 createdAt: {
                                     type: 'string',
-                                    example: '2024-01-15T10:30:00.000Z',
+                                    example: '2025-01-15T10:30:00.000Z',
                                     description: 'Account creation timestamp',
                                 },
                             },
@@ -1500,7 +1500,7 @@ export class AuthController {
                         },
                         expiresAt: {
                             type: 'string',
-                            example: '2024-01-22T10:30:00.000Z',
+                            example: '2025-01-22T10:30:00.000Z',
                             description: 'Invitation expiration timestamp',
                         },
                         invitedBy: {
@@ -1688,7 +1688,7 @@ export class AuthController {
                         },
                         expiresAt: {
                             type: 'string',
-                            example: '2024-01-22T10:30:00.000Z',
+                            example: '2025-01-22T10:30:00.000Z',
                             description: 'Invitation expiration timestamp',
                         },
                     },

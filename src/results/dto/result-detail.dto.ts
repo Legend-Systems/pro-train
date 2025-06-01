@@ -131,7 +131,7 @@ export class AttemptDetailDto {
 
     @ApiProperty({
         description: 'Attempt start time',
-        example: '2024-01-15T10:00:00.000Z',
+        example: '2025-01-15T10:00:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -139,7 +139,7 @@ export class AttemptDetailDto {
 
     @ApiProperty({
         description: 'Attempt end time',
-        example: '2024-01-15T11:30:00.000Z',
+        example: '2025-01-15T11:30:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -199,7 +199,7 @@ export class ResultDetailDto {
 
     @ApiProperty({
         description: 'Test completion date',
-        example: '2024-01-15T11:30:00.000Z',
+        example: '2025-01-15T11:30:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -207,7 +207,7 @@ export class ResultDetailDto {
 
     @ApiProperty({
         description: 'Result creation date',
-        example: '2024-01-15T11:35:00.000Z',
+        example: '2025-01-15T11:35:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -215,7 +215,7 @@ export class ResultDetailDto {
 
     @ApiProperty({
         description: 'Last update date',
-        example: '2024-01-15T11:35:00.000Z',
+        example: '2025-01-15T11:35:00.000Z',
     })
     @IsDate()
     @Type(() => Date)

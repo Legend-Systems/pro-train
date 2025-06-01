@@ -224,7 +224,7 @@ export class FileFilterDto {
     @ApiProperty({
         description:
             'Search within stored filenames in Google Cloud Storage. Useful for finding files by their processed names.',
-        example: 'course-image-2024',
+        example: 'course-image-2025',
         required: false,
         type: String,
         title: 'Filename Search',

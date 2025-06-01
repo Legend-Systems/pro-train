@@ -231,12 +231,12 @@ export class MediaManagerController {
                         filename: {
                             type: 'string',
                             example:
-                                'media/org-123/2024/01/15/a1b2c3d4-course-introduction.jpg',
+                                'media/org-123/2025/01/15/a1b2c3d4-course-introduction.jpg',
                         },
                         url: {
                             type: 'string',
                             example:
-                                'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction.jpg',
+                                'https://storage.googleapis.com/crmapplications/media/org-123/2025/01/15/a1b2c3d4-course-introduction.jpg',
                         },
                         mimeType: { type: 'string', example: 'image/jpeg' },
                         size: { type: 'number', example: 2048576 },
@@ -258,7 +258,7 @@ export class MediaManagerController {
                         },
                         createdAt: {
                             type: 'string',
-                            example: '2024-01-15T10:30:45.123Z',
+                            example: '2025-01-15T10:30:45.123Z',
                         },
                     },
                 },
@@ -276,7 +276,7 @@ export class MediaManagerController {
                             url: {
                                 type: 'string',
                                 example:
-                                    'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
+                                    'https://storage.googleapis.com/crmapplications/media/org-123/2025/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
                             },
                         },
                     },
@@ -287,7 +287,7 @@ export class MediaManagerController {
                             width: 150,
                             height: 150,
                             size: 15000,
-                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
+                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2025/01/15/a1b2c3d4-course-introduction-thumbnail.jpg',
                         },
                         {
                             id: 3,
@@ -295,7 +295,7 @@ export class MediaManagerController {
                             width: 500,
                             height: 500,
                             size: 85000,
-                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2024/01/15/a1b2c3d4-course-introduction-medium.jpg',
+                            url: 'https://storage.googleapis.com/crmapplications/media/org-123/2025/01/15/a1b2c3d4-course-introduction-medium.jpg',
                         },
                     ],
                 },

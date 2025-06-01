@@ -66,7 +66,7 @@ export class TestFilterDto {
 
     @ApiProperty({
         description: 'Filter tests created after this date (ISO string)',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
         required: false,
         type: String,
         format: 'date-time',
@@ -77,7 +77,7 @@ export class TestFilterDto {
 
     @ApiProperty({
         description: 'Filter tests created before this date (ISO string)',
-        example: '2024-12-31T23:59:59.999Z',
+        example: '2025-12-31T23:59:59.999Z',
         required: false,
         type: String,
         format: 'date-time',

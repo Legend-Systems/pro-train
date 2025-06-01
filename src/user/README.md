@@ -162,7 +162,7 @@ export enum UserStatus {
     "role": "user",
     "emailVerified": true,
     "status": "active",
-    "createdAt": "2024-01-01T00:00:00Z"
+    "createdAt": "2025-01-01T00:00:00Z"
   }
 }
 ```
@@ -250,7 +250,7 @@ export enum UserStatus {
       "coursesEnrolled": 5,
       "testsCompleted": 23,
       "averageScore": 87.5,
-      "lastActivity": "2024-01-15T10:30:00Z"
+      "lastActivity": "2025-01-15T10:30:00Z"
     }
   }
 }
@@ -425,7 +425,7 @@ export enum UserStatus {
       {
         "name": "Top Performer",
         "description": "Scored above 90% in 5 tests",
-        "earnedAt": "2024-01-10T12:00:00Z"
+        "earnedAt": "2025-01-10T12:00:00Z"
       }
     ],
     "recentActivity": [
@@ -433,7 +433,7 @@ export enum UserStatus {
         "type": "test_completed",
         "courseTitle": "JavaScript Fundamentals",
         "score": 95,
-        "completedAt": "2024-01-15T10:30:00Z"
+        "completedAt": "2025-01-15T10:30:00Z"
       }
     ]
   }

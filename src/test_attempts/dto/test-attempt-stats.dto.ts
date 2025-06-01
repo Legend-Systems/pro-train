@@ -45,7 +45,7 @@ export class TestAttemptStatsDto {
 
     @ApiProperty({
         description: 'Most recent attempt date',
-        example: '2024-01-15T10:30:00.000Z',
+        example: '2025-01-15T10:30:00.000Z',
     })
     lastAttemptDate: Date;
 

@@ -124,7 +124,7 @@ export class ResultSummaryDto {
 
     @ApiProperty({
         description: 'Date range start',
-        example: '2024-01-01T00:00:00.000Z',
+        example: '2025-01-01T00:00:00.000Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -132,7 +132,7 @@ export class ResultSummaryDto {
 
     @ApiProperty({
         description: 'Date range end',
-        example: '2024-01-31T23:59:59.999Z',
+        example: '2025-01-31T23:59:59.999Z',
     })
     @IsDate()
     @Type(() => Date)
@@ -140,7 +140,7 @@ export class ResultSummaryDto {
 
     @ApiProperty({
         description: 'Most recent attempt date',
-        example: '2024-01-30T14:30:00.000Z',
+        example: '2025-01-30T14:30:00.000Z',
     })
     @IsDate()
     @Type(() => Date)

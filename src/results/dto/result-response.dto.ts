@@ -95,14 +95,14 @@ class AttemptInfo {
 
     @ApiProperty({
         description: 'Start time',
-        example: '2024-01-01T10:00:00.000Z',
+        example: '2025-01-01T10:00:00.000Z',
     })
     @Expose()
     startTime: Date;
 
     @ApiProperty({
         description: 'End time',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @Expose()
     endTime: Date;
@@ -178,21 +178,21 @@ export class ResultResponseDto {
 
     @ApiProperty({
         description: 'When the result was calculated',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @Expose()
     calculatedAt: Date;
 
     @ApiProperty({
         description: 'Result creation timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @Expose()
     createdAt: Date;
 
     @ApiProperty({
         description: 'Result last update timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @Expose()
     updatedAt: Date;

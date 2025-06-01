@@ -200,8 +200,8 @@ export class Result {
         "efficiency": 0.78,
         "consistency": 0.82
       },
-      "gradedAt": "2024-01-15T12:15:30Z",
-      "publishedAt": "2024-01-15T12:16:00Z",
+      "gradedAt": "2025-01-15T12:15:30Z",
+      "publishedAt": "2025-01-15T12:16:00Z",
       "isPublished": true
     },
     "test": {
@@ -260,7 +260,7 @@ export class Result {
         "rank": 18,
         "percentile": 78.5,
         "timeSpent": 6300,
-        "gradedAt": "2024-01-15T12:15:30Z",
+        "gradedAt": "2025-01-15T12:15:30Z",
         "attemptNumber": 1,
         "canRetake": true
       }
@@ -283,13 +283,13 @@ export class Result {
     },
     "progressTrend": [
       {
-        "period": "2024-W01",
+        "period": "2025-W01",
         "averageScore": 78.2,
         "testsCompleted": 3,
         "improvement": 5.2
       },
       {
-        "period": "2024-W02",
+        "period": "2025-W02",
         "averageScore": 85.1,
         "testsCompleted": 4,
         "improvement": 6.9
@@ -324,7 +324,7 @@ export class Result {
         "rank": 1,
         "percentile": 99.2,
         "timeSpent": 5400,
-        "gradedAt": "2024-01-15T11:30:00Z",
+        "gradedAt": "2025-01-15T11:30:00Z",
         "attemptNumber": 1
       }
     ],
@@ -409,9 +409,9 @@ export class Result {
     ],
     "temporalAnalysis": {
       "performanceTrend": [
-        { "date": "2024-01-10", "averageScore": 74.1, "attempts": 15 },
-        { "date": "2024-01-11", "averageScore": 77.8, "attempts": 22 },
-        { "date": "2024-01-12", "averageScore": 76.5, "attempts": 18 }
+        { "date": "2025-01-10", "averageScore": 74.1, "attempts": 15 },
+        { "date": "2025-01-11", "averageScore": 77.8, "attempts": 22 },
+        { "date": "2025-01-12", "averageScore": 76.5, "attempts": 18 }
       ],
       "timeAnalysis": {
         "averageTime": "1h 32m",
@@ -461,14 +461,14 @@ export class Result {
     },
     "performanceTrend": [
       {
-        "month": "2024-01",
+        "month": "2025-01",
         "testsCompleted": 8,
         "averageScore": 78.2,
         "improvement": 5.2,
         "topSubject": "JavaScript Basics"
       },
       {
-        "month": "2024-02",
+        "month": "2025-02",
         "testsCompleted": 10,
         "averageScore": 84.1,
         "improvement": 5.9,
@@ -534,7 +534,7 @@ export class Result {
     "result": {
       "resultId": "result-uuid",
       "isPublished": true,
-      "publishedAt": "2024-01-15T16:30:00Z"
+      "publishedAt": "2025-01-15T16:30:00Z"
     },
     "notifications": {
       "emailsSent": 1,
@@ -618,15 +618,15 @@ export class Result {
 {
   "success": true,
   "data": {
-    "exportUrl": "https://trainpro.com/exports/test-15-results-20240115.csv",
-    "fileName": "test-15-results-20240115.csv",
+    "exportUrl": "https://trainpro.com/exports/test-15-results-20250115.csv",
+    "fileName": "test-15-results-20250115.csv",
     "format": "csv",
     "recordCount": 125,
     "columns": [
       "Student Name", "Email", "Score", "Percentage", "Grade", 
       "Time Spent", "Attempt Number", "Completed At"
     ],
-    "expiresAt": "2024-01-22T16:30:00Z"
+    "expiresAt": "2025-01-22T16:30:00Z"
   },
   "message": "Export generated successfully"
 }

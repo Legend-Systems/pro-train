@@ -118,7 +118,7 @@ export class ResultsController {
                         passed: { type: 'boolean', example: true },
                         calculatedAt: {
                             type: 'string',
-                            example: '2024-01-15T14:30:00.000Z',
+                            example: '2025-01-15T14:30:00.000Z',
                         },
                         user: {
                             type: 'object',
@@ -281,7 +281,7 @@ export class ResultsController {
                                     passed: { type: 'boolean', example: true },
                                     calculatedAt: {
                                         type: 'string',
-                                        example: '2024-01-15T14:30:00.000Z',
+                                        example: '2025-01-15T14:30:00.000Z',
                                     },
                                     test: {
                                         type: 'object',
@@ -723,7 +723,7 @@ export class ResultsController {
                         newPercentage: { type: 'number', example: 87.0 },
                         recalculatedAt: {
                             type: 'string',
-                            example: '2024-01-15T14:30:00.000Z',
+                            example: '2025-01-15T14:30:00.000Z',
                         },
                     },
                 },

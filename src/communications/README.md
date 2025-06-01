@@ -229,7 +229,7 @@ export enum CommunicationStatus {
     "score": 85.5,
     "percentage": 85.5,
     "grade": "B+",
-    "testDate": "2024-01-15T12:00:00Z",
+    "testDate": "2025-01-15T12:00:00Z",
     "courseName": "Web Development Bootcamp",
     "instructorName": "Dr. Jane Smith"
   },
@@ -250,8 +250,8 @@ export enum CommunicationStatus {
       "status": "queued",
       "templateId": "test-completion-template",
       "scheduledAt": null,
-      "createdAt": "2024-01-15T14:30:00Z",
-      "estimatedDelivery": "2024-01-15T14:32:00Z"
+      "createdAt": "2025-01-15T14:30:00Z",
+      "estimatedDelivery": "2025-01-15T14:32:00Z"
     }
   },
   "message": "Email queued for delivery"
@@ -287,7 +287,7 @@ export enum CommunicationStatus {
   "templateId": "grade-notification-template",
   "subject": "Your Test Results Are Now Available",
   "priority": "high",
-  "scheduledAt": "2024-01-15T16:00:00Z"
+  "scheduledAt": "2025-01-15T16:00:00Z"
 }
 
 // Response
@@ -298,7 +298,7 @@ export enum CommunicationStatus {
     "totalRecipients": 2,
     "queuedCount": 2,
     "failedCount": 0,
-    "estimatedCompletion": "2024-01-15T16:05:00Z",
+    "estimatedCompletion": "2025-01-15T16:05:00Z",
     "communications": [
       {
         "communicationId": "comm-uuid-1",
@@ -336,14 +336,14 @@ export enum CommunicationStatus {
       "htmlContent": "<html><body><h1>Test Results</h1>...</body></html>",
       "status": "delivered",
       "templateId": "test-completion-template",
-      "sentAt": "2024-01-15T14:32:15Z",
-      "deliveredAt": "2024-01-15T14:32:18Z",
-      "openedAt": "2024-01-15T15:45:22Z",
+      "sentAt": "2025-01-15T14:32:15Z",
+      "deliveredAt": "2025-01-15T14:32:18Z",
+      "openedAt": "2025-01-15T15:45:22Z",
       "clickedAt": null,
       "retryCount": 0,
       "provider": "sendgrid",
       "providerMessageId": "sg_message_12345",
-      "createdAt": "2024-01-15T14:30:00Z"
+      "createdAt": "2025-01-15T14:30:00Z"
     },
     "analytics": {
       "deliveryTime": "3 seconds",
@@ -414,7 +414,7 @@ export enum CommunicationStatus {
       "variables": [ /* Variable definitions */ ],
       "isActive": true,
       "version": 1,
-      "createdAt": "2024-01-15T10:00:00Z",
+      "createdAt": "2025-01-15T10:00:00Z",
       "previewUrl": "https://trainpro.com/templates/preview/template-uuid"
     }
   },
@@ -444,8 +444,8 @@ export enum CommunicationStatus {
         "isActive": true,
         "version": 1,
         "usageCount": 145,
-        "lastUsed": "2024-01-15T12:30:00Z",
-        "createdAt": "2024-01-10T09:00:00Z"
+        "lastUsed": "2025-01-15T12:30:00Z",
+        "createdAt": "2025-01-10T09:00:00Z"
       }
     ],
     "pagination": {
@@ -512,14 +512,14 @@ export enum CommunicationStatus {
     "temporalAnalysis": {
       "dailyStats": [
         {
-          "date": "2024-01-10",
+          "date": "2025-01-10",
           "sent": 456,
           "delivered": 449,
           "opened": 203,
           "clicked": 56
         },
         {
-          "date": "2024-01-11",
+          "date": "2025-01-11",
           "sent": 523,
           "delivered": 518,
           "opened": 234,
@@ -564,7 +564,7 @@ export enum CommunicationStatus {
       "name": "Final Exam Results Notification",
       "emailType": "grade_published",
       "templateId": "grade-notification-template",
-      "sentAt": "2024-01-15T16:00:00Z",
+      "sentAt": "2025-01-15T16:00:00Z",
       "totalRecipients": 345
     },
     "performance": {
@@ -580,10 +580,10 @@ export enum CommunicationStatus {
       "unsubscribeRate": 0.3
     },
     "timeline": {
-      "deliveryComplete": "2024-01-15T16:05:23Z",
-      "firstOpen": "2024-01-15T16:02:45Z",
-      "firstClick": "2024-01-15T16:08:12Z",
-      "peakActivity": "2024-01-15T17:30:00Z"
+      "deliveryComplete": "2025-01-15T16:05:23Z",
+      "firstOpen": "2025-01-15T16:02:45Z",
+      "firstClick": "2025-01-15T16:08:12Z",
+      "peakActivity": "2025-01-15T17:30:00Z"
     },
     "engagement": {
       "avgTimeToOpen": "2h 15m",
@@ -637,8 +637,8 @@ export enum CommunicationStatus {
   },
   "channels": ["email", "in_app"],
   "priority": "high",
-  "scheduledAt": "2024-01-18T10:00:00Z",
-  "expiresAt": "2024-01-21T00:00:00Z"
+  "scheduledAt": "2025-01-18T10:00:00Z",
+  "expiresAt": "2025-01-21T00:00:00Z"
 }
 
 // Response
@@ -652,8 +652,8 @@ export enum CommunicationStatus {
       "status": "scheduled",
       "estimatedRecipients": 2485,
       "channels": ["email", "in_app"],
-      "scheduledAt": "2024-01-18T10:00:00Z",
-      "createdAt": "2024-01-15T14:30:00Z"
+      "scheduledAt": "2025-01-18T10:00:00Z",
+      "createdAt": "2025-01-15T14:30:00Z"
     }
   },
   "message": "System notification scheduled successfully"

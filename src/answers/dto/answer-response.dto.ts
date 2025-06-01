@@ -82,7 +82,7 @@ export class AnswerResponseDto {
 
     @ApiProperty({
         description: 'When this answer was marked/graded',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
         required: false,
     })
     @IsOptional()
@@ -100,14 +100,14 @@ export class AnswerResponseDto {
 
     @ApiProperty({
         description: 'Answer submission timestamp',
-        example: '2024-01-01T09:30:00.000Z',
+        example: '2025-01-01T09:30:00.000Z',
     })
     @IsDateString()
     createdAt: Date;
 
     @ApiProperty({
         description: 'Answer last update timestamp',
-        example: '2024-01-01T11:00:00.000Z',
+        example: '2025-01-01T11:00:00.000Z',
     })
     @IsDateString()
     updatedAt: Date;

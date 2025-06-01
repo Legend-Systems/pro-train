@@ -304,7 +304,7 @@ export class LeaderboardController {
                         totalPoints: { type: 'number', example: 420 },
                         lastUpdated: {
                             type: 'string',
-                            example: '2024-01-15T14:30:00.000Z',
+                            example: '2025-01-15T14:30:00.000Z',
                         },
                         user: {
                             type: 'object',
@@ -448,7 +448,7 @@ export class LeaderboardController {
                         updatedEntries: { type: 'number', example: 45 },
                         refreshedAt: {
                             type: 'string',
-                            example: '2024-01-15T14:30:00.000Z',
+                            example: '2025-01-15T14:30:00.000Z',
                         },
                         processingTime: { type: 'number', example: 1.25 },
                     },
