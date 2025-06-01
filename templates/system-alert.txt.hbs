@@ -13,13 +13,13 @@ Hello{{#if recipientName}} {{recipientName}}{{/if}},
 Time: {{formatDate timestamp 'long'}}
 
 {{#if eq alertType 'error'}}
-If you need immediate assistance, please contact our support team.
+We know how frustrating technical issues can be, especially when you're in the flow of learning. Our team is focused on resolving this quickly so you can get back to what matters most - your progress.
 {{else if eq alertType 'warning'}}
-Please take note of this important information.
+We're sharing this update because we respect your time and want you to plan accordingly. Transparency is important to us, and we believe you deserve to know what's happening.
 {{else if eq alertType 'success'}}
-Thank you for your attention.
+Great news to share! 🎉 We love celebrating positive updates with our learning community. Thank you for being part of what makes {{companyName}} special.
 {{else}}
-This is an informational notice.
+We believe in keeping you informed about your learning platform. This update helps ensure you have the latest information to make the most of your {{companyName}} experience.
 {{/if}}
 
 Need help? Contact us at {{supportEmail}}

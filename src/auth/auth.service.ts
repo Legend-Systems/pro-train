@@ -868,11 +868,12 @@ export class AuthService {
                 ),
             };
 
-            // Use custom template for invitation
-            const rendered = await this.emailTemplateService.renderByType(
-                EmailType.CUSTOM,
-                templateData,
-            );
+            // Use invitation template for personalized invitations
+            const rendered = await this.emailTemplateService.renderTemplate({
+                template: 'invitation',
+                data: templateData,
+                format: 'both',
+            });
 
             await this.emailQueueService.queueEmail(
                 {

@@ -28,16 +28,33 @@
         }
         
         .header {
-            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 40px 20px;
             text-align: center;
             color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            opacity: 0.3;
         }
         
         .header h1 {
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
         }
         
         .content {
@@ -74,6 +91,22 @@
         .footer a {
             color: #667eea;
             text-decoration: none;
+        }
+        
+        .custom-section {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        .custom-section h4 {
+            color: #1e293b;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 600;
         }
         
         @media (max-width: 600px) {
@@ -113,9 +146,11 @@
             </div>
             
             {{#each customSections}}
-            <div class="message">
-                {{#if this.title}}<strong>{{this.title}}</strong><br>{{/if}}
-                {{{this.content}}}
+            <div class="custom-section">
+                {{#if this.title}}<h4>{{this.title}}</h4>{{/if}}
+                <div class="message" style="margin-bottom: 0;">
+                    {{{this.content}}}
+                </div>
             </div>
             {{/each}}
         </div>

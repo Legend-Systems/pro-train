@@ -14,11 +14,34 @@
             padding: 20px;
         }
         .header {
-            background-color: #17a2b8;
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
             color: white;
-            padding: 20px;
+            padding: 40px 20px;
             text-align: center;
             border-radius: 8px 8px 0 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            opacity: 0.3;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
         }
         .content {
             background-color: #f8f9fa;
@@ -27,12 +50,19 @@
         }
         .button {
             display: inline-block;
-            background-color: #17a2b8;
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 8px;
             margin: 10px 5px;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(6, 182, 212, 0.3);
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
         }
         .footer {
             text-align: center;
@@ -65,9 +95,9 @@
         <img src="{{avatar}}" alt="Profile Picture" class="avatar">
         {{/if}}
         
-        <h2>Hello {{firstName}}!</h2>
+        <h2>Welcome to your learning adventure, {{firstName}}! 🎉</h2>
         
-        <p>Welcome to {{companyName}}! Your account has been successfully created and you're ready to start your learning journey with us.</p>
+        <p>This is such an exciting moment! Your {{companyName}} account is ready, and you're about to embark on a personalized learning journey designed just for you. We're not just another platform - we're your partners in growth, ready to help you unlock skills you didn't even know you had.</p>
         
         <div class="user-info">
             <h3>Your Account Details</h3>
@@ -81,12 +111,14 @@
             {{/if}}
         </div>
         
-        <h3>What You Can Do</h3>
+        <h3>Your Learning Superpowers Await</h3>
         <ul>
-            <li>Take assigned tests and quizzes</li>
-            <li>Track your progress and results</li>
-            <li>Access learning materials</li>
-            <li>Update your profile settings</li>
+            <li>Tackle engaging tests and quizzes that adapt to your learning style</li>
+            <li>Watch your progress unfold with detailed analytics and achievements</li>
+            <li>Explore a rich library of learning materials curated for your success</li>
+            <li>Customize your experience to match your goals and preferences</li>
+            <li>Connect with fellow learners and expert mentors in your organization</li>
+            <li>Celebrate milestones and track your continuous growth journey</li>
         </ul>
         
         <div style="text-align: center; margin: 30px 0;">
@@ -94,12 +126,12 @@
             <a href="{{profileUrl}}" class="button" style="background-color: #6c757d;">Edit Profile</a>
         </div>
         
-        <p>Ready to get started? <a href="{{loginUrl}}">Log in to your account</a> and explore what {{companyName}} has to offer.</p>
+        <p>Ready to transform your potential into expertise? <a href="{{loginUrl}}">Log in to your account</a> and discover a learning experience that's both powerful and enjoyable. Every click forward is a step toward the professional you're becoming!</p>
         
-        <p>If you need any help or have questions, don't hesitate to contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+        <p>Questions? Excitement? Curiosity? We're here for all of it! Our friendly support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> loves helping learners succeed.</p>
         
-        <p>Best regards,<br>
-        The {{companyName}} Team</p>
+        <p>Here's to your success and growth! 🚀<br>
+        Your Learning Champions at {{companyName}}</p>
     </div>
     
     <div class="footer">

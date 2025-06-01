@@ -14,11 +14,34 @@
             padding: 20px;
         }
         .header {
-            background-color: #007bff;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
-            padding: 20px;
+            padding: 40px 20px;
             text-align: center;
             border-radius: 8px 8px 0 0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            opacity: 0.3;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
         }
         .content {
             background-color: #f8f9fa;
@@ -27,12 +50,19 @@
         }
         .button {
             display: inline-block;
-            background-color: #007bff;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
-            padding: 12px 24px;
+            padding: 16px 32px;
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 8px;
             margin: 10px 0;
+            font-weight: 600;
+            transition: transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
         }
         .footer {
             text-align: center;
@@ -48,16 +78,20 @@
     </div>
     
     <div class="content">
-        <h2>Hello {{organizationName}}!</h2>
+        <h2>Welcome to the future of learning, {{organizationName}}! 🎉</h2>
         
-        <p>Congratulations! Your organization has been successfully registered with {{companyName}}. We're excited to have you on board and help you streamline your testing and assessment processes.</p>
+        <p>This is a pivotal moment for your organization! You've just unlocked a platform that will transform how your team learns, grows, and succeeds. We're not just excited to have you aboard - we're honored to partner with you in creating a culture of continuous learning and excellence.</p>
         
-        <h3>What's Next?</h3>
+        <p><strong>Why this matters for {{organizationName}}:</strong> In today's rapidly evolving world, organizations that invest in their people's growth don't just survive - they thrive. You've just given your team access to tools that will accelerate their development, boost engagement, and drive measurable results for your business.</p>
+        
+        <h3>Your roadmap to organizational learning excellence:</h3>
         <ul>
-            <li>Access your organization dashboard</li>
-            <li>Set up your first branch</li>
-            <li>Invite team members</li>
-            <li>Create your first test</li>
+            <li>Explore your comprehensive organization dashboard and analytics</li>
+            <li>Establish your first branch to start organizing your teams</li>
+            <li>Invite your team members to join this learning revolution</li>
+            <li>Design your first assessment and watch engagement soar</li>
+            <li>Discover how data-driven insights will guide your training strategy</li>
+            <li>Experience the ROI of investing in your people's potential</li>
         </ul>
         
         <div style="text-align: center; margin: 30px 0;">
