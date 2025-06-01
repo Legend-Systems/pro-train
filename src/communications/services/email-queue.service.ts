@@ -146,13 +146,10 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
                     // Remove completed jobs after a delay
                     setTimeout(() => this.removeCompletedJob(job.id), 5000);
                 } else {
-                    await this.handleJobFailure(
-                        job,
-                        result.error || 'Unknown error',
-                    );
+                    this.handleJobFailure(job, result.error || 'Unknown error');
                 }
             } catch (error) {
-                await this.handleJobFailure(job, error.message);
+                this.handleJobFailure(job, error?.message || 'Unknown error');
             }
         }
     }
@@ -222,7 +219,7 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
         return results;
     }
 
-    private async handleJobFailure(job: EmailJobData, error: string) {
+    private handleJobFailure(job: EmailJobData, error: string) {
         job.attempts = (job.attempts || 0) + 1;
         job.maxAttempts = job.maxAttempts || 3;
 

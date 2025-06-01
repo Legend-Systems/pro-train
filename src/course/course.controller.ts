@@ -12,7 +12,6 @@ import {
     HttpStatus,
     HttpCode,
     Logger,
-    NotFoundException,
     ParseIntPipe,
 } from '@nestjs/common';
 import {
@@ -34,13 +33,8 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseFilterDto } from './dto/course-filter.dto';
 import {
-    CourseResponseDto,
-    CourseListResponseDto,
-    CourseDetailDto,
-    CourseStatsDto,
     StandardApiResponse,
     StandardOperationResponse,
-    CourseApiResponse,
     CourseListApiResponse,
     CourseDetailApiResponse,
     CourseStatsApiResponse,

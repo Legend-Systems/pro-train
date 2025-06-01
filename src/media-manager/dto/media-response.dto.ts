@@ -55,7 +55,7 @@ export class MediaFileResponseDto {
         type: String,
         title: 'MIME Type',
         pattern:
-            '^[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_.]*$',
+            '^[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_]*/[a-zA-Z0-9][a-zA-Z0-9!#$&\\-\\^_.]*$',
     })
     mimeType: string;
 

@@ -20,11 +20,20 @@ export class CommunicationsService {
     /**
      * Get base template data that all emails should include
      */
-    private getBaseTemplateData(recipientEmail: string, recipientName?: string) {
-        const clientUrl = this.configService.get('CLIENT_URL', 'http://localhost:3000');
+    private getBaseTemplateData(
+        recipientEmail: string,
+        recipientName?: string,
+    ) {
+        const clientUrl = this.configService.get(
+            'CLIENT_URL',
+            'http://localhost:3000',
+        );
         const appName = this.configService.get('APP_NAME', 'trainpro Platform');
-        const supportEmail = this.configService.get('SUPPORT_EMAIL', 'support@trainpro.com');
-        
+        const supportEmail = this.configService.get(
+            'SUPPORT_EMAIL',
+            'support@trainpro.com',
+        );
+
         return {
             recipientName,
             recipientEmail,
@@ -43,9 +52,15 @@ export class CommunicationsService {
         website?: string,
     ): Promise<void> {
         try {
-            const clientUrl = this.configService.get('CLIENT_URL', 'http://localhost:3000');
-            const baseData = this.getBaseTemplateData(organizationEmail, organizationName);
-            
+            const clientUrl = this.configService.get(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const baseData = this.getBaseTemplateData(
+                organizationEmail,
+                organizationName,
+            );
+
             const templateData: WelcomeOrganizationTemplateData = {
                 ...baseData,
                 organizationName,
@@ -64,8 +79,10 @@ export class CommunicationsService {
 
             // ... existing code ...
         } catch (error) {
-            this.logger.error(`Error sending welcome organization email: ${error.message}`);
+            this.logger.error(
+                `Error sending welcome organization email: ${error.message}`,
+            );
             throw error;
         }
     }
-} 
+}

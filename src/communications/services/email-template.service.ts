@@ -261,7 +261,8 @@ export class EmailTemplateService {
                         name: 'Course Created',
                         type: EmailType.COURSE_CREATED,
                         version: '1.0.0',
-                        description: 'Course creation confirmation for creators',
+                        description:
+                            'Course creation confirmation for creators',
                         requiredData: [
                             'title',
                             'description',

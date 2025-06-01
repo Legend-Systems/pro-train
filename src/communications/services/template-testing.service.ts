@@ -60,7 +60,8 @@ export class TemplateTestingService {
                     dueDate: new Date(
                         Date.now() + 7 * 24 * 60 * 60 * 1000,
                     ).toISOString(), // 7 days from now
-                    testUrl: 'https://trainpro.com/tests/javascript-fundamentals',
+                    testUrl:
+                        'https://trainpro.com/tests/javascript-fundamentals',
                     duration: '45 minutes',
                     instructorName: 'Dr. Sarah Wilson',
                 } as TestNotificationTemplateData;
@@ -86,7 +87,8 @@ export class TemplateTestingService {
                     courseName: 'Full Stack Web Development',
                     courseDescription:
                         'Learn to build modern web applications using React, Node.js, and databases.',
-                    courseUrl: 'https://trainpro.com/courses/full-stack-web-dev',
+                    courseUrl:
+                        'https://trainpro.com/courses/full-stack-web-dev',
                     instructorName: 'Prof. Michael Chen',
                     startDate: new Date(
                         Date.now() + 3 * 24 * 60 * 60 * 1000,

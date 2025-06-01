@@ -149,7 +149,7 @@ export class ResultsService {
                 page,
                 limit,
             };
-        } catch (error) {
+        } catch {
             throw new InternalServerErrorException(
                 'Failed to fetch user results',
             );
@@ -189,7 +189,7 @@ export class ResultsService {
                 page,
                 limit,
             };
-        } catch (error) {
+        } catch {
             throw new InternalServerErrorException(
                 'Failed to fetch test results',
             );
@@ -232,7 +232,7 @@ export class ResultsService {
                 page,
                 limit,
             };
-        } catch (error) {
+        } catch {
             throw new InternalServerErrorException(
                 'Failed to fetch course results',
             );
