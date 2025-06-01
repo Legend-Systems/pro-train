@@ -251,6 +251,54 @@ auth/
 }
 ```
 
+#### `POST /auth/re-invite-all` 🔒 Protected
+
+**Send Re-engagement Campaign to All Users**
+
+```typescript
+// Request
+{} // No body required
+
+// Response
+{
+  "success": true,
+  "message": "Re-engagement emails sent successfully. 25 emails queued, 0 failed.",
+  "data": {
+    "totalUsers": 25,
+    "successCount": 25,
+    "failedCount": 0,
+    "failedEmails": []
+  }
+}
+```
+
+**Purpose**: Organizational re-engagement campaign to encourage existing users to actively start using the platform.
+
+**Features**:
+- Fetches all users from the system
+- Sends personalized re-engagement emails
+- Encourages platform adoption and learning
+- Provides detailed success/failure reporting
+- Implements anti-spam measures with randomized delays
+
+**Rate Limiting**: 1 attempt per hour per user to prevent abuse
+
+**Email Content**:
+- Personalized greeting with user's name
+- Organizational invitation using the user's actual organization name
+- Highlights of available features and learning opportunities
+- Clear call-to-action to login and begin learning
+- Professional tone from the user's organization
+- Quick access links to courses, tests, leaderboard, and support
+- Fallback to "Your Organization" for users without organization links
+
+**Use Cases**:
+- User re-engagement campaigns
+- Platform adoption initiatives
+- Learning program launch announcements
+- Organizational onboarding communication
+- Course enrollment campaigns
+
 ### Utility Endpoints
 
 #### `GET /auth/token-info` 🔒 Protected
@@ -301,6 +349,7 @@ auth/
 2. **Password Reset** - Security recovery instructions
 3. **Email Verification** - Account activation
 4. **Invitation Email** - Team onboarding
+5. **Re-engagement Email** - Organizational campaign to encourage platform usage
 
 ### Email Configuration
 
@@ -333,10 +382,11 @@ SMTP_PORT=587
 
 ```typescript
 // Endpoint-specific limits
-@Throttle({ default: { limit: 3, ttl: 60000 } })   // Signup: 3/min
-@Throttle({ default: { limit: 5, ttl: 60000 } })   // Signin: 5/min
-@Throttle({ default: { limit: 3, ttl: 300000 } })  // Password reset: 3/5min
-@Throttle({ default: { limit: 10, ttl: 300000 } }) // Invitations: 10/5min
+@Throttle({ default: { limit: 3, ttl: 60000 } })    // Signup: 3/min
+@Throttle({ default: { limit: 5, ttl: 60000 } })    // Signin: 5/min
+@Throttle({ default: { limit: 3, ttl: 300000 } })   // Password reset: 3/5min
+@Throttle({ default: { limit: 10, ttl: 300000 } })  // Invitations: 10/5min
+@Throttle({ default: { limit: 1, ttl: 3600000 } })  // Re-engagement: 1/hour
 ```
 
 ### Security Headers
@@ -463,6 +513,30 @@ await authService.signUp({
 });
 ```
 
+### Re-engagement Campaign Flow
+
+```typescript
+// 1. Initiate re-engagement campaign (requires authentication & admin permissions)
+const campaignResponse = await authService.sendReInviteToAllUsers();
+
+// Response includes detailed statistics
+console.log(campaignResponse.data);
+// {
+//   totalUsers: 150,
+//   successCount: 148,
+//   failedCount: 2,
+//   failedEmails: ['invalid@domain.com', 'bounced@email.com']
+// }
+
+// 2. Monitor campaign success
+if (campaignResponse.success) {
+    console.log(`✅ Campaign sent to ${campaignResponse.data.successCount} users`);
+    if (campaignResponse.data.failedCount > 0) {
+        console.log(`⚠️ ${campaignResponse.data.failedCount} emails failed to send`);
+    }
+}
+```
+
 ### Protected Route Implementation
 
 ```typescript
@@ -509,8 +583,8 @@ JWT_REFRESH_EXPIRES_IN=7d
 
 # Email Configuration
 CLIENT_URL=http://localhost:3000
-APP_NAME=trainpro Platform
-SUPPORT_EMAIL=support@trainpro.com
+APP_NAME=Exxam Learning Platform
+SUPPORT_EMAIL=support@exxam.com
 
 # Rate Limiting
 THROTTLE_TTL=60000

@@ -924,7 +924,7 @@ export class AuthService {
      */
     async sendReInviteToAllUsers(): Promise<StandardApiResponse<any>> {
         try {
-            // Get all users from the system
+            // Get all users from the system with organization details
             const allUsers = await this.userService.findAll();
 
             if (!allUsers || allUsers.length === 0) {
@@ -942,10 +942,6 @@ export class AuthService {
                 'APP_NAME',
                 'Exxam Learning Platform',
             );
-            const organizationName = this.configService.get<string>(
-                'ORGANIZATION_NAME',
-                'Your Organization',
-            );
 
             let successCount = 0;
             let failedCount = 0;
@@ -954,6 +950,9 @@ export class AuthService {
             // Send re-engagement email to each user
             for (const user of allUsers) {
                 try {
+                    // Use the user's linked organization name dynamically, fallback to default if no org
+                    const organizationName = user.orgId?.name || 'Your Organization';
+
                     const templateData = {
                         recipientName: `${user.firstName} ${user.lastName}`,
                         recipientEmail: user.email,
@@ -995,6 +994,7 @@ export class AuthService {
                             templateType: 're-invite',
                             batchOperation: true,
                             campaignType: 'user-reengagement',
+                            organizationId: user.orgId?.id,
                         },
                     );
 

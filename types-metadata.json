@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2025-06-01T14:22:36.010Z",
+  "generatedAt": "2025-06-01T14:33:34.374Z",
   "generator": "SuperDetailedTypeExtractor v2.0",
   "statistics": {
     "filesProcessed": 188,
-    "totalLines": 45852,
+    "totalLines": 45853,
     "errorCount": 0,
     "warningCount": 0,
     "dependencies": {},
@@ -277,19 +277,19 @@
       "auth/auth.service.ts": {
         "path": "server/src/auth/auth.service.ts",
         "name": "auth.service.ts",
-        "size": 37963,
-        "lastModified": "2025-06-01T14:20:54.217Z",
+        "size": 38112,
+        "lastModified": "2025-06-01T14:33:12.400Z",
         "relativePath": "auth/auth.service.ts",
-        "lineCount": 1100,
+        "lineCount": 1101,
         "analysis": {
           "hasJSDoc": true,
           "hasDecorators": true,
           "hasGenerics": true,
           "hasImports": true,
           "hasExports": true,
-          "complexity": 279
+          "complexity": 283
         },
-        "complexity": 279,
+        "complexity": 283,
         "dependencies": 24,
         "exports": 0
       },
@@ -4152,8 +4152,8 @@
         "line": 43,
         "type": "class",
         "methodCount": 56,
-        "propertyCount": 326,
-        "complexity": 285
+        "propertyCount": 327,
+        "complexity": 289
       },
       {
         "name": "ForgotPasswordDto",
@@ -7156,19 +7156,19 @@
     "auth/auth.service.ts": {
       "path": "server/src/auth/auth.service.ts",
       "name": "auth.service.ts",
-      "size": 37963,
-      "lastModified": "2025-06-01T14:20:54.217Z",
+      "size": 38112,
+      "lastModified": "2025-06-01T14:33:12.400Z",
       "relativePath": "auth/auth.service.ts",
-      "lineCount": 1100,
+      "lineCount": 1101,
       "analysis": {
         "hasJSDoc": true,
         "hasDecorators": true,
         "hasGenerics": true,
         "hasImports": true,
         "hasExports": true,
-        "complexity": 279
+        "complexity": 283
       },
-      "complexity": 279,
+      "complexity": 283,
       "dependencies": 24,
       "exports": 0
     },
