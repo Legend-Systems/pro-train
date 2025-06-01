@@ -1451,7 +1451,7 @@ export class AuthController {
                 value: {
                     email: 'teammate@company.com',
                     message:
-                        "Join our team on the Exxam platform! We're excited to have you aboard.",
+                        "Join our team on the trainpro platform! We're excited to have you aboard.",
                     organizationId: 'org_123456789',
                 },
             },
@@ -1669,7 +1669,7 @@ export class AuthController {
                         },
                         message: {
                             type: 'string',
-                            example: 'Join our team on the Exxam platform!',
+                            example: 'Join our team on the trainpro platform!',
                             description: 'Custom message from inviter',
                         },
                         organizationId: {

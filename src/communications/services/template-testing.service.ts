@@ -25,19 +25,19 @@ export class TemplateTestingService {
         const baseData = {
             recipientName: 'John Doe',
             recipientEmail: 'john.doe@example.com',
-            companyName: 'Exxam Platform',
-            companyUrl: 'https://exxam.com',
-            supportEmail: 'support@exxam.com',
-            unsubscribeUrl: 'https://exxam.com/unsubscribe?token=sample',
+            companyName: 'trainpro Platform',
+            companyUrl: 'https://trainpro.com',
+            supportEmail: 'support@trainpro.com',
+            unsubscribeUrl: 'https://trainpro.com/unsubscribe?token=sample',
         };
 
         switch (type) {
             case EmailType.WELCOME:
                 return {
                     ...baseData,
-                    loginUrl: 'https://exxam.com/login',
-                    dashboardUrl: 'https://exxam.com/dashboard',
-                    profileUrl: 'https://exxam.com/profile',
+                    loginUrl: 'https://trainpro.com/login',
+                    dashboardUrl: 'https://trainpro.com/dashboard',
+                    profileUrl: 'https://trainpro.com/profile',
                     activationToken: 'sample-activation-token',
                 } as WelcomeTemplateData;
 
@@ -45,7 +45,7 @@ export class TemplateTestingService {
                 return {
                     ...baseData,
                     resetUrl:
-                        'https://exxam.com/reset-password?token=sample-reset-token',
+                        'https://trainpro.com/reset-password?token=sample-reset-token',
                     resetToken: 'sample-reset-token',
                     expiryTime: '15 minutes',
                     ipAddress: '192.168.1.100',
@@ -60,7 +60,7 @@ export class TemplateTestingService {
                     dueDate: new Date(
                         Date.now() + 7 * 24 * 60 * 60 * 1000,
                     ).toISOString(), // 7 days from now
-                    testUrl: 'https://exxam.com/tests/javascript-fundamentals',
+                    testUrl: 'https://trainpro.com/tests/javascript-fundamentals',
                     duration: '45 minutes',
                     instructorName: 'Dr. Sarah Wilson',
                 } as TestNotificationTemplateData;
@@ -75,7 +75,7 @@ export class TemplateTestingService {
                     percentage: 85,
                     completionTime: '32 minutes',
                     resultsUrl:
-                        'https://exxam.com/results/javascript-fundamentals-123',
+                        'https://trainpro.com/results/javascript-fundamentals-123',
                     feedback:
                         'Great job! You have a solid understanding of JavaScript fundamentals. Consider reviewing array methods for improvement.',
                 } as ResultsSummaryTemplateData;
@@ -86,7 +86,7 @@ export class TemplateTestingService {
                     courseName: 'Full Stack Web Development',
                     courseDescription:
                         'Learn to build modern web applications using React, Node.js, and databases.',
-                    courseUrl: 'https://exxam.com/courses/full-stack-web-dev',
+                    courseUrl: 'https://trainpro.com/courses/full-stack-web-dev',
                     instructorName: 'Prof. Michael Chen',
                     startDate: new Date(
                         Date.now() + 3 * 24 * 60 * 60 * 1000,
@@ -103,7 +103,7 @@ export class TemplateTestingService {
                     alertTitle: 'Scheduled Maintenance Notice',
                     alertMessage:
                         'We will be performing scheduled maintenance on our servers this Sunday from 2:00 AM to 4:00 AM EST. During this time, the platform may be temporarily unavailable.',
-                    actionUrl: 'https://exxam.com/status',
+                    actionUrl: 'https://trainpro.com/status',
                     actionText: 'Check Status',
                     timestamp: new Date().toISOString(),
                 } as SystemAlertTemplateData;

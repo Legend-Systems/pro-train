@@ -48,9 +48,9 @@ export class OrgController {
     @ApiOperation({
         summary: '🏗️ Create New Organization',
         description: `
-        **Create Organization - Foundation of the Exxam Ecosystem**
+        **Create Organization - Foundation of the trainpro Ecosystem**
         
-        Organizations are the cornerstone of the Exxam platform, enabling:
+        Organizations are the cornerstone of the trainpro platform, enabling:
         
         **🎯 Why Organizations Matter:**
         - **Multi-tenant Architecture**: Isolate data and operations between different institutions
@@ -255,7 +255,7 @@ export class OrgController {
         **Organization Directory - Complete Platform Overview**
         
         **🔍 What This Provides:**
-        - Complete list of all organizations in the Exxam platform
+        - Complete list of all organizations in the trainpro platform
         - Hierarchical view showing organizations with their branches
         - Administrative overview for platform management
         - Quick access to organizational statistics and health

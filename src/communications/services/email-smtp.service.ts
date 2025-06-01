@@ -114,7 +114,7 @@ export class EmailSMTPService {
 
             const fromName = this.configService.get<string>(
                 'EMAIL_FROM_NAME',
-                'Exxam Platform',
+                'trainpro Platform',
             );
             const fromString = fromName
                 ? `"${fromName}" <${fromEmail}>`

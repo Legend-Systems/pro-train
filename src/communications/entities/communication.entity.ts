@@ -80,7 +80,7 @@ export class Communication {
     @Column()
     @ApiProperty({
         description: 'Sender email address',
-        example: 'noreply@exxam.com',
+        example: 'noreply@trainpro.com',
     })
     @IsEmail()
     senderEmail: string;
@@ -88,7 +88,7 @@ export class Communication {
     @Column({ nullable: true })
     @ApiProperty({
         description: 'Sender name',
-        example: 'Exxam Platform',
+        example: 'trainpro Platform',
         required: false,
     })
     @IsString()
@@ -98,7 +98,7 @@ export class Communication {
     @Column()
     @ApiProperty({
         description: 'Email subject line',
-        example: 'Welcome to Exxam!',
+        example: 'Welcome to trainpro!',
     })
     @IsString()
     subject: string;
@@ -106,7 +106,7 @@ export class Communication {
     @Column('text')
     @ApiProperty({
         description: 'Email body content (HTML)',
-        example: '<h1>Welcome!</h1><p>Thank you for joining Exxam.</p>',
+        example: '<h1>Welcome!</h1><p>Thank you for joining trainpro.</p>',
     })
     @IsString()
     body: string;
@@ -114,7 +114,7 @@ export class Communication {
     @Column('text', { nullable: true })
     @ApiProperty({
         description: 'Plain text version of email body',
-        example: 'Welcome! Thank you for joining Exxam.',
+        example: 'Welcome! Thank you for joining trainpro.',
         required: false,
     })
     @IsString()

@@ -28,7 +28,7 @@ export class SendInvitationDto {
         description:
             'Optional personalized message to include in the invitation email',
         example:
-            "Join our team on the Exxam platform! We're excited to have you aboard.",
+            "Join our team on the trainpro platform! We're excited to have you aboard.",
         required: false,
         type: String,
         title: 'Custom Message',

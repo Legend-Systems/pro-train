@@ -1,6 +1,6 @@
 # Email Templates
 
-This directory contains Handlebars templates for the Exxam Platform email communications system.
+This directory contains Handlebars templates for the trainpro Platform email communications system.
 
 ## Available Templates
 
@@ -47,7 +47,7 @@ All templates have access to these base variables:
 
 - `recipientName` - Recipient's display name
 - `recipientEmail` - Recipient's email address
-- `companyName` - Platform name (default: "Exxam Platform")
+- `companyName` - Platform name (default: "trainpro Platform")
 - `companyUrl` - Platform URL
 - `supportEmail` - Support contact email
 - `unsubscribeUrl` - Unsubscribe link

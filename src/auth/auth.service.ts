@@ -602,7 +602,7 @@ export class AuthService {
         try {
             const baseUrl = this.configService.get<string>(
                 'CLIENT_URL',
-                'https://exxam.com',
+                'https://trainpro.com',
             );
 
             const templateData = {
@@ -611,11 +611,11 @@ export class AuthService {
                 loginUrl: `${baseUrl}/login`,
                 dashboardUrl: `${baseUrl}/dashboard`,
                 profileUrl: `${baseUrl}/profile`,
-                companyName: 'Exxam Platform',
+                companyName: 'trainpro Platform',
                 companyUrl: baseUrl,
                 supportEmail: this.configService.get<string>(
                     'SUPPORT_EMAIL',
-                    'support@exxam.com',
+                    'support@trainpro.com',
                 ),
             };
 
@@ -655,7 +655,7 @@ export class AuthService {
         try {
             const baseUrl = this.configService.get<string>(
                 'CLIENT_URL',
-                'https://exxam.com',
+                'https://trainpro.com',
             );
             const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
@@ -665,11 +665,11 @@ export class AuthService {
                 resetUrl,
                 resetToken: token,
                 expiryTime: '15 minutes',
-                companyName: 'Exxam Platform',
+                companyName: 'trainpro Platform',
                 companyUrl: baseUrl,
                 supportEmail: this.configService.get<string>(
                     'SUPPORT_EMAIL',
-                    'support@exxam.com',
+                    'support@trainpro.com',
                 ),
             };
 
@@ -710,7 +710,7 @@ export class AuthService {
         try {
             const baseUrl = this.configService.get<string>(
                 'CLIENT_URL',
-                'https://exxam.com',
+                'https://trainpro.com',
             );
             const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
 
@@ -720,11 +720,11 @@ export class AuthService {
                 verificationUrl,
                 verificationToken: token,
                 expiryTime: '24 hours',
-                companyName: 'Exxam Platform',
+                companyName: 'trainpro Platform',
                 companyUrl: baseUrl,
                 supportEmail: this.configService.get<string>(
                     'SUPPORT_EMAIL',
-                    'support@exxam.com',
+                    'support@trainpro.com',
                 ),
             };
 
@@ -844,7 +844,7 @@ export class AuthService {
         try {
             const baseUrl = this.configService.get<string>(
                 'CLIENT_URL',
-                'https://exxam.com',
+                'https://trainpro.com',
             );
             const invitationUrl = `${baseUrl}/signup?invitation=${token}`;
 
@@ -856,15 +856,15 @@ export class AuthService {
                 signupUrl: invitationUrl,
                 customMessage:
                     customMessage ||
-                    `You've been invited to join Exxam Platform by ${inviter.firstName} ${inviter.lastName}.`,
+                    `You've been invited to join trainpro Platform by ${inviter.firstName} ${inviter.lastName}.`,
                 expiryTime: '7 days',
                 loginInstructions:
                     'After signing up, you will receive your login credentials and can access the platform immediately.',
-                companyName: 'Exxam Platform',
+                companyName: 'trainpro Platform',
                 companyUrl: baseUrl,
                 supportEmail: this.configService.get<string>(
                     'SUPPORT_EMAIL',
-                    'support@exxam.com',
+                    'support@trainpro.com',
                 ),
             };
 
@@ -877,7 +877,7 @@ export class AuthService {
             await this.emailQueueService.queueEmail(
                 {
                     to: recipientEmail,
-                    subject: `${inviter.firstName} ${inviter.lastName} invited you to join Exxam Platform`,
+                    subject: `${inviter.firstName} ${inviter.lastName} invited you to join trainpro Platform`,
                     html: rendered.html,
                     text: rendered.text,
                 },

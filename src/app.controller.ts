@@ -20,7 +20,7 @@ export class AppController {
     @Get()
     @ApiOperation({
         summary: '🏠 Welcome Message',
-        description: 'Returns welcome message for the eXXam API system',
+        description: 'Returns welcome message for the trainpro API system',
     })
     @ApiResponse({
         status: 200,
@@ -28,7 +28,7 @@ export class AppController {
         schema: {
             type: 'string',
             example:
-                'Welcome to eXXam API - Advanced Web-Based Examination & Marking System',
+                'Welcome to trainpro API - Advanced Web-Based Examination & Marking System',
         },
     })
     getHello(): string {
@@ -45,7 +45,7 @@ export class AppController {
             - Feature capabilities by category
             - Technical architecture details
             
-            This endpoint provides a complete overview of the eXXam system
+            This endpoint provides a complete overview of the trainpro system
             for developers, administrators, and API consumers.
         `,
     })

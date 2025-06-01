@@ -48,7 +48,7 @@ export class EmailConfigService {
                 from: {
                     name: this.configService.get<string>(
                         'EMAIL_FROM_NAME',
-                        'Exxam Platform',
+                        'trainpro Platform',
                     ),
                     address:
                         this.configService.get<string>('EMAIL_FROM_ADDRESS') ||

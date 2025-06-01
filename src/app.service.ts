@@ -29,17 +29,17 @@ export interface SystemInfo {
 @Injectable()
 export class AppService {
     getHello(): string {
-        return 'Welcome to eXXam API - Advanced Web-Based Examination & Marking System';
+        return 'Welcome to trainpro API - Advanced Web-Based Examination & Marking System';
     }
 
     getSystemInfo(): SystemInfo {
         return {
-            name: 'eXXam - Advanced Examination System',
+            name: 'trainpro - Advanced Examination System',
             version: '1.0.0',
             description: `
-                eXXam is a comprehensive web-based examination and marking system designed for educational institutions, 
+                trainpro is a comprehensive web-based examination and marking system designed for educational institutions, 
                 training organizations, and assessment providers. Built with scalability, security, and user experience 
-                in mind, eXXam supports multiple question types, automated marking, detailed analytics, and gamified 
+                in mind, trainpro supports multiple question types, automated marking, detailed analytics, and gamified 
                 learning experiences through leaderboards and progress tracking.
             `,
             features: [

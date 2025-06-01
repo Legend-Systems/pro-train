@@ -469,7 +469,7 @@ export class EmailTemplateService {
 
         // Provide default company name if not provided
         const subjectData = {
-            companyName: 'Exxam Platform',
+            companyName: 'trainpro Platform',
             ...data,
         };
 
