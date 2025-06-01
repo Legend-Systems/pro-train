@@ -3,10 +3,19 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import helmet from 'helmet';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);
+
+    // Security: Use helmet for security headers
+    app.use(
+        helmet({
+            contentSecurityPolicy: false, // Disable CSP for Swagger UI
+            xPoweredBy: false, // Disable x-powered-by header
+        }),
+    );
 
     // Enable global validation
     app.useGlobalPipes(

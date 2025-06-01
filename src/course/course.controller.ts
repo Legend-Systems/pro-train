@@ -395,9 +395,7 @@ export class CourseController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(
-                `Getting courses created by user: ${scope.userId}`,
-            );
+            this.logger.log(`Getting courses created by user: ${scope.userId}`);
 
             const result = await this.courseService.findByCreator(
                 scope.userId,
@@ -569,7 +567,9 @@ export class CourseController {
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse> {
         try {
-            this.logger.log(`Getting stats for course ${id} by user: ${req.user.id}`);
+            this.logger.log(
+                `Getting stats for course ${id} by user: ${req.user.id}`,
+            );
 
             const stats = await this.courseService.getStats(id);
 
@@ -758,7 +758,8 @@ export class CourseController {
     })
     @ApiResponse({
         status: HttpStatus.FORBIDDEN,
-        description: '⛔ Forbidden - Cannot delete course with tests or not creator',
+        description:
+            '⛔ Forbidden - Cannot delete course with tests or not creator',
         schema: {
             type: 'object',
             properties: {

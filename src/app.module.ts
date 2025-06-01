@@ -34,7 +34,8 @@ import { OrgModule } from './org/org.module';
 import { BranchModule } from './branch/branch.module';
 import { MediaManagerModule } from './media-manager/media-manager.module';
 import { MediaFile } from './media-manager/entities/media-manager.entity';
-import { RewardsModule } from './rewards/rewards.module';
+import { CourseMaterialsModule } from './course-materials/course-materials.module';
+import { CourseMaterial } from './course-materials/entities/course-material.entity';
 
 @Module({
     imports: [
@@ -77,18 +78,19 @@ import { RewardsModule } from './rewards/rewards.module';
                 password: configService.get('DATABASE_PASSWORD'),
                 database: configService.get('DATABASE_NAME'),
                 entities: [
-                    User,
+                    Answer,
+                    Communication,
                     Course,
-                    Test,
+                    CourseMaterial,
+                    Leaderboard,
+                    MediaFile,
                     Question,
                     QuestionOption,
-                    TestAttempt,
-                    Answer,
                     Result,
-                    Leaderboard,
+                    Test,
+                    TestAttempt,
                     TrainingProgress,
-                    Communication,
-                    MediaFile,
+                    User,
                 ],
                 synchronize: true,
                 logging: false,
@@ -129,7 +131,7 @@ import { RewardsModule } from './rewards/rewards.module';
         OrgModule,
         BranchModule,
         MediaManagerModule,
-        RewardsModule,
+        CourseMaterialsModule,
     ],
     controllers: [AppController],
     providers: [

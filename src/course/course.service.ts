@@ -328,6 +328,10 @@ export class CourseService {
             query.leftJoinAndSelect('course.creator', 'creator');
             query.leftJoinAndSelect('course.orgId', 'org');
             query.leftJoinAndSelect('course.branchId', 'branch');
+            query.leftJoinAndSelect(
+                'course.courseMaterials',
+                'courseMaterials',
+            );
             query.where('course.courseId = :id', { id });
 
             // Apply org/branch scoping
@@ -579,7 +583,7 @@ export class CourseService {
 
             const course = await this.courseRepository.findOne({
                 where: { courseId: id },
-                relations: ['creator', 'orgId', 'branchId'],
+                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
             });
 
             if (course) {

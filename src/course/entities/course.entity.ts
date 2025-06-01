@@ -17,6 +17,7 @@ import { TrainingProgress } from 'src/training_progress/entities/training_progre
 import { Result } from 'src/results/entities/result.entity';
 import { Leaderboard } from 'src/leaderboard/entities/leaderboard.entity';
 import { Test } from 'src/test/entities/test.entity';
+import { CourseMaterial } from 'src/course-materials/entities/course-material.entity';
 
 @Entity('courses')
 export class Course {
@@ -101,6 +102,9 @@ export class Course {
 
     @OneToMany(() => TrainingProgress, progress => progress.course)
     trainingProgress: TrainingProgress[];
+
+    @OneToMany(() => CourseMaterial, material => material.course)
+    courseMaterials: CourseMaterial[];
 
     constructor(partial: Partial<Course>) {
         Object.assign(this, partial);
