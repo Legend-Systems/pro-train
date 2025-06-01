@@ -1740,4 +1740,170 @@ export class AuthController {
         );
         return this.authService.validateInvitation(validateInvitationDto);
     }
+
+    @Post('re-invite-all')
+    @UseGuards(JwtAuthGuard)
+    @Throttle({ default: { limit: 1, ttl: 3600000 } }) // 1 attempt per hour
+    @ApiOperation({
+        summary: '🎓 Send Re-engagement to All Users',
+        description: `
+      **Sends re-engagement emails to all existing users in the system**
+      
+      This endpoint handles organizational re-engagement campaigns with the following features:
+      - Fetches all users from the system
+      - Sends personalized re-engagement emails to each user
+      - Encourages users to start actively using the platform
+      - Provides detailed reporting of success/failure rates
+      - Implements anti-spam measures with randomized delays
+      
+      **Security Features:**
+      - Rate limiting: 1 attempt per hour per user (to prevent abuse)
+      - Authentication required (JWT)
+      - Admin/elevated permissions recommended
+      - Batch operation logging
+      - Email delivery tracking
+      
+      **Re-engagement Flow:**
+      1. Authenticated admin initiates bulk re-engagement campaign
+      2. System fetches all registered users
+      3. Personal re-engagement emails are generated for each user
+      4. Emails are queued with randomized delays to avoid spam detection
+      5. Detailed report of success/failure is returned
+      6. Failed emails are logged for retry attempts
+      
+      **Email Content:**
+      - Personalized greeting with user's name
+      - Organizational invitation to start using the platform
+      - Highlights of available features and learning opportunities
+      - Clear call-to-action to login and begin learning
+      - Professional and engaging tone from the organization
+      - Links to courses, tests, dashboard, and support
+      
+      **Use Cases:**
+      - User re-engagement campaigns
+      - Platform adoption initiatives
+      - Learning program launch announcements
+      - Organizational onboarding communication
+      - Course enrollment campaigns
+    `,
+        operationId: 'sendReInviteToAllUsers',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Re-engagement emails sent successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Re-engagement sending success status',
+                },
+                message: {
+                    type: 'string',
+                    example:
+                        'Re-engagement emails sent successfully. 25 emails queued, 0 failed.',
+                    description: 'Detailed success confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Detailed re-engagement statistics',
+                    properties: {
+                        totalUsers: {
+                            type: 'number',
+                            example: 25,
+                            description: 'Total number of users in the system',
+                        },
+                        successCount: {
+                            type: 'number',
+                            example: 25,
+                            description:
+                                'Number of emails successfully queued',
+                        },
+                        failedCount: {
+                            type: 'number',
+                            example: 0,
+                            description: 'Number of emails that failed to queue',
+                        },
+                        failedEmails: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            example: [],
+                            description:
+                                'List of email addresses that failed (if any)',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ No users found or operation failed',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'string',
+                    example: 'No users found in the system',
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Authentication required',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: {
+                    type: 'string',
+                    example: 'Unauthorized',
+                },
+                error: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+        description: '⏰ Rate limit exceeded',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 429 },
+                message: {
+                    type: 'string',
+                    example: 'Too many re-invite requests. Please try again later.',
+                },
+                error: { type: 'string', example: 'Too Many Requests' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        description: '💥 Server error during email sending',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 500 },
+                message: {
+                    type: 'string',
+                    example: 'Failed to send re-invite emails to users',
+                },
+                error: { type: 'string', example: 'Internal Server Error' },
+            },
+        },
+    })
+    @ApiBearerAuth()
+    async sendReInviteToAllUsers(
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse<any>> {
+        this.logger.log(
+            `User re-engagement campaign initiated by user ${req.user.id}`,
+        );
+        return this.authService.sendReInviteToAllUsers();
+    }
 }

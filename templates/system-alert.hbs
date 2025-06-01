@@ -31,21 +31,6 @@
             padding: 40px 20px;
             text-align: center;
             color: white;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%), linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.1) 75%);
-            background-size: 20px 20px;
-            background-position: 0 0, 10px 10px;
-            opacity: 0.3;
         }
         
         .header.error {
@@ -57,7 +42,7 @@
         }
         
         .header.success {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
         }
         
         .header.info {
@@ -68,15 +53,11 @@
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 8px;
-            position: relative;
-            z-index: 1;
         }
         
         .header p {
             font-size: 16px;
             opacity: 0.9;
-            position: relative;
-            z-index: 1;
         }
         
         .content {
@@ -90,133 +71,71 @@
             margin-bottom: 20px;
         }
         
-        .alert-card {
-            padding: 30px;
-            border-radius: 12px;
-            margin: 30px 0;
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 30px;
+            line-height: 1.7;
+        }
+        
+        .alert-notice {
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
             border-left: 4px solid;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-            position: relative;
-            overflow: hidden;
         }
         
-        .alert-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            opacity: 0.1;
-            transform: translate(30px, -30px);
-        }
-        
-        .alert-card.error {
-            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        .alert-notice.error {
+            background-color: #fef2f2;
             border-left-color: #ef4444;
         }
         
-        .alert-card.error::before {
-            background: #ef4444;
+        .alert-notice.error p {
+            color: #991b1b;
         }
         
-        .alert-card.warning {
-            background: linear-gradient(135deg, #fefbf3 0%, #fef3c7 100%);
+        .alert-notice.warning {
+            background-color: #fef3c7;
             border-left-color: #f59e0b;
         }
         
-        .alert-card.warning::before {
-            background: #f59e0b;
-        }
-        
-        .alert-card.success {
-            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-            border-left-color: #10b981;
-        }
-        
-        .alert-card.success::before {
-            background: #10b981;
-        }
-        
-        .alert-card.info {
-            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-            border-left-color: #3b82f6;
-        }
-        
-        .alert-card.info::before {
-            background: #3b82f6;
-        }
-        
-        .alert-title {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 15px;
-            text-align: center;
-            position: relative;
-            z-index: 1;
-        }
-        
-        .alert-title.error {
-            color: #b91c1c;
-        }
-        
-        .alert-title.warning {
+        .alert-notice.warning p {
             color: #92400e;
         }
         
-        .alert-title.success {
-            color: #065f46;
+        .alert-notice.success {
+            background-color: #dcfce7;
+            border-left-color: #22c55e;
         }
         
-        .alert-title.info {
+        .alert-notice.success p {
+            color: #15803d;
+        }
+        
+        .alert-notice.info {
+            background-color: #eff6ff;
+            border-left-color: #3b82f6;
+        }
+        
+        .alert-notice.info p {
             color: #1e40af;
         }
         
-        .alert-icon {
-            font-size: 48px;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .alert-message {
-            font-size: 16px;
-            line-height: 1.7;
-            text-align: center;
-            margin-bottom: 20px;
-            position: relative;
-            z-index: 1;
-        }
-        
-        .alert-message.error {
-            color: #7f1d1d;
-        }
-        
-        .alert-message.warning {
-            color: #78350f;
-        }
-        
-        .alert-message.success {
-            color: #064e3b;
-        }
-        
-        .alert-message.info {
-            color: #1e3a8a;
-        }
-        
-        .timestamp {
-            text-align: center;
+        .alert-notice p {
+            margin: 0;
             font-size: 14px;
-            color: #6b7280;
-            margin: 20px 0;
-            padding: 10px;
-            background-color: #f9fafb;
-            border-radius: 6px;
+            font-weight: 600;
+        }
+        
+        .alert-icon {
+            font-size: 24px;
+            margin-right: 8px;
+            vertical-align: middle;
         }
         
         .cta-section {
             text-align: center;
-            margin: 30px 0;
+            margin: 40px 0;
         }
         
         .cta-button {
@@ -232,33 +151,36 @@
         
         .cta-button.error {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
         }
         
         .cta-button.warning {
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);
         }
         
         .cta-button.success {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
         }
         
         .cta-button.info {
             background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
         }
         
         .cta-button:hover {
             transform: translateY(-2px);
         }
         
-        .message {
-            font-size: 16px;
-            color: #4b5563;
-            margin-bottom: 20px;
-            line-height: 1.7;
+        .timestamp-info {
+            background-color: #f3f4f6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+        }
+        
+        .timestamp-info p {
+            margin: 0;
+            font-size: 14px;
+            color: #6b7280;
         }
         
         .footer {
@@ -275,7 +197,7 @@
         }
         
         .footer a {
-            color: #2563eb;
+            color: #667eea;
             text-decoration: none;
         }
         
@@ -292,16 +214,13 @@
                 font-size: 24px;
             }
             
-            .alert-card {
-                padding: 20px;
+            .greeting {
+                font-size: 18px;
             }
             
-            .alert-title {
-                font-size: 20px;
-            }
-            
-            .alert-icon {
-                font-size: 36px;
+            .cta-button {
+                padding: 14px 28px;
+                font-size: 15px;
             }
         }
     </style>
@@ -309,7 +228,13 @@
 <body>
     <div class="container">
         <div class="header {{alertType}}">
-            <h1>System Alert</h1>
+            <h1>
+                {{#if eq alertType 'error'}}🚨{{/if}}
+                {{#if eq alertType 'warning'}}⚠️{{/if}}
+                {{#if eq alertType 'success'}}✅{{/if}}
+                {{#if eq alertType 'info'}}ℹ️{{/if}}
+                System Alert
+            </h1>
             <p>{{alertTitle}}</p>
         </div>
         
@@ -320,44 +245,54 @@
             </div>
             {{/if}}
             
-            <div class="alert-card {{alertType}}">
-                <div class="alert-icon">
-                    {{#if eq alertType 'error'}}🚨{{/if}}
-                    {{#if eq alertType 'warning'}}⚠️{{/if}}
-                    {{#if eq alertType 'success'}}✅{{/if}}
-                    {{#if eq alertType 'info'}}ℹ️{{/if}}
-                </div>
-                
-                <div class="alert-title {{alertType}}">
-                    {{alertTitle}}
-                </div>
-                
-                <div class="alert-message {{alertType}}">
-                    {{alertMessage}}
-                </div>
-                
-                {{#if actionUrl}}
-                <div class="cta-section">
-                    <a href="{{actionUrl}}" class="cta-button {{alertType}}">
-                        {{#if actionText}}{{actionText}}{{else}}Learn More{{/if}}
-                    </a>
-                </div>
-                {{/if}}
+            <div class="message">
+                {{alertMessage}}
             </div>
             
-            <div class="timestamp">
-                <strong>Time:</strong> {{formatDate timestamp 'long'}}
+            <div class="alert-notice {{alertType}}">
+                <p>
+                    <span class="alert-icon">
+                        {{#if eq alertType 'error'}}🚨{{/if}}
+                        {{#if eq alertType 'warning'}}⚠️{{/if}}
+                        {{#if eq alertType 'success'}}✅{{/if}}
+                        {{#if eq alertType 'info'}}ℹ️{{/if}}
+                    </span>
+                    <strong>{{alertTitle}}:</strong> 
+                    {{#if eq alertType 'error'}}This issue requires immediate attention.{{/if}}
+                    {{#if eq alertType 'warning'}}Please review this important information.{{/if}}
+                    {{#if eq alertType 'success'}}This update has been successfully completed.{{/if}}
+                    {{#if eq alertType 'info'}}This is an informational update for your awareness.{{/if}}
+                </p>
             </div>
+            
+            <div class="timestamp-info">
+                <p><strong>Alert Details:</strong></p>
+                <p>Date & Time: {{formatDate timestamp 'long'}}</p>
+                <p>Alert Type: {{alertType}}</p>
+                <p>System: {{companyName}} Platform</p>
+            </div>
+            
+            {{#if actionUrl}}
+            <div class="cta-section">
+                <a href="{{actionUrl}}" class="cta-button {{alertType}}">
+                    {{#if actionText}}{{actionText}}{{else}}Learn More{{/if}}
+                </a>
+            </div>
+            {{/if}}
             
             <div class="message">
                 {{#if eq alertType 'error'}}
+                <strong>We're addressing this issue:</strong><br>
                 We know how frustrating technical issues can be, especially when you're in the flow of learning. Our entire team is focused on resolving this quickly so you can get back to what matters most - your progress. We truly appreciate your patience and are here to support you through this.
                 {{else if eq alertType 'warning'}}
-                We're sharing this important update because we respect your time and want you to plan accordingly. Transparency is important to us, and we believe you deserve to know what's happening with your learning platform. As always, we're here if you have any questions.
+                <strong>Please note this important information:</strong><br>
+                We're sharing this important update because we respect your time and want you to plan accordingly. Transparency is important to us, and we believe you deserve to know what's happening with your learning platform.
                 {{else if eq alertType 'success'}}
-                Great news to share! 🎉 We love celebrating positive updates with our learning community. Thank you for being part of what makes {{companyName}} special - your engagement and feedback help us continuously improve.
+                <strong>Great news to share! 🎉</strong><br>
+                We love celebrating positive updates with our learning community. Thank you for being part of what makes {{companyName}} special - your engagement and feedback help us continuously improve.
                 {{else}}
-                We believe in keeping you informed about your learning platform. This update helps ensure you have the latest information to make the most of your {{companyName}} experience. Knowledge is power, especially when it comes to your own learning journey!
+                <strong>Keeping you informed:</strong><br>
+                We believe in keeping you informed about your learning platform. This update helps ensure you have the latest information to make the most of your {{companyName}} experience.
                 {{/if}}
             </div>
             
@@ -377,6 +312,9 @@
         <div class="footer">
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
             <p>{{companyName}} System Team</p>
+            <p style="margin-top: 15px; font-size: 12px; color: #9ca3af;">
+                This is an automated system notification. Please do not reply to this email.
+            </p>
         </div>
     </div>
 </body>

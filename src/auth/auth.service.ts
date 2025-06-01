@@ -389,6 +389,9 @@ export class AuthService {
         // Consume the reset token
         this.tokenManagerService.consumeSpecialToken(token);
 
+        // Send password changed confirmation email
+        await this.sendPasswordChangedEmail(user);
+
         return {
             success: true,
             message: 'Password has been successfully reset.',
@@ -844,6 +847,185 @@ export class AuthService {
             },
             message: 'Invitation token is valid',
         };
+    }
+
+    /**
+     * Send password changed confirmation email
+     */
+    private async sendPasswordChangedEmail(
+        user: User,
+        ipAddress?: string,
+        userAgent?: string,
+    ): Promise<void> {
+        try {
+            const baseUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const appName = this.configService.get<string>(
+                'APP_NAME',
+                'trainpro Platform',
+            );
+
+            const templateData = {
+                recipientName: `${user.firstName} ${user.lastName}`,
+                recipientEmail: user.email,
+                changeDateTime: new Date().toLocaleString('en-US', {
+                    timeZone: 'UTC',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZoneName: 'short',
+                }),
+                loginUrl: `${baseUrl}/login`,
+                dashboardUrl: `${baseUrl}/dashboard`,
+                profileUrl: `${baseUrl}/profile`,
+                companyName: appName,
+                companyUrl: baseUrl,
+                supportEmail: this.configService.get<string>(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                ipAddress,
+                userAgent,
+                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.PASSWORD_CHANGED,
+                templateData,
+            );
+
+            await this.emailQueueService.queueEmail(
+                {
+                    to: user.email,
+                    subject: rendered.subject,
+                    html: rendered.html,
+                    text: rendered.text,
+                },
+                EmailJobPriority.CRITICAL,
+                0, // Send immediately
+                {
+                    userId: user.id,
+                    templateType: EmailType.PASSWORD_CHANGED,
+                },
+            );
+        } catch (error) {
+            console.error('Failed to send password changed email:', error);
+            // Don't throw error - email failure shouldn't block password change
+        }
+    }
+
+    /**
+     * Send re-engagement emails to all existing users
+     * This is an organizational initiative to encourage users to start actively using the platform
+     */
+    async sendReInviteToAllUsers(): Promise<StandardApiResponse<any>> {
+        try {
+            // Get all users from the system
+            const allUsers = await this.userService.findAll();
+
+            if (!allUsers || allUsers.length === 0) {
+                return {
+                    success: false,
+                    message: 'No users found in the system',
+                };
+            }
+
+            const baseUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const appName = this.configService.get<string>(
+                'APP_NAME',
+                'Exxam Learning Platform',
+            );
+            const organizationName = this.configService.get<string>(
+                'ORGANIZATION_NAME',
+                'Your Organization',
+            );
+
+            let successCount = 0;
+            let failedCount = 0;
+            const failedEmails: string[] = [];
+
+            // Send re-engagement email to each user
+            for (const user of allUsers) {
+                try {
+                    const templateData = {
+                        recipientName: `${user.firstName} ${user.lastName}`,
+                        recipientEmail: user.email,
+                        loginUrl: `${baseUrl}/login`,
+                        dashboardUrl: `${baseUrl}/dashboard`,
+                        profileUrl: `${baseUrl}/profile`,
+                        coursesUrl: `${baseUrl}/courses`,
+                        testsUrl: `${baseUrl}/tests`,
+                        leaderboardUrl: `${baseUrl}/leaderboard`,
+                        companyName: appName,
+                        organizationName: organizationName,
+                        companyUrl: baseUrl,
+                        supportEmail: this.configService.get<string>(
+                            'SUPPORT_EMAIL',
+                            'support@exxam.com',
+                        ),
+                        unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                        currentYear: new Date().getFullYear(),
+                    };
+
+                    const rendered =
+                        await this.emailTemplateService.renderTemplate({
+                            template: 're-invite',
+                            data: templateData,
+                            format: 'both',
+                        });
+
+                    await this.emailQueueService.queueEmail(
+                        {
+                            to: user.email,
+                            subject: `🎓 Your Learning Journey Awaits - Start Using ${appName} Today!`,
+                            html: rendered.html,
+                            text: rendered.text,
+                        },
+                        EmailJobPriority.HIGH,
+                        Math.floor(Math.random() * 300000), // Random delay up to 5 minutes to avoid spam detection
+                        {
+                            userId: user.id,
+                            templateType: 're-invite',
+                            batchOperation: true,
+                            campaignType: 'user-reengagement',
+                        },
+                    );
+
+                    successCount++;
+                } catch (error) {
+                    console.error(
+                        `Failed to send re-engagement email to ${user.email}:`,
+                        error,
+                    );
+                    failedCount++;
+                    failedEmails.push(user.email);
+                }
+            }
+
+            return {
+                success: true,
+                message: `Re-engagement emails sent successfully. ${successCount} emails queued, ${failedCount} failed.`,
+                data: {
+                    totalUsers: allUsers.length,
+                    successCount,
+                    failedCount,
+                    failedEmails,
+                },
+            };
+        } catch (error) {
+            console.error('Failed to send re-engagement emails:', error);
+            return {
+                success: false,
+                message: 'Failed to send re-engagement emails to users',
+            };
+        }
     }
 
     /**

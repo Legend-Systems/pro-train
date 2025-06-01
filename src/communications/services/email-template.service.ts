@@ -194,6 +194,25 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'password-changed',
+                    type: EmailType.PASSWORD_CHANGED,
+                    htmlFile: 'password-changed.hbs',
+                    textFile: 'password-changed.txt.hbs',
+                    metadata: {
+                        name: 'Password Changed',
+                        type: EmailType.PASSWORD_CHANGED,
+                        version: '1.0.0',
+                        description:
+                            'Password change confirmation notification',
+                        requiredData: [
+                            'recipientName',
+                            'changeDateTime',
+                            'loginUrl',
+                        ],
+                        optionalData: ['ipAddress', 'userAgent'],
+                    },
+                },
+                {
                     name: 'test-notification',
                     type: EmailType.TEST_NOTIFICATION,
                     htmlFile: 'test-notification.hbs',
@@ -521,6 +540,7 @@ export class EmailTemplateService {
             'welcome-user':
                 'Welcome {{firstName}}! Your {{companyName}} Account is Ready',
             'password-reset': 'Password Reset Request',
+            'password-changed': 'Password Changed Successfully',
             'test-notification': 'New Test Available: {{testTitle}}',
             'results-summary': 'Test Results: {{testTitle}}',
             'course-enrollment': 'Enrolled in {{courseName}}',
