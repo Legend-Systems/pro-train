@@ -31,6 +31,36 @@ export class CommunicationsService {
         private readonly configService: ConfigService,
     ) {}
 
+    /**
+     * Get base template data that all emails should include
+     */
+    private getBaseTemplateData(
+        recipientEmail: string,
+        recipientName?: string,
+    ) {
+        const clientUrl = this.configService.get<string>(
+            'CLIENT_URL',
+            'http://localhost:3000',
+        );
+        const appName = this.configService.get<string>(
+            'APP_NAME',
+            'trainpro Platform',
+        );
+        const supportEmail = this.configService.get<string>(
+            'SUPPORT_EMAIL',
+            'support@trainpro.com',
+        );
+
+        return {
+            recipientName,
+            recipientEmail,
+            companyName: appName,
+            companyUrl: clientUrl,
+            supportEmail,
+            unsubscribeUrl: `${clientUrl}/unsubscribe`,
+        };
+    }
+
     async sendWelcomeOrganizationEmail(
         organizationId: string,
         organizationName: string,
@@ -39,25 +69,24 @@ export class CommunicationsService {
         website?: string,
     ): Promise<void> {
         try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const baseData = this.getBaseTemplateData(
+                organizationEmail,
+                organizationName,
+            );
+
             const templateData: WelcomeOrganizationTemplateData = {
-                recipientName: organizationName,
-                recipientEmail: organizationEmail,
+                ...baseData,
                 organizationName,
                 organizationId,
-                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
-                loginUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/login`,
-                companyName: 'trainpro Platform',
-                companyUrl: this.configService.get(
-                    'CLIENT_URL',
-                    'http://localhost:3000',
-                ),
-                supportEmail: this.configService.get(
-                    'SUPPORT_EMAIL',
-                    'support@trainpro.com',
-                ),
+                dashboardUrl: `${clientUrl}/dashboard`,
+                loginUrl: `${clientUrl}/login`,
                 logoUrl,
                 website,
-                setupGuideUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/setup-guide`,
+                setupGuideUrl: `${clientUrl}/setup-guide`,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -117,28 +146,24 @@ export class CommunicationsService {
         managerName?: string,
     ): Promise<void> {
         try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const baseData = this.getBaseTemplateData(branchEmail, branchName);
+
             const templateData: WelcomeBranchTemplateData = {
-                recipientName: branchName,
-                recipientEmail: branchEmail,
+                ...baseData,
                 branchName,
                 branchId,
                 organizationName,
                 organizationId,
-                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
-                loginUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/login`,
-                companyName: 'trainpro Platform',
-                companyUrl: this.configService.get(
-                    'CLIENT_URL',
-                    'http://localhost:3000',
-                ),
-                supportEmail: this.configService.get(
-                    'SUPPORT_EMAIL',
-                    'support@trainpro.com',
-                ),
+                dashboardUrl: `${clientUrl}/dashboard`,
+                loginUrl: `${clientUrl}/login`,
                 address,
                 contactNumber,
                 managerName,
-                setupGuideUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/setup-guide`,
+                setupGuideUrl: `${clientUrl}/setup-guide`,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -427,6 +452,259 @@ export class CommunicationsService {
         } catch (error) {
             this.logger.error(
                 `Failed to send password change email for user ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendUserDeactivatedEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        organizationId?: string,
+        organizationName?: string,
+        branchId?: string,
+        branchName?: string,
+        reason?: string,
+        deactivatedBy?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: firstName,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userEmail,
+                organizationName,
+                branchName,
+                reason,
+                deactivatedBy,
+                companyName: 'trainpro Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.USER_DEACTIVATED,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: firstName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'trainpro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.USER_DEACTIVATED,
+                templateUsed: 'user-deactivated',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    organizationId,
+                    organizationName,
+                    branchId,
+                    branchName,
+                    reason,
+                    deactivatedBy,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `User deactivated email queued for: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send user deactivated email for ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendUserRestoredEmail(
+        userId: string,
+        userEmail: string,
+        firstName: string,
+        lastName: string,
+        organizationId?: string,
+        organizationName?: string,
+        branchId?: string,
+        branchName?: string,
+        restoredBy?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: firstName,
+                recipientEmail: userEmail,
+                firstName,
+                lastName,
+                userEmail,
+                organizationName,
+                branchName,
+                restoredBy,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                companyName: 'trainpro Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                unsubscribeUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/unsubscribe`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.USER_RESTORED,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: firstName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'trainpro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.USER_RESTORED,
+                templateUsed: 'user-restored',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    userId,
+                    organizationId,
+                    organizationName,
+                    branchId,
+                    branchName,
+                    restoredBy,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `User restored email queued for: ${firstName} ${lastName} (${userEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send user restored email for ${firstName} ${lastName}:`,
+                error,
+            );
+        }
+    }
+
+    async sendCourseCreatedEmail(
+        courseId: number,
+        title: string,
+        description: string,
+        creatorId: string,
+        creatorEmail: string,
+        creatorFirstName: string,
+        creatorLastName: string,
+        organizationId?: string,
+        organizationName?: string,
+        branchId?: string,
+        branchName?: string,
+    ): Promise<void> {
+        try {
+            const templateData = {
+                recipientName: creatorFirstName,
+                recipientEmail: creatorEmail,
+                title,
+                description,
+                creatorFirstName,
+                creatorLastName,
+                organizationName,
+                branchName,
+                courseUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/courses/${courseId}`,
+                dashboardUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/dashboard`,
+                companyName: 'trainpro Platform',
+                companyUrl: this.configService.get(
+                    'CLIENT_URL',
+                    'http://localhost:3000',
+                ),
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                unsubscribeUrl: `${this.configService.get('CLIENT_URL', 'http://localhost:3000')}/unsubscribe`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.COURSE_CREATED,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: creatorEmail,
+                recipientName: creatorFirstName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'trainpro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.COURSE_CREATED,
+                templateUsed: 'course-created',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    courseId,
+                    creatorId,
+                    organizationId,
+                    organizationName,
+                    branchId,
+                    branchName,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            await this.emailQueueService.queueEmail({
+                to: creatorEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Course created email queued for: ${creatorFirstName} ${creatorLastName} (${creatorEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send course created email for course ${title}:`,
                 error,
             );
         }

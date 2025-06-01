@@ -29,6 +29,9 @@ export enum EmailType {
     TEST_NOTIFICATION = 'test_notification',
     RESULTS_SUMMARY = 'results_summary',
     COURSE_ENROLLMENT = 'course_enrollment',
+    COURSE_CREATED = 'course_created',
+    USER_DEACTIVATED = 'user_deactivated',
+    USER_RESTORED = 'user_restored',
     SYSTEM_ALERT = 'system_alert',
     CUSTOM = 'custom',
 }

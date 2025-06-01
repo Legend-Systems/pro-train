@@ -611,6 +611,7 @@ export class UserController {
                 req.user.id,
                 assignOrgBranchDto.orgId,
                 assignOrgBranchDto.branchId,
+                req.user.id, // assignedBy
             );
 
             this.logger.log(
@@ -695,7 +696,10 @@ export class UserController {
         try {
             this.logger.log(`Soft deleting user: ${req.user.id}`);
 
-            const result = await this.userService.softDelete(req.user.id);
+            const result = await this.userService.softDelete(
+                req.user.id,
+                req.user.id,
+            );
 
             this.logger.log(`User soft deleted successfully: ${req.user.id}`);
 
@@ -777,7 +781,10 @@ export class UserController {
         try {
             this.logger.log(`Restoring user: ${req.user.id}`);
 
-            const result = await this.userService.restoreUser(req.user.id);
+            const result = await this.userService.restoreUser(
+                req.user.id,
+                req.user.id,
+            );
 
             this.logger.log(`User restored successfully: ${req.user.id}`);
 
@@ -973,7 +980,10 @@ export class UserController {
         try {
             this.logger.log(`Admin ${req.user.id} restoring user: ${userId}`);
 
-            const result = await this.userService.restoreUser(userId);
+            const result = await this.userService.restoreUser(
+                userId,
+                req.user.id,
+            );
 
             this.logger.log(
                 `User ${userId} restored successfully by admin: ${req.user.id}`,

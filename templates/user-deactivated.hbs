@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Status Update</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .status-card {
+            background: linear-gradient(135deg, #fefbf3 0%, #fef3c7 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #f59e0b;
+            text-align: center;
+        }
+        
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .status-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 15px;
+        }
+        
+        .status-message {
+            font-size: 16px;
+            color: #78350f;
+            line-height: 1.6;
+        }
+        
+        .info-section {
+            background-color: #f8fafc;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+        
+        .info-section h4 {
+            color: #1f2937;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .info-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #374151;
+            width: 140px;
+            flex-shrink: 0;
+        }
+        
+        .info-value {
+            color: #4b5563;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .footer a {
+            color: #f59e0b;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .status-card {
+                padding: 20px;
+            }
+            
+            .status-title {
+                font-size: 20px;
+            }
+            
+            .info-item {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .info-label {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Account Status Update</h1>
+            <p>Important information about your account</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello {{firstName}},
+            </div>
+            
+            <div class="message">
+                We hope this message finds you well. We're reaching out to inform you about an important update to your {{companyName}} account status. We understand that changes like this can feel overwhelming, and we want you to know that we're here to support you through this transition.
+            </div>
+            
+            <div class="status-card">
+                <div class="status-icon">⏸️</div>
+                <div class="status-title">Account Temporarily Deactivated</div>
+                <div class="status-message">
+                    Your learning account has been temporarily deactivated. While this means you won't be able to access courses or take tests for now, this is a temporary status that can be changed when circumstances allow.
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <h4>Account Details</h4>
+                <div class="info-item">
+                    <span class="info-label">Name:</span>
+                    <span class="info-value">{{firstName}} {{lastName}}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{userEmail}}</span>
+                </div>
+                {{#if organizationName}}
+                <div class="info-item">
+                    <span class="info-label">Organization:</span>
+                    <span class="info-value">{{organizationName}}</span>
+                </div>
+                {{/if}}
+                {{#if branchName}}
+                <div class="info-item">
+                    <span class="info-label">Branch:</span>
+                    <span class="info-value">{{branchName}}</span>
+                </div>
+                {{/if}}
+                {{#if reason}}
+                <div class="info-item">
+                    <span class="info-label">Reason:</span>
+                    <span class="info-value">{{reason}}</span>
+                </div>
+                {{/if}}
+            </div>
+            
+            <div class="message">
+                <strong>What this means:</strong> Your account data, progress, and achievements remain safely stored. When your account is reactivated, you'll find everything exactly as you left it - your courses, progress, and all the hard work you've put into your learning journey.
+            </div>
+            
+            <div class="message">
+                <strong>Looking forward:</strong> We believe in the power of learning to transform lives and careers. This pause in your learning journey doesn't diminish the progress you've already made or the potential you have to achieve great things. When you're ready to return, we'll be here to welcome you back with open arms.
+            </div>
+            
+            <div class="message">
+                If you have questions about this change or believe this was done in error, please don't hesitate to reach out to our support team. We're committed to treating every situation with understanding and care, and we're here to help clarify any concerns you may have.
+            </div>
+            
+            <div class="message">
+                Thank you for being part of our learning community. We genuinely hope to see you back soon and continue supporting your growth and success! 🌟
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>{{companyName}} Support Team</p>
+        </div>
+    </div>
+</body>
+</html> 

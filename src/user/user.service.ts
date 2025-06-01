@@ -19,6 +19,8 @@ import {
     UserProfileUpdatedEvent,
     UserPasswordChangedEvent,
     UserOrgBranchAssignedEvent,
+    UserDeactivatedEvent,
+    UserRestoredEvent,
 } from '../common/events';
 import * as bcrypt from 'bcrypt';
 
@@ -527,6 +529,7 @@ export class UserService {
         userId: string,
         orgId?: string,
         branchId?: string,
+        assignedBy?: string,
     ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             const updateData: Record<string, any> = {};
@@ -559,8 +562,7 @@ export class UserService {
                     user.branchId?.id,
                     user.branchId?.name,
                     user.avatar?.id?.toString(),
-                    // TODO: Add assignedBy parameter when authentication context is available
-                    undefined,
+                    assignedBy,
                 ),
             );
 
@@ -620,7 +622,10 @@ export class UserService {
     /**
      * Soft delete a user by setting status to DELETED
      */
-    async softDelete(userId: string): Promise<StandardOperationResponse> {
+    async softDelete(
+        userId: string,
+        deactivatedBy?: string,
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // First check if user exists and is not already deleted
             const user = await this.userRepository.findOne({
@@ -641,6 +646,23 @@ export class UserService {
                 status: UserStatus.DELETED,
             });
 
+            // Emit user deactivated event
+            this.eventEmitter.emit(
+                'user.deactivated',
+                new UserDeactivatedEvent(
+                    user.id,
+                    user.email,
+                    user.firstName,
+                    user.lastName,
+                    user.orgId?.id,
+                    user.orgId?.name,
+                    user.branchId?.id,
+                    user.branchId?.name,
+                    deactivatedBy,
+                    'Account deactivated by user',
+                ),
+            );
+
             return {
                 message: 'User deleted successfully',
                 status: 'success',
@@ -652,7 +674,10 @@ export class UserService {
     /**
      * Restore a soft-deleted user by setting status to ACTIVE
      */
-    async restoreUser(userId: string): Promise<StandardOperationResponse> {
+    async restoreUser(
+        userId: string,
+        restoredBy?: string,
+    ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
             // First check if user exists and is deleted
             const user = await this.userRepository.findOne({
@@ -674,6 +699,22 @@ export class UserService {
             await this.userRepository.update(userId, {
                 status: UserStatus.ACTIVE,
             });
+
+            // Emit user restored event
+            this.eventEmitter.emit(
+                'user.restored',
+                new UserRestoredEvent(
+                    user.id,
+                    user.email,
+                    user.firstName,
+                    user.lastName,
+                    user.orgId?.id,
+                    user.orgId?.name,
+                    user.branchId?.id,
+                    user.branchId?.name,
+                    restoredBy,
+                ),
+            );
 
             return {
                 message: 'User restored successfully',

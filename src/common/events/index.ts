@@ -4,3 +4,6 @@ export * from './user-created.event';
 export * from './user-profile-updated.event';
 export * from './user-password-changed.event';
 export * from './user-org-branch-assigned.event';
+export * from './user-deactivated.event';
+export * from './user-restored.event';
+export * from './course-created.event';

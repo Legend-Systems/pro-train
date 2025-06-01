@@ -8,6 +8,9 @@ import {
     UserProfileUpdatedEvent,
     UserPasswordChangedEvent,
     UserOrgBranchAssignedEvent,
+    UserDeactivatedEvent,
+    UserRestoredEvent,
+    CourseCreatedEvent,
 } from '../../common/events';
 
 @Injectable()
@@ -159,6 +162,87 @@ export class EmailListener {
         } catch (error) {
             this.logger.error(
                 'Failed to handle user organization/branch assignment event',
+                error instanceof Error ? error.message : String(error),
+            );
+        }
+    }
+
+    @OnEvent('user.deactivated')
+    async handleUserDeactivated(event: UserDeactivatedEvent) {
+        try {
+            this.logger.log(
+                `Handling user deactivated event for: ${event.firstName} ${event.lastName}`,
+            );
+
+            await this.communicationsService.sendUserDeactivatedEmail(
+                event.userId,
+                event.userEmail,
+                event.firstName,
+                event.lastName,
+                event.organizationId,
+                event.organizationName,
+                event.branchId,
+                event.branchName,
+                event.reason,
+                event.deactivatedBy,
+            );
+        } catch (error) {
+            this.logger.error(
+                'Failed to handle user deactivated event',
+                error instanceof Error ? error.message : String(error),
+            );
+        }
+    }
+
+    @OnEvent('user.restored')
+    async handleUserRestored(event: UserRestoredEvent) {
+        try {
+            this.logger.log(
+                `Handling user restored event for: ${event.firstName} ${event.lastName}`,
+            );
+
+            await this.communicationsService.sendUserRestoredEmail(
+                event.userId,
+                event.userEmail,
+                event.firstName,
+                event.lastName,
+                event.organizationId,
+                event.organizationName,
+                event.branchId,
+                event.branchName,
+                event.restoredBy,
+            );
+        } catch (error) {
+            this.logger.error(
+                'Failed to handle user restored event',
+                error instanceof Error ? error.message : String(error),
+            );
+        }
+    }
+
+    @OnEvent('course.created')
+    async handleCourseCreated(event: CourseCreatedEvent) {
+        try {
+            this.logger.log(
+                `Handling course created event for: ${event.title}`,
+            );
+
+            await this.communicationsService.sendCourseCreatedEmail(
+                event.courseId,
+                event.title,
+                event.description,
+                event.creatorId,
+                event.creatorEmail,
+                event.creatorFirstName,
+                event.creatorLastName,
+                event.organizationId,
+                event.organizationName,
+                event.branchId,
+                event.branchName,
+            );
+        } catch (error) {
+            this.logger.error(
+                'Failed to handle course created event',
                 error instanceof Error ? error.message : String(error),
             );
         }

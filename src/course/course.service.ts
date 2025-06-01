@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -26,6 +27,7 @@ import { Result } from '../results/entities/result.entity';
 import { UserService } from '../user/user.service';
 import { OrgBranchScopingService } from '../auth/services/org-branch-scoping.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { CourseCreatedEvent } from '../common/events';
 
 @Injectable()
 export class CourseService {
@@ -73,6 +75,7 @@ export class CourseService {
         private readonly resultRepository: Repository<Result>,
         private readonly userService: UserService,
         private readonly orgBranchScopingService: OrgBranchScopingService,
+        private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
     ) {}
@@ -185,6 +188,24 @@ export class CourseService {
 
             // Invalidate list caches since a new course was created
             await this.invalidateCourseListCaches();
+
+            // Emit course created event
+            this.eventEmitter.emit(
+                'course.created',
+                new CourseCreatedEvent(
+                    savedCourse.courseId,
+                    savedCourse.title,
+                    savedCourse.description || '',
+                    user.id,
+                    user.email,
+                    user.firstName,
+                    user.lastName,
+                    scope.orgId,
+                    user.orgId?.name,
+                    scope.branchId,
+                    user.branchId?.name,
+                ),
+            );
 
             this.logger.log(
                 `Course ${savedCourse.courseId} created successfully by user ${scope.userId}`,

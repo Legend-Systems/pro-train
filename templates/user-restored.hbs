@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome Back to {{companyName}}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .welcome-back-card {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #10b981;
+            text-align: center;
+        }
+        
+        .welcome-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .welcome-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #065f46;
+            margin-bottom: 15px;
+        }
+        
+        .welcome-message {
+            font-size: 16px;
+            color: #064e3b;
+            line-height: 1.6;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .info-section {
+            background-color: #f8fafc;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+        
+        .info-section h4 {
+            color: #1f2937;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .info-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        .info-label {
+            font-weight: 600;
+            color: #374151;
+            width: 140px;
+            flex-shrink: 0;
+        }
+        
+        .info-value {
+            color: #4b5563;
+        }
+        
+        .features-section {
+            background-color: #ecfdf5;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+            border-left: 4px solid #10b981;
+        }
+        
+        .features-section h4 {
+            color: #047857;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .features-list {
+            list-style: none;
+        }
+        
+        .features-list li {
+            padding: 8px 0;
+            color: #065f46;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .features-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        .footer a {
+            color: #10b981;
+            text-decoration: none;
+        }
+        
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .welcome-back-card {
+                padding: 20px;
+            }
+            
+            .welcome-title {
+                font-size: 20px;
+            }
+            
+            .info-item {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .info-label {
+                width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Welcome Back!</h1>
+            <p>Your account has been restored</p>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello {{firstName}},
+            </div>
+            
+            <div class="message">
+                🎉 What an amazing day this is! We're absolutely thrilled to welcome you back to the {{companyName}} learning community. Your account has been fully restored, and we couldn't be more excited to see you return to your learning journey. The entire team has been looking forward to this moment!
+            </div>
+            
+            <div class="welcome-back-card">
+                <div class="welcome-icon">🚀</div>
+                <div class="welcome-title">Account Successfully Restored!</div>
+                <div class="welcome-message">
+                    Your learning adventure continues! Everything is exactly as you left it - your progress, achievements, and all the knowledge you've gained. It's time to pick up where you left off and keep building toward your goals.
+                </div>
+            </div>
+            
+            <div class="info-section">
+                <h4>Your Account Details</h4>
+                <div class="info-item">
+                    <span class="info-label">Name:</span>
+                    <span class="info-value">{{firstName}} {{lastName}}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{userEmail}}</span>
+                </div>
+                {{#if organizationName}}
+                <div class="info-item">
+                    <span class="info-label">Organization:</span>
+                    <span class="info-value">{{organizationName}}</span>
+                </div>
+                {{/if}}
+                {{#if branchName}}
+                <div class="info-item">
+                    <span class="info-label">Branch:</span>
+                    <span class="info-value">{{branchName}}</span>
+                </div>
+                {{/if}}
+            </div>
+            
+            <div class="cta-section">
+                <a href="{{dashboardUrl}}" class="cta-button">Access Your Dashboard</a>
+            </div>
+            
+            <div class="features-section">
+                <h4>What's Waiting for You</h4>
+                <ul class="features-list">
+                    <li>All your course progress and achievements are intact</li>
+                    <li>Access to your personalized learning dashboard</li>
+                    <li>New courses and learning materials may have been added</li>
+                    <li>Enhanced features and improvements to your learning experience</li>
+                    <li>Full access to tests, quizzes, and assessments</li>
+                    <li>Community discussions and collaboration tools</li>
+                </ul>
+            </div>
+            
+            <div class="message">
+                <strong>Ready to dive back in?</strong> Your learning momentum is about to be rekindled! Whether you want to review previous materials, explore new courses, or jump straight into assessments, your personalized dashboard has everything organized and ready for you.
+            </div>
+            
+            <div class="message">
+                <strong>What makes your return special:</strong> You're coming back with experience, knowledge, and a fresh perspective. This isn't just a restart - it's a continuation of your growth story with added wisdom and renewed motivation. We're confident you'll achieve even greater things this time around!
+            </div>
+            
+            <div class="message">
+                Welcome back to the family! Our support team is here and excited to help you succeed. Don't hesitate to reach out if you need any assistance getting back into the rhythm of learning. Your success is our priority, and we're here to support you every step of the way! 🌟
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>
+                {{companyName}} | 
+                {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
+            </p>
+        </div>
+    </div>
+</body>
+</html> 
