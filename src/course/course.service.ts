@@ -17,6 +17,7 @@ import {
     CourseDetailDto,
     CourseStatsDto,
     StandardOperationResponse,
+    CourseCreatorDto,
 } from './dto/course-response.dto';
 import { Course } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
@@ -272,7 +273,7 @@ export class CourseService {
 
             const [courses, total] = await query.getManyAndCount();
 
-            // Calculate actual test counts for each course with caching
+            // Calculate actual test counts for each course with caching and map creator
             const coursesWithCounts = await Promise.all(
                 courses.map(async course => {
                     const testCount = await this.getCachedTestCount(
@@ -282,8 +283,21 @@ export class CourseService {
                         course.courseId,
                     );
 
+                    // Map User entity to simplified CourseCreatorDto
+                    const creatorDto: CourseCreatorDto | undefined =
+                        course.creator
+                            ? {
+                                  id: course.creator.id,
+                                  email: course.creator.email,
+                                  firstName: course.creator.firstName,
+                                  lastName: course.creator.lastName,
+                                  role: course.creator.role,
+                              }
+                            : undefined;
+
                     return {
                         ...course,
+                        creator: creatorDto,
                         testCount,
                         studentCount,
                     };
@@ -353,8 +367,20 @@ export class CourseService {
             // Get statistics with caching
             const stats = await this.getStats(id);
 
+            // Map User entity to simplified CourseCreatorDto to avoid complex nested structures
+            const creatorDto: CourseCreatorDto | undefined = course.creator
+                ? {
+                      id: course.creator.id,
+                      email: course.creator.email,
+                      firstName: course.creator.firstName,
+                      lastName: course.creator.lastName,
+                      role: course.creator.role,
+                  }
+                : undefined;
+
             const result: CourseDetailDto = {
                 ...course,
+                creator: creatorDto,
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
                 statistics: {

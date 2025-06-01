@@ -1,5 +1,38 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { User } from '../../user/entities/user.entity';
+
+// Simplified creator DTO to avoid complex nested structures in Swagger
+export class CourseCreatorDto {
+    @ApiProperty({
+        description: 'Creator unique identifier',
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    })
+    id: string;
+
+    @ApiProperty({
+        description: 'Creator email address',
+        example: 'john.doe@example.com',
+    })
+    email: string;
+
+    @ApiProperty({
+        description: 'Creator first name',
+        example: 'John',
+    })
+    firstName: string;
+
+    @ApiProperty({
+        description: 'Creator last name',
+        example: 'Doe',
+    })
+    lastName: string;
+
+    @ApiProperty({
+        description: 'Creator role',
+        example: 'admin',
+        required: false,
+    })
+    role?: string;
+}
 
 export class CourseResponseDto {
     @ApiProperty({
@@ -41,11 +74,11 @@ export class CourseResponseDto {
     updatedAt: Date;
 
     @ApiProperty({
-        description: 'Course creator information',
-        type: () => User,
+        description: 'Course creator information (simplified)',
+        type: () => CourseCreatorDto,
         required: false,
     })
-    creator?: User;
+    creator?: CourseCreatorDto;
 
     @ApiProperty({
         description: 'Number of tests in this course',
