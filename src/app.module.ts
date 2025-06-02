@@ -98,9 +98,6 @@ import { CourseMaterial } from './course-materials/entities/course-material.enti
                 // Connection pool configuration
                 extra: {
                     connectionLimit: 20,
-                    acquireTimeout: 30000,
-                    timeout: 30000,
-                    reconnect: true,
                     idleTimeout: 30000,
                     charset: 'utf8mb4',
                 },
