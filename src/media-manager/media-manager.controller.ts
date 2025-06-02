@@ -348,7 +348,7 @@ export class MediaManagerController {
 
             this.logger.log(`File uploaded successfully: ${result.file.id}`);
             return result;
-        } catch (error) {
+        } catch (error: any) {
             this.logger.error(`Error uploading file: ${error.message}`, error);
             throw error;
         }
@@ -907,6 +907,240 @@ export class MediaManagerController {
                 `Error deleting file ${id} for user ${req.user.id}:`,
                 error,
             );
+            throw error;
+        }
+    }
+
+    @Delete(':id/soft')
+    @ApiOperation({
+        summary: '🗑️ Soft Delete File',
+        description: `
+      **Soft delete a media file (mark as deleted without removing from storage)**
+      
+      This endpoint allows safe deletion of files by marking them as deleted:
+      - File ownership validation
+      - Status changed to "deleted"
+      - All variants also soft deleted
+      - Can be restored later if needed
+      
+      **Soft Deletion Benefits:**
+      - Reversible operation (can be restored)
+      - Maintains data integrity
+      - Audit trail preservation
+      - Safer than hard deletion
+      
+      **Process:**
+      - Validates user ownership
+      - Updates status to "deleted"
+      - Removes from normal queries
+      - Logs action for audit
+      
+      **Use Cases:**
+      - Safe file removal
+      - Content moderation
+      - Temporary hiding of files
+      - Accidental deletion protection
+    `,
+        operationId: 'softDeleteFile',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Media file unique identifier',
+        example: 1,
+        type: 'number',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ File soft deleted successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'File soft deleted successfully',
+                },
+                status: { type: 'string', example: 'success' },
+                code: { type: 'number', example: 200 },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ File not found or already deleted',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '❌ Access denied - Not file owner',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    async softDeleteFile(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<{ message: string; status: string; code: number }> {
+        try {
+            this.logger.log(
+                `Soft deleting file ${id} for user: ${req.user.id}`,
+            );
+
+            const result = await this.mediaService.softDelete(
+                id,
+                req.user.id,
+                scope,
+            );
+
+            this.logger.log(`File ${id} soft deleted successfully`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error soft deleting file ${id} for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Post(':id/restore')
+    @ApiOperation({
+        summary: '♻️ Restore Deleted File',
+        description: `
+      **Restore a previously soft-deleted media file**
+      
+      This endpoint allows restoration of soft-deleted files:
+      - File ownership validation
+      - Status changed back to "active"
+      - All variants also restored
+      - Full functionality restored
+      
+      **Restoration Features:**
+      - Reverses soft deletion
+      - Restores all file variants
+      - Re-enables file access
+      - Maintains file metadata
+      
+      **Process:**
+      - Validates user ownership
+      - Updates status to "active"
+      - Includes in normal queries again
+      - Logs restoration action
+      
+      **Use Cases:**
+      - Accidental deletion recovery
+      - Content un-moderation
+      - File recovery operations
+      - Undo deletion actions
+    `,
+        operationId: 'restoreFile',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Media file unique identifier',
+        example: 1,
+        type: 'number',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ File restored successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'File restored successfully',
+                },
+                status: { type: 'string', example: 'success' },
+                code: { type: 'number', example: 200 },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ File not found or not deleted',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '❌ Access denied - Not file owner',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    async restoreFile(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<{ message: string; status: string; code: number }> {
+        try {
+            this.logger.log(`Restoring file ${id} for user: ${req.user.id}`);
+
+            const result = await this.mediaService.restoreFile(
+                id,
+                req.user.id,
+                scope,
+            );
+
+            this.logger.log(`File ${id} restored successfully`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error restoring file ${id} for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('deleted/list')
+    @ApiOperation({
+        summary: '👻 List Deleted Files',
+        description: `
+      **Retrieve all soft-deleted media files for restoration or permanent cleanup**
+      
+      This endpoint provides access to deleted files for:
+      - Administrative oversight
+      - File restoration workflows
+      - Cleanup operations
+      - Audit and compliance
+      
+      **Features:**
+      - Shows only deleted files
+      - Organization/branch scoping
+      - Comprehensive file metadata
+      - Deletion timestamps
+      
+      **Use Cases:**
+      - File recovery interfaces
+      - Administrative panels
+      - Audit and compliance tools
+      - Cleanup utilities
+    `,
+        operationId: 'getDeletedFiles',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Deleted files retrieved successfully',
+        type: [MediaFileResponseDto],
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    async getDeletedFiles(): Promise<MediaFileResponseDto[]> {
+        try {
+            this.logger.log('Getting deleted files list');
+
+            const deletedFiles = await this.mediaService.findDeleted();
+
+            this.logger.log(`Retrieved ${deletedFiles.length} deleted files`);
+
+            return deletedFiles;
+        } catch (error) {
+            this.logger.error('Error getting deleted files:', error);
             throw error;
         }
     }

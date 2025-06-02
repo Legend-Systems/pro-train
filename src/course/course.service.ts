@@ -4,6 +4,7 @@ import {
     ForbiddenException,
     Inject,
     Logger,
+    BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,7 +21,7 @@ import {
     StandardOperationResponse,
     CourseCreatorDto,
 } from './dto/course-response.dto';
-import { Course } from './entities/course.entity';
+import { Course, CourseStatus } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
@@ -250,6 +251,11 @@ export class CourseService {
             query.leftJoinAndSelect('course.orgId', 'org');
             query.leftJoinAndSelect('course.branchId', 'branch');
 
+            // Filter by status - only show active courses by default
+            query.andWhere('course.status = :status', {
+                status: CourseStatus.ACTIVE,
+            });
+
             // Apply org/branch scoping
             if (scope?.orgId) {
                 query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
@@ -368,6 +374,11 @@ export class CourseService {
                 'courseMaterials',
             );
             query.where('course.courseId = :id', { id });
+
+            // Filter by status - only show active courses by default
+            query.andWhere('course.status = :status', {
+                status: CourseStatus.ACTIVE,
+            });
 
             // Apply org/branch scoping
             if (scope?.orgId) {
@@ -629,7 +640,7 @@ export class CourseService {
             }
 
             const course = await this.courseRepository.findOne({
-                where: { courseId: id },
+                where: { courseId: id, status: CourseStatus.ACTIVE },
                 relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
             });
 
@@ -654,7 +665,7 @@ export class CourseService {
     async findByOrganization(orgId: string): Promise<Course[]> {
         return this.retryOperation(async () => {
             return this.courseRepository.find({
-                where: { orgId: { id: orgId } },
+                where: { orgId: { id: orgId }, status: CourseStatus.ACTIVE },
                 relations: ['creator', 'orgId', 'branchId'],
             });
         });
@@ -663,7 +674,7 @@ export class CourseService {
     async findByBranch(branchId: string): Promise<Course[]> {
         return this.retryOperation(async () => {
             return this.courseRepository.find({
-                where: { branchId: { id: branchId } },
+                where: { branchId: { id: branchId }, status: CourseStatus.ACTIVE },
                 relations: ['creator', 'orgId', 'branchId'],
             });
         });
@@ -714,6 +725,125 @@ export class CourseService {
         );
 
         return count;
+    }
+
+    /**
+     * Soft delete a course by setting status to DELETED
+     */
+    async softDelete(
+        courseId: number,
+        deletedBy?: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if course exists and is not already deleted
+            const course = await this.courseRepository.findOne({
+                where: { courseId },
+                relations: ['creator', 'orgId', 'branchId'],
+            });
+
+            if (!course) {
+                throw new NotFoundException(`Course with ID ${courseId} not found`);
+            }
+
+            if (course.status === CourseStatus.DELETED) {
+                throw new BadRequestException('Course is already deleted');
+            }
+
+            // Update status to DELETED
+            await this.courseRepository.update(courseId, {
+                status: CourseStatus.DELETED,
+            });
+
+            // Invalidate course cache
+            await this.invalidateCourseCache(courseId, course.createdBy);
+
+            return {
+                message: 'Course deleted successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Restore a soft-deleted course by setting status to ACTIVE
+     */
+    async restoreCourse(
+        courseId: number,
+        restoredBy?: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if course exists and is deleted
+            const course = await this.courseRepository.findOne({
+                where: { courseId },
+                relations: ['creator', 'orgId', 'branchId'],
+            });
+
+            if (!course) {
+                throw new NotFoundException(`Course with ID ${courseId} not found`);
+            }
+
+            if (course.status !== CourseStatus.DELETED) {
+                throw new BadRequestException(
+                    'Course is not deleted and cannot be restored',
+                );
+            }
+
+            // Update status to ACTIVE
+            await this.courseRepository.update(courseId, {
+                status: CourseStatus.ACTIVE,
+            });
+
+            // Invalidate course cache
+            await this.invalidateCourseCache(courseId, course.createdBy);
+
+            return {
+                message: 'Course restored successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Find all soft-deleted courses (for admin purposes)
+     */
+    async findDeleted(): Promise<Course[]> {
+        return this.retryOperation(async () => {
+            const courses = await this.courseRepository.find({
+                where: { status: CourseStatus.DELETED },
+                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
+            });
+
+            return courses;
+        });
+    }
+
+    /**
+     * Find all courses with any status (for admin purposes)
+     */
+    async findAllWithDeleted(): Promise<Course[]> {
+        return this.retryOperation(async () => {
+            const courses = await this.courseRepository.find({
+                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
+            });
+
+            return courses;
+        });
+    }
+
+    /**
+     * Find course by ID including deleted courses (for admin purposes)
+     */
+    async findByIdWithDeleted(id: number): Promise<Course | null> {
+        return this.retryOperation(async () => {
+            const course = await this.courseRepository.findOne({
+                where: { courseId: id },
+                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
+            });
+
+            return course;
+        });
     }
 
     // Legacy methods with deprecation notice - keeping for backward compatibility

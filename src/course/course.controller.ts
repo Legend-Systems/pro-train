@@ -4,6 +4,7 @@ import {
     Post,
     Put,
     Delete,
+    Patch,
     Body,
     Param,
     Query,
@@ -13,6 +14,8 @@ import {
     HttpCode,
     Logger,
     ParseIntPipe,
+    NotFoundException,
+    ForbiddenException,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -795,6 +798,441 @@ export class CourseController {
         } catch (error) {
             this.logger.error(
                 `Error deleting course ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Delete(':id/soft-delete')
+    @ApiOperation({
+        summary: '🗑️ Soft Delete Course',
+        description: `
+      **Soft deletes a course by setting status to DELETED**
+      
+      This endpoint performs a soft delete of the course:
+      - Sets course status to DELETED instead of removing the record
+      - Preserves course data for potential restoration
+      - Course will no longer appear in normal queries
+      - Course can be restored later using the restore endpoint
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Only course creator can soft delete their course
+      - Checks if course is already deleted before proceeding
+      
+      **Use Cases:**
+      - Course deactivation
+      - Temporary course suspension
+      - Course archival
+      - Course management cleanup
+    `,
+        operationId: 'softDeleteCourse',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course ID to soft delete',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course soft deleted successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course deleted successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course is already deleted',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course is already deleted',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async softDeleteCourse(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(
+                `Soft deleting course ${id} by user: ${req.user.id}`,
+            );
+
+            // First validate ownership
+            await this.courseService.validateOwnership(id, req.user.id);
+
+            return await this.courseService.softDelete(id, req.user.id);
+        } catch (error) {
+            this.logger.error(
+                `Error soft deleting course ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch(':id/restore')
+    @ApiOperation({
+        summary: '♻️ Restore Soft Deleted Course',
+        description: `
+      **Restores a soft-deleted course by setting status to ACTIVE**
+      
+      This endpoint restores a previously soft-deleted course:
+      - Sets course status back to ACTIVE
+      - Makes the course accessible again
+      - Course will appear in normal queries again
+      - Validates that course is currently in DELETED status
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Only course creator can restore their course
+      - Checks if course is actually deleted before proceeding
+      
+      **Use Cases:**
+      - Course reactivation
+      - Undoing accidental deletion
+      - Course returning after temporary deactivation
+      - Course management restoration
+    `,
+        operationId: 'restoreCourse',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course ID to restore',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course restored successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course restored successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async restoreCourse(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Restoring course ${id} by user: ${req.user.id}`);
+
+            // Note: We need to use findByIdWithDeleted to validate ownership of deleted courses
+            const course = await this.courseService.findByIdWithDeleted(id);
+            if (!course) {
+                throw new NotFoundException(`Course with ID ${id} not found`);
+            }
+
+            if (course.createdBy !== req.user.id) {
+                throw new ForbiddenException(
+                    'You are not authorized to restore this course',
+                );
+            }
+
+            return await this.courseService.restoreCourse(id, req.user.id);
+        } catch (error) {
+            this.logger.error(
+                `Error restoring course ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('admin/deleted')
+    @ApiOperation({
+        summary: '📋 Get Deleted Courses (Admin)',
+        description: `
+      **Retrieves all soft-deleted courses (for administrative purposes)**
+      
+      This endpoint returns all courses with DELETED status:
+      - Shows courses that have been soft-deleted
+      - Includes full course data
+      - Intended for administrative use
+      - Helps with course recovery operations
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      
+      **Use Cases:**
+      - Administrative course management
+      - Course recovery operations
+      - Audit trails and reporting
+      - Bulk restoration operations
+    `,
+        operationId: 'adminGetDeletedCourses',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Deleted courses retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Deleted courses retrieved successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'array',
+                    description: 'List of soft-deleted courses',
+                    items: {
+                        type: 'object',
+                        description: 'Deleted course data',
+                    },
+                },
+            },
+        },
+    })
+    async adminGetDeletedCourses(
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(
+                `Getting deleted courses for admin: ${req.user.id}`,
+            );
+
+            const deletedCourses = await this.courseService.findDeleted();
+
+            this.logger.log(
+                `Retrieved ${deletedCourses.length} deleted courses for admin: ${req.user.id}`,
+            );
+
+            return {
+                success: true,
+                message: 'Deleted courses retrieved successfully',
+                data: deletedCourses,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting deleted courses for admin ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch('admin/restore/:id')
+    @ApiOperation({
+        summary: '♻️ Restore Course by ID (Admin)',
+        description: `
+      **Restores a soft-deleted course by course ID (for administrative use)**
+      
+      This endpoint allows administrators to restore any soft-deleted course:
+      - Sets specified course status back to ACTIVE
+      - Makes the course accessible again
+      - Validates that target course exists and is deleted
+      - Returns success confirmation only
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      - Validates target course exists and is deleted
+      
+      **Use Cases:**
+      - Administrative course recovery
+      - Bulk course restoration
+      - Customer support operations
+      - Data recovery procedures
+    `,
+        operationId: 'adminRestoreCourse',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course ID to restore',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course restored successfully by admin',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course restored successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async adminRestoreCourse(
+        @Param('id', ParseIntPipe) id: number,
+        @Request() req: AuthenticatedRequest,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Admin ${req.user.id} restoring course: ${id}`);
+
+            const result = await this.courseService.restoreCourse(
+                id,
+                req.user.id,
+            );
+
+            this.logger.log(
+                `Course ${id} restored successfully by admin: ${req.user.id}`,
+            );
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error restoring course ${id} by admin ${req.user.id}:`,
                 error,
             );
             throw error;

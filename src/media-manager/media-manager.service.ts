@@ -19,6 +19,7 @@ import {
     MediaFile,
     MediaType,
     ImageVariant,
+    MediaFileStatus,
 } from './entities/media-manager.entity';
 import {
     UploadFileDto,
@@ -435,8 +436,8 @@ export class MediaManagerService {
                 }
 
                 // Apply filters
-                query.andWhere('media.isActive = :isActive', {
-                    isActive: true,
+                query.andWhere('media.status = :status', {
+                    status: MediaFileStatus.ACTIVE,
                 });
 
                 if (type) {
@@ -493,7 +494,7 @@ export class MediaManagerService {
                             const variants = await this.mediaRepository.find({
                                 where: {
                                     originalFileId: file.id,
-                                    isActive: true,
+                                    status: MediaFileStatus.ACTIVE,
                                 },
                                 order: { variant: 'ASC' },
                             });
@@ -544,7 +545,10 @@ export class MediaManagerService {
                     return cachedFile;
                 }
 
-                const whereCondition: any = { id, isActive: true };
+                const whereCondition: any = {
+                    id,
+                    status: MediaFileStatus.ACTIVE,
+                };
 
                 // Apply org/branch scoping
                 if (scope?.orgId) {
@@ -571,7 +575,10 @@ export class MediaManagerService {
                     file.variant === ImageVariant.ORIGINAL
                 ) {
                     const variants = await this.mediaRepository.find({
-                        where: { originalFileId: file.id, isActive: true },
+                        where: {
+                            originalFileId: file.id,
+                            status: MediaFileStatus.ACTIVE,
+                        },
                         order: { variant: 'ASC' },
                     });
                     result = { ...file, variants };
@@ -601,7 +608,7 @@ export class MediaManagerService {
         return this.retryOperation(async () => {
             try {
                 const file = await this.mediaRepository.findOne({
-                    where: { id, isActive: true },
+                    where: { id, status: MediaFileStatus.ACTIVE },
                     relations: ['orgId', 'branchId'],
                 });
 
@@ -615,13 +622,13 @@ export class MediaManagerService {
                     );
                 }
 
-                // Mark as inactive instead of hard delete
-                await this.mediaRepository.update(id, { isActive: false });
+                // Mark as deleted instead of hard delete
+                await this.mediaRepository.update(id, { status: MediaFileStatus.DELETED });
 
-                // Also mark variants as inactive
+                // Also mark variants as deleted
                 await this.mediaRepository.update(
                     { originalFileId: id },
-                    { isActive: false },
+                    { status: MediaFileStatus.DELETED },
                 );
 
                 // Invalidate caches
@@ -658,7 +665,9 @@ export class MediaManagerService {
                 }
 
                 const query = this.mediaRepository.createQueryBuilder('media');
-                query.where('media.isActive = :isActive', { isActive: true });
+                query.where('media.status = :status', {
+                    status: MediaFileStatus.ACTIVE,
+                });
 
                 // Apply org/branch scoping
                 if (scope?.orgId) {
@@ -946,5 +955,140 @@ export class MediaManagerService {
         const ext = path.extname(originalFilename);
         const nameWithoutExt = originalFilename.replace(ext, '');
         return `${nameWithoutExt}-${variant}${ext}`;
+    }
+
+    /**
+     * Soft delete a media file by setting status to DELETED
+     */
+    async softDelete(
+        fileId: number,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<{ message: string; status: string; code: number }> {
+        return this.retryOperation(async () => {
+            // First check if file exists and is not already deleted
+            const file = await this.mediaRepository.findOne({
+                where: { id: fileId },
+                relations: ['uploader', 'orgId', 'branchId'],
+            });
+
+            if (!file) {
+                throw new NotFoundException(
+                    `Media file with ID ${fileId} not found`,
+                );
+            }
+
+            if (file.status === MediaFileStatus.DELETED) {
+                throw new BadRequestException('Media file is already deleted');
+            }
+
+            // Update status to DELETED
+            await this.mediaRepository.update(fileId, {
+                status: MediaFileStatus.DELETED,
+            });
+
+            // Invalidate file cache
+            await this.invalidateFileCache(
+                fileId,
+                file.uploadedBy,
+                file.orgId?.id,
+                file.branchId?.id,
+            );
+
+            return {
+                message: 'Media file deleted successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Restore a soft-deleted media file by setting status to ACTIVE
+     */
+    async restoreFile(
+        fileId: number,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<{ message: string; status: string; code: number }> {
+        return this.retryOperation(async () => {
+            // First check if file exists and is deleted
+            const file = await this.mediaRepository.findOne({
+                where: { id: fileId },
+                relations: ['uploader', 'orgId', 'branchId'],
+            });
+
+            if (!file) {
+                throw new NotFoundException(
+                    `Media file with ID ${fileId} not found`,
+                );
+            }
+
+            if (file.status !== MediaFileStatus.DELETED) {
+                throw new BadRequestException(
+                    'Media file is not deleted and cannot be restored',
+                );
+            }
+
+            // Update status to ACTIVE
+            await this.mediaRepository.update(fileId, {
+                status: MediaFileStatus.ACTIVE,
+            });
+
+            // Invalidate file cache
+            await this.invalidateFileCache(
+                fileId,
+                file.uploadedBy,
+                file.orgId?.id,
+                file.branchId?.id,
+            );
+
+            return {
+                message: 'Media file restored successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Find all soft-deleted media files (for admin purposes)
+     */
+    async findDeleted(): Promise<MediaFile[]> {
+        return this.retryOperation(async () => {
+            const files = await this.mediaRepository.find({
+                where: { status: MediaFileStatus.DELETED },
+                relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
+            });
+
+            return files;
+        });
+    }
+
+    /**
+     * Find all media files with any status (for admin purposes)
+     */
+    async findAllWithDeleted(): Promise<MediaFile[]> {
+        return this.retryOperation(async () => {
+            const files = await this.mediaRepository.find({
+                relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
+            });
+
+            return files;
+        });
+    }
+
+    /**
+     * Find media file by ID including deleted files (for admin purposes)
+     */
+    async findByIdWithDeleted(id: number): Promise<MediaFile | null> {
+        return this.retryOperation(async () => {
+            const file = await this.mediaRepository.findOne({
+                where: { id },
+                relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
+            });
+
+            return file;
+        });
     }
 }

@@ -28,6 +28,13 @@ export enum MaterialType {
     OTHER = 'other',
 }
 
+export enum MaterialStatus {
+    ACTIVE = 'active',
+    INACTIVE = 'inactive',
+    DELETED = 'deleted',
+    DRAFT = 'draft',
+}
+
 @Entity('course_materials')
 export class CourseMaterial {
     @PrimaryGeneratedColumn()
@@ -104,6 +111,16 @@ export class CourseMaterial {
         example: true,
     })
     isActive: boolean;
+
+    @Column({ nullable: true, default: MaterialStatus.ACTIVE })
+    @ApiProperty({
+        description: 'Material status',
+        example: 'active',
+        default: 'active',
+        enum: MaterialStatus,
+    })
+    @IsEnum(MaterialStatus)
+    status: MaterialStatus;
 
     @Column()
     @ApiProperty({

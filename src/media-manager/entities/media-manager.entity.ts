@@ -35,6 +35,13 @@ export enum ImageVariant {
     LARGE = 'large',
 }
 
+export enum MediaFileStatus {
+    ACTIVE = 'active',
+    INACTIVE = 'inactive',
+    DELETED = 'deleted',
+    PROCESSING = 'processing',
+}
+
 @Entity('media_files')
 export class MediaFile {
     @PrimaryGeneratedColumn()
@@ -155,6 +162,16 @@ export class MediaFile {
     })
     @IsBoolean()
     isActive: boolean;
+
+    @Column({ nullable: true, default: MediaFileStatus.ACTIVE })
+    @ApiProperty({
+        description: 'Media file status',
+        example: 'active',
+        default: 'active',
+        enum: MediaFileStatus,
+    })
+    @IsEnum(MediaFileStatus)
+    status: MediaFileStatus;
 
     @Column({ nullable: true })
     @ApiProperty({

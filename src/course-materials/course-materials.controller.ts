@@ -1071,4 +1071,431 @@ export class CourseMaterialsController {
             throw error;
         }
     }
+
+    @Delete(':id/soft-delete')
+    @ApiOperation({
+        summary: '🗑️ Soft Delete Course Material',
+        description: `
+      **Soft deletes a course material by setting status to DELETED**
+      
+      This endpoint performs a soft delete of the course material:
+      - Sets material status to DELETED instead of removing the record
+      - Preserves material data for potential restoration
+      - Material will no longer appear in normal queries
+      - Material can be restored later using the restore endpoint
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Course access validation
+      - Organization/branch scope validation
+      - Checks if material is already deleted before proceeding
+      
+      **Use Cases:**
+      - Material deactivation
+      - Temporary material suspension
+      - Material archival
+      - Course content management cleanup
+    `,
+        operationId: 'softDeleteCourseMaterial',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course material ID to soft delete',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course material soft deleted successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material deleted successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course material is already deleted',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material is already deleted',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course material not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async softDeleteCourseMaterial(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Soft deleting course material ${id} by user: ${scope.userId}`);
+
+            return await this.courseMaterialsService.softDelete(
+                id,
+                { orgId: scope.orgId, branchId: scope.branchId },
+                scope.userId,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Error soft deleting course material ${id} by user ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch(':id/restore')
+    @ApiOperation({
+        summary: '♻️ Restore Soft Deleted Course Material',
+        description: `
+      **Restores a soft-deleted course material by setting status to ACTIVE**
+      
+      This endpoint restores a previously soft-deleted course material:
+      - Sets material status back to ACTIVE
+      - Makes the material accessible again
+      - Material will appear in normal queries again
+      - Validates that material is currently in DELETED status
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Course access validation
+      - Organization/branch scope validation
+      - Checks if material is actually deleted before proceeding
+      
+      **Use Cases:**
+      - Material reactivation
+      - Undoing accidental deletion
+      - Material returning after temporary deactivation
+      - Course content management restoration
+    `,
+        operationId: 'restoreCourseMaterial',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course material ID to restore',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course material restored successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material restored successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course material is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course material not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async restoreCourseMaterial(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Restoring course material ${id} by user: ${scope.userId}`);
+
+            return await this.courseMaterialsService.restoreMaterial(
+                id,
+                { orgId: scope.orgId, branchId: scope.branchId },
+                scope.userId,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Error restoring course material ${id} by user ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('admin/deleted')
+    @ApiOperation({
+        summary: '📋 Get Deleted Course Materials (Admin)',
+        description: `
+      **Retrieves all soft-deleted course materials (for administrative purposes)**
+      
+      This endpoint returns all course materials with DELETED status:
+      - Shows materials that have been soft-deleted
+      - Includes full material data with relations
+      - Intended for administrative use
+      - Helps with material recovery operations
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      
+      **Use Cases:**
+      - Administrative material management
+      - Material recovery operations
+      - Audit trails and reporting
+      - Bulk restoration operations
+    `,
+        operationId: 'adminGetDeletedCourseMaterials',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Deleted course materials retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Deleted course materials retrieved successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'array',
+                    description: 'List of soft-deleted course materials',
+                    items: {
+                        type: 'object',
+                        description: 'Deleted course material data',
+                    },
+                },
+            },
+        },
+    })
+    async adminGetDeletedCourseMaterials(
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<any> {
+        try {
+            this.logger.log(`Getting deleted course materials for admin: ${scope.userId}`);
+
+            const deletedMaterials = await this.courseMaterialsService.findDeleted();
+
+            this.logger.log(
+                `Retrieved ${deletedMaterials.length} deleted course materials for admin: ${scope.userId}`,
+            );
+
+            return {
+                success: true,
+                message: 'Deleted course materials retrieved successfully',
+                data: deletedMaterials,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting deleted course materials for admin ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Patch('admin/restore/:id')
+    @ApiOperation({
+        summary: '♻️ Restore Course Material by ID (Admin)',
+        description: `
+      **Restores a soft-deleted course material by material ID (for administrative use)**
+      
+      This endpoint allows administrators to restore any soft-deleted course material:
+      - Sets specified material status back to ACTIVE
+      - Makes the material accessible again
+      - Validates that target material exists and is deleted
+      - Returns success confirmation only
+      
+      **Security Features:**
+      - Requires valid JWT authentication
+      - Should be restricted to admin users in production
+      - Validates target material exists and is deleted
+      
+      **Use Cases:**
+      - Administrative material recovery
+      - Bulk material restoration
+      - Customer support operations
+      - Data recovery procedures
+    `,
+        operationId: 'adminRestoreCourseMaterial',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course material ID to restore',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course material restored successfully by admin',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material restored successfully',
+                },
+                status: {
+                    type: 'string',
+                    example: 'success',
+                },
+                code: {
+                    type: 'number',
+                    example: 200,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Course material is not deleted and cannot be restored',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material is not deleted and cannot be restored',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 400,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course material not found',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Course material with ID 1 not found',
+                },
+                status: {
+                    type: 'string',
+                    example: 'error',
+                },
+                code: {
+                    type: 'number',
+                    example: 404,
+                },
+            },
+        },
+    })
+    async adminRestoreCourseMaterial(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Admin ${scope.userId} restoring course material: ${id}`);
+
+            const result = await this.courseMaterialsService.restoreMaterial(
+                id,
+                { orgId: scope.orgId, branchId: scope.branchId },
+                scope.userId,
+            );
+
+            this.logger.log(
+                `Course material ${id} restored successfully by admin: ${scope.userId}`,
+            );
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error restoring course material ${id} by admin ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
 }

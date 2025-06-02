@@ -9,7 +9,7 @@ import {
     Index,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
 import { User } from '../../user/entities/user.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
@@ -18,6 +18,13 @@ import { Result } from 'src/results/entities/result.entity';
 import { Leaderboard } from 'src/leaderboard/entities/leaderboard.entity';
 import { Test } from 'src/test/entities/test.entity';
 import { CourseMaterial } from 'src/course-materials/entities/course-material.entity';
+
+export enum CourseStatus {
+    ACTIVE = 'active',
+    INACTIVE = 'inactive',
+    DELETED = 'deleted',
+    DRAFT = 'draft',
+}
 
 @Entity('courses')
 export class Course {
@@ -57,6 +64,16 @@ export class Course {
     @IsString()
     @IsNotEmpty()
     createdBy: string;
+
+    @Column({ nullable: true, default: CourseStatus.ACTIVE })
+    @ApiProperty({
+        description: 'Course status',
+        example: 'active',
+        default: 'active',
+        enum: CourseStatus,
+    })
+    @IsEnum(CourseStatus)
+    status: CourseStatus;
 
     @CreateDateColumn()
     @ApiProperty({

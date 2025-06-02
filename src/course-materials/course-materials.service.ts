@@ -5,6 +5,7 @@ import {
     ForbiddenException,
     Inject,
     Logger,
+    BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -18,7 +19,7 @@ import {
     StandardOperationResponse,
     CourseMaterialListApiResponse,
 } from './dto/course-material-response.dto';
-import { CourseMaterial } from './entities/course-material.entity';
+import { CourseMaterial, MaterialStatus } from './entities/course-material.entity';
 import { Course } from '../course/entities/course.entity';
 import { User } from '../user/entities/user.entity';
 import {
@@ -423,6 +424,11 @@ export class CourseMaterialsService {
                 .leftJoinAndSelect('material.mediaFile', 'mediaFile')
                 .where('material.courseId = :courseId', { courseId });
 
+            // Filter by status - only show active materials by default
+            queryBuilder.andWhere('material.status = :status', {
+                status: MaterialStatus.ACTIVE,
+            });
+
             // Filter by active status if needed
             if (!options.includeInactive) {
                 queryBuilder.andWhere('material.isActive = :isActive', {
@@ -519,7 +525,7 @@ export class CourseMaterialsService {
             }
 
             const material = await this.courseMaterialRepository.findOne({
-                where: { materialId: id },
+                where: { materialId: id, status: MaterialStatus.ACTIVE },
                 relations: [
                     'course',
                     'course.orgId',
@@ -770,8 +776,9 @@ export class CourseMaterialsService {
 
             const whereClause: {
                 courseId: number;
+                status: MaterialStatus;
                 isActive?: boolean;
-            } = { courseId };
+            } = { courseId, status: MaterialStatus.ACTIVE };
             if (!includeInactive) {
                 whereClause.isActive = true;
             }
@@ -860,6 +867,156 @@ export class CourseMaterialsService {
                 status: 'success',
                 code: 200,
             };
+        });
+    }
+
+    /**
+     * Soft delete a course material by setting status to DELETED
+     */
+    async softDelete(
+        materialId: number,
+        scope: OrgBranchScope,
+        deletedBy?: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if material exists and is not already deleted
+            const material = await this.courseMaterialRepository.findOne({
+                where: { materialId },
+                relations: ['course'],
+            });
+
+            if (!material) {
+                throw new NotFoundException(
+                    `Course material with ID ${materialId} not found`,
+                );
+            }
+
+            if (material.status === MaterialStatus.DELETED) {
+                throw new BadRequestException('Course material is already deleted');
+            }
+
+            // Validate course access
+            await this.validateCourseAccessWithScope(
+                material.courseId,
+                scope,
+                deletedBy,
+            );
+
+            // Update status to DELETED
+            await this.courseMaterialRepository.update(materialId, {
+                status: MaterialStatus.DELETED,
+                updatedBy: deletedBy,
+            });
+
+            // Invalidate material cache
+            await this.invalidateMaterialCache(materialId, material.courseId);
+
+            return {
+                message: 'Course material deleted successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Restore a soft-deleted course material by setting status to ACTIVE
+     */
+    async restoreMaterial(
+        materialId: number,
+        scope: OrgBranchScope,
+        restoredBy?: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            // First check if material exists and is deleted
+            const material = await this.courseMaterialRepository.findOne({
+                where: { materialId },
+                relations: ['course'],
+            });
+
+            if (!material) {
+                throw new NotFoundException(
+                    `Course material with ID ${materialId} not found`,
+                );
+            }
+
+            if (material.status !== MaterialStatus.DELETED) {
+                throw new BadRequestException(
+                    'Course material is not deleted and cannot be restored',
+                );
+            }
+
+            // Validate course access
+            await this.validateCourseAccessWithScope(
+                material.courseId,
+                scope,
+                restoredBy,
+            );
+
+            // Update status to ACTIVE
+            await this.courseMaterialRepository.update(materialId, {
+                status: MaterialStatus.ACTIVE,
+                updatedBy: restoredBy,
+            });
+
+            // Invalidate material cache
+            await this.invalidateMaterialCache(materialId, material.courseId);
+
+            return {
+                message: 'Course material restored successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
+    }
+
+    /**
+     * Find all soft-deleted course materials (for admin purposes)
+     */
+    async findDeleted(): Promise<CourseMaterial[]> {
+        return this.retryOperation(async () => {
+            const materials = await this.courseMaterialRepository.find({
+                where: { status: MaterialStatus.DELETED },
+                relations: ['course', 'creator', 'updater', 'mediaFile'],
+            });
+
+            // Load media file variants for all materials
+            return Promise.all(
+                materials.map(material => this.loadMediaFileVariants(material)),
+            );
+        });
+    }
+
+    /**
+     * Find all course materials with any status (for admin purposes)
+     */
+    async findAllWithDeleted(): Promise<CourseMaterial[]> {
+        return this.retryOperation(async () => {
+            const materials = await this.courseMaterialRepository.find({
+                relations: ['course', 'creator', 'updater', 'mediaFile'],
+            });
+
+            // Load media file variants for all materials
+            return Promise.all(
+                materials.map(material => this.loadMediaFileVariants(material)),
+            );
+        });
+    }
+
+    /**
+     * Find course material by ID including deleted materials (for admin purposes)
+     */
+    async findByIdWithDeleted(id: number): Promise<CourseMaterial | null> {
+        return this.retryOperation(async () => {
+            const material = await this.courseMaterialRepository.findOne({
+                where: { materialId: id },
+                relations: ['course', 'creator', 'updater', 'mediaFile'],
+            });
+
+            if (material) {
+                return this.loadMediaFileVariants(material);
+            }
+            return material;
         });
     }
 }
