@@ -34,24 +34,67 @@ import { RetryService } from '../common/services/retry.service';
 export class CourseService {
     private readonly logger = new Logger(CourseService.name);
 
-    // Cache keys with comprehensive coverage
+    // Cache keys with comprehensive coverage and org/branch scope
     private readonly CACHE_KEYS = {
-        COURSE_BY_ID: (id: number) => `course:${id}`,
-        COURSES_BY_ORG: (orgId: string, filters: string) =>
-            `courses:org:${orgId}:${filters}`,
-        COURSES_BY_BRANCH: (branchId: string, filters: string) =>
-            `courses:branch:${branchId}:${filters}`,
-        COURSES_BY_CREATOR: (userId: string, filters: string) =>
-            `courses:creator:${userId}:${filters}`,
-        COURSE_STATS: (courseId: number) => `course:stats:${courseId}`,
-        COURSE_LIST: (filters: string) => `courses:list:${filters}`,
-        USER_COURSES: (userId: string) => `user:${userId}:courses`,
-        ALL_COURSES: 'courses:all',
-        COURSE_DETAIL: (id: number) => `course:detail:${id}`,
-        COURSE_TESTS_COUNT: (courseId: number) =>
-            `course:tests:count:${courseId}`,
-        COURSE_STUDENTS_COUNT: (courseId: number) =>
-            `course:students:count:${courseId}`,
+        COURSE_BY_ID: (id: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:course:${id}`,
+        COURSES_BY_ORG: (orgId: number, filters: string, branchId?: number) =>
+            `org:${orgId}:branch:${
+                branchId || 'global'
+            }:courses:org:${filters}`,
+        COURSES_BY_BRANCH: (
+            branchId: number,
+            filters: string,
+            orgId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId}:courses:branch:${filters}`,
+        COURSES_BY_CREATOR: (
+            userId: string,
+            filters: string,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:courses:creator:${userId}:${filters}`,
+        COURSE_STATS: (courseId: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:course:stats:${courseId}`,
+        COURSE_LIST: (filters: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:courses:list:${filters}`,
+        USER_COURSES: (userId: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:user:${userId}:courses`,
+        ALL_COURSES: (orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:courses:all`,
+        COURSE_DETAIL: (id: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:course:detail:${id}`,
+        COURSE_TESTS_COUNT: (
+            courseId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:course:tests:count:${courseId}`,
+        COURSE_STUDENTS_COUNT: (
+            courseId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:course:students:count:${courseId}`,
     };
 
     // Cache TTL in seconds with different durations for different data types
@@ -82,54 +125,98 @@ export class CourseService {
     ) {}
 
     /**
-     * Cache helper methods
+     * Comprehensive cache invalidation methods with org/branch scope
      */
     private async invalidateCourseCache(
         courseId: number,
         userId?: string,
+        orgId?: number,
+        branchId?: number,
     ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.COURSE_BY_ID(courseId),
-            this.CACHE_KEYS.COURSE_DETAIL(courseId),
-            this.CACHE_KEYS.COURSE_STATS(courseId),
-            this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId),
-            this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId),
+            this.CACHE_KEYS.COURSE_BY_ID(courseId, orgId, branchId),
+            this.CACHE_KEYS.COURSE_DETAIL(courseId, orgId, branchId),
+            this.CACHE_KEYS.COURSE_STATS(courseId, orgId, branchId),
+            this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId, orgId, branchId),
+            this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId, orgId, branchId),
         ];
 
         if (userId) {
-            keysToDelete.push(this.CACHE_KEYS.USER_COURSES(userId));
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_COURSES(userId, orgId, branchId),
+            );
         }
 
         // Also invalidate general course lists
-        keysToDelete.push(this.CACHE_KEYS.ALL_COURSES);
-
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
-    }
-
-    private async invalidateCourseListCaches(): Promise<void> {
-        // Clear general course list caches
-        const keysToInvalidate = [this.CACHE_KEYS.ALL_COURSES];
+        keysToDelete.push(this.CACHE_KEYS.ALL_COURSES(orgId, branchId));
 
         await Promise.all(
-            keysToInvalidate.map(key => this.cacheManager.del(key)),
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+    }
+
+    private async invalidateCourseListCaches(
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
+        // Clear general course list caches
+        const keysToInvalidate = [this.CACHE_KEYS.ALL_COURSES(orgId, branchId)];
+
+        await Promise.all(
+            keysToInvalidate.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
         );
 
         // Note: In production, consider implementing cache tags or maintaining
         // a registry of active cache keys for more granular invalidation
     }
 
-    private async invalidateUserCoursesCache(userId: string): Promise<void> {
+    private async invalidateUserCoursesCache(
+        userId: string,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.USER_COURSES(userId),
-            this.CACHE_KEYS.ALL_COURSES,
+            this.CACHE_KEYS.USER_COURSES(userId, orgId, branchId),
+            this.CACHE_KEYS.ALL_COURSES(orgId, branchId),
         ];
 
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
 
     private generateCacheKeyForCourses(
         filters?: CourseFilterDto,
         prefix: string = 'list',
+        orgId?: number,
+        branchId?: number,
     ): string {
         const filterKey = JSON.stringify({
             title: filters?.title,
@@ -141,7 +228,7 @@ export class CourseService {
             sortBy: filters?.sortBy,
             sortOrder: filters?.sortOrder,
         });
-        return `${this.CACHE_KEYS.COURSE_LIST(filterKey)}:${prefix}`;
+        return `${this.CACHE_KEYS.COURSE_LIST(filterKey, orgId, branchId)}:${prefix}`;
     }
 
     async create(
@@ -167,7 +254,10 @@ export class CourseService {
             const savedCourse = await this.courseRepository.save(course);
 
             // Invalidate list caches since a new course was created
-            await this.invalidateCourseListCaches();
+            await this.invalidateCourseListCaches(
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
 
             // Emit course created event
             this.eventEmitter.emit(
@@ -205,13 +295,28 @@ export class CourseService {
     ): Promise<CourseListResponseDto> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.generateCacheKeyForCourses(filters, 'all');
+            const cacheKey = this.generateCacheKeyForCourses(
+                filters,
+                'all',
+                scope?.orgId ? Number(scope.orgId) : undefined,
+                scope?.branchId ? Number(scope.branchId) : undefined,
+            );
 
-            const cachedResult =
-                await this.cacheManager.get<CourseListResponseDto>(cacheKey);
+            try {
+                const cachedResult =
+                    await this.cacheManager.get<CourseListResponseDto>(
+                        cacheKey,
+                    );
 
-            if (cachedResult) {
-                return cachedResult;
+                if (cachedResult) {
+                    this.logger.debug(`Cache hit for course list: ${cacheKey}`);
+                    return cachedResult;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const {
@@ -318,12 +423,20 @@ export class CourseService {
                 totalPages: Math.ceil(total / limit),
             };
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.COURSE_LIST * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.COURSE_LIST * 1000,
+                );
+                this.logger.debug(`Cache set for course list: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
@@ -335,13 +448,27 @@ export class CourseService {
     ): Promise<CourseDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.COURSE_DETAIL(id);
+            const cacheKey = this.CACHE_KEYS.COURSE_DETAIL(
+                id,
+                scope?.orgId ? Number(scope.orgId) : undefined,
+                scope?.branchId ? Number(scope.branchId) : undefined,
+            );
 
-            const cachedCourse =
-                await this.cacheManager.get<CourseDetailDto>(cacheKey);
+            try {
+                const cachedCourse =
+                    await this.cacheManager.get<CourseDetailDto>(cacheKey);
 
-            if (cachedCourse) {
-                return cachedCourse;
+                if (cachedCourse) {
+                    this.logger.debug(
+                        `Cache hit for course detail: ${cacheKey}`,
+                    );
+                    return cachedCourse;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const query = this.courseRepository.createQueryBuilder('course');
@@ -402,12 +529,20 @@ export class CourseService {
                 },
             };
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.COURSE_DETAIL * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.COURSE_DETAIL * 1000,
+                );
+                this.logger.debug(`Cache set for course detail: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
@@ -449,7 +584,12 @@ export class CourseService {
             await this.courseRepository.save(existingCourse);
 
             // Invalidate course cache
-            await this.invalidateCourseCache(id, scope.userId);
+            await this.invalidateCourseCache(
+                id,
+                scope.userId,
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
 
             this.logger.log(
                 `Course ${id} updated successfully by user ${scope.userId}`,
@@ -496,8 +636,16 @@ export class CourseService {
             await this.courseRepository.remove(existingCourse);
 
             // Invalidate course cache
-            await this.invalidateCourseCache(id, scope.userId);
-            await this.invalidateCourseListCaches();
+            await this.invalidateCourseCache(
+                id,
+                scope.userId,
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
+            await this.invalidateCourseListCaches(
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
 
             this.logger.log(
                 `Course ${id} deleted successfully by user ${scope.userId}`,
@@ -517,13 +665,27 @@ export class CourseService {
     ): Promise<CourseStatsDto> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.COURSE_STATS(id);
+            const cacheKey = this.CACHE_KEYS.COURSE_STATS(
+                id,
+                scope?.orgId ? Number(scope.orgId) : undefined,
+                scope?.branchId ? Number(scope.branchId) : undefined,
+            );
 
-            const cachedStats =
-                await this.cacheManager.get<CourseStatsDto>(cacheKey);
+            try {
+                const cachedStats =
+                    await this.cacheManager.get<CourseStatsDto>(cacheKey);
 
-            if (cachedStats) {
-                return cachedStats;
+                if (cachedStats) {
+                    this.logger.debug(
+                        `Cache hit for course stats: ${cacheKey}`,
+                    );
+                    return cachedStats;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const course = await this.findOne(id, scope);
@@ -604,12 +766,20 @@ export class CourseService {
                 lastActivityAt,
             };
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                result,
-                this.CACHE_TTL.STATS * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.STATS * 1000,
+                );
+                this.logger.debug(`Cache set for course stats: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return result;
         });
@@ -653,10 +823,19 @@ export class CourseService {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_BY_ID(id);
 
-            const cachedCourse = await this.cacheManager.get<Course>(cacheKey);
+            try {
+                const cachedCourse =
+                    await this.cacheManager.get<Course>(cacheKey);
 
-            if (cachedCourse) {
-                return cachedCourse;
+                if (cachedCourse) {
+                    this.logger.debug(`Cache hit for course: ${cacheKey}`);
+                    return cachedCourse;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             const course = await this.courseRepository.findOne({
@@ -665,12 +844,20 @@ export class CourseService {
             });
 
             if (course) {
-                // Cache the result
-                await this.cacheManager.set(
-                    cacheKey,
-                    course,
-                    this.CACHE_TTL.COURSE * 1000, // Convert to milliseconds
-                );
+                // Cache the result with error handling
+                try {
+                    await this.cacheManager.set(
+                        cacheKey,
+                        course,
+                        this.CACHE_TTL.COURSE * 1000, // Convert to milliseconds
+                    );
+                    this.logger.debug(`Cache set for course: ${cacheKey}`);
+                } catch (error) {
+                    this.logger.warn(
+                        `Cache set failed for key ${cacheKey}:`,
+                        error,
+                    );
+                }
             }
 
             return course;
@@ -707,20 +894,30 @@ export class CourseService {
     private async getCachedTestCount(courseId: number): Promise<number> {
         const cacheKey = this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId);
 
-        const cachedCount = await this.cacheManager.get<number>(cacheKey);
-        if (cachedCount !== undefined && cachedCount !== null) {
-            return cachedCount;
+        try {
+            const cachedCount = await this.cacheManager.get<number>(cacheKey);
+            if (cachedCount !== undefined && cachedCount !== null) {
+                this.logger.debug(`Cache hit for test count: ${cacheKey}`);
+                return cachedCount;
+            }
+        } catch (error) {
+            this.logger.warn(`Cache get failed for key ${cacheKey}:`, error);
         }
 
         const count = await this.testRepository.count({
             where: { courseId, isActive: true },
         });
 
-        await this.cacheManager.set(
-            cacheKey,
-            count,
-            this.CACHE_TTL.COUNTS * 1000,
-        );
+        try {
+            await this.cacheManager.set(
+                cacheKey,
+                count,
+                this.CACHE_TTL.COUNTS * 1000,
+            );
+            this.logger.debug(`Cache set for test count: ${cacheKey}`);
+        } catch (error) {
+            this.logger.warn(`Cache set failed for key ${cacheKey}:`, error);
+        }
 
         return count;
     }
@@ -728,9 +925,14 @@ export class CourseService {
     private async getCachedStudentCount(courseId: number): Promise<number> {
         const cacheKey = this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId);
 
-        const cachedCount = await this.cacheManager.get<number>(cacheKey);
-        if (cachedCount !== undefined && cachedCount !== null) {
-            return cachedCount;
+        try {
+            const cachedCount = await this.cacheManager.get<number>(cacheKey);
+            if (cachedCount !== undefined && cachedCount !== null) {
+                this.logger.debug(`Cache hit for student count: ${cacheKey}`);
+                return cachedCount;
+            }
+        } catch (error) {
+            this.logger.warn(`Cache get failed for key ${cacheKey}:`, error);
         }
 
         const count = await this.testAttemptRepository
@@ -741,11 +943,16 @@ export class CourseService {
             .getRawOne()
             .then((result: { count: string }) => parseInt(result.count) || 0);
 
-        await this.cacheManager.set(
-            cacheKey,
-            count,
-            this.CACHE_TTL.COUNTS * 1000,
-        );
+        try {
+            await this.cacheManager.set(
+                cacheKey,
+                count,
+                this.CACHE_TTL.COUNTS * 1000,
+            );
+            this.logger.debug(`Cache set for student count: ${cacheKey}`);
+        } catch (error) {
+            this.logger.warn(`Cache set failed for key ${cacheKey}:`, error);
+        }
 
         return count;
     }
@@ -781,7 +988,12 @@ export class CourseService {
             });
 
             // Invalidate course cache
-            await this.invalidateCourseCache(courseId, course.createdBy);
+            await this.invalidateCourseCache(
+                courseId,
+                course.createdBy,
+                course.orgId ? Number(course.orgId) : undefined,
+                course.branchId ? Number(course.branchId) : undefined,
+            );
 
             return {
                 message: 'Course deleted successfully',
@@ -824,7 +1036,12 @@ export class CourseService {
             });
 
             // Invalidate course cache
-            await this.invalidateCourseCache(courseId, course.createdBy);
+            await this.invalidateCourseCache(
+                courseId,
+                course.createdBy,
+                course.orgId ? Number(course.orgId) : undefined,
+                course.branchId ? Number(course.branchId) : undefined,
+            );
 
             return {
                 message: 'Course restored successfully',
