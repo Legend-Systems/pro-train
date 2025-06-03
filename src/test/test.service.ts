@@ -4,9 +4,12 @@ import {
     ForbiddenException,
     BadRequestException,
     Logger,
+    Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
@@ -27,10 +30,41 @@ import {
 import { Result } from '../results/entities/result.entity';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
+import { RetryService } from '../common/services/retry.service';
 
 @Injectable()
 export class TestService {
     private readonly logger = new Logger(TestService.name);
+
+    // Cache key patterns with org/branch scoping
+    private readonly CACHE_KEYS = {
+        TEST_BY_ID: (testId: number, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:${testId}`,
+        TESTS_LIST: (filters: string, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:tests:list:${filters}`,
+        TEST_STATS: (testId: number, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:stats:${testId}`,
+        TEST_CONFIG: (testId: number, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:config:${testId}`,
+        COURSE_TESTS: (courseId: number, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:course:${courseId}:tests`,
+        TEST_ATTEMPTS_STATS: (
+            testId: number,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:${testId}:attempts:stats`,
+    };
+
+    // Cache TTL configurations (in seconds)
+    private readonly CACHE_TTL = {
+        TEST_DETAILS: 300, // 5 minutes - test details change moderately
+        TESTS_LIST: 180, // 3 minutes - lists change more frequently
+        TEST_STATS: 600, // 10 minutes - statistics change less frequently
+        TEST_CONFIG: 1800, // 30 minutes - configuration rarely changes
+        COURSE_TESTS: 300, // 5 minutes - course test lists
+        ATTEMPTS_STATS: 300, // 5 minutes - attempt statistics
+    };
 
     constructor(
         @InjectRepository(Test)
@@ -43,43 +77,59 @@ export class TestService {
         private readonly testAttemptRepository: Repository<TestAttempt>,
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
         private readonly courseService: CourseService,
     ) {}
 
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries = 3,
-        delay = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                const isConnectionError =
-                    error instanceof Error &&
-                    (error.message.includes('ECONNRESET') ||
-                        error.message.includes('Connection lost') ||
-                        error.message.includes('connect ETIMEDOUT'));
+    /**
+     * Cache invalidation helper for tests
+     */
+    private async invalidateTestCache(
+        testId: number,
+        courseId?: number,
+        orgId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.TEST_BY_ID(testId, orgId, branchId),
+            this.CACHE_KEYS.TEST_STATS(testId, orgId, branchId),
+            this.CACHE_KEYS.TEST_CONFIG(testId, orgId, branchId),
+            this.CACHE_KEYS.TEST_ATTEMPTS_STATS(testId, orgId, branchId),
+        ];
 
-                if (isConnectionError && attempt < maxRetries) {
-                    console.log(
-                        `Database connection error on attempt ${attempt}, retrying in ${delay}ms...`,
-                    );
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                    continue;
-                }
-                throw error;
-            }
+        if (courseId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.COURSE_TESTS(courseId, orgId, branchId),
+            );
         }
-        throw new Error('Max retries exceeded');
+
+        // Invalidate general lists cache (with wildcard pattern approximation)
+        keysToDelete.push(this.CACHE_KEYS.TESTS_LIST('*', orgId, branchId));
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
+
+    /**
+     * Create a new test with caching and scoping
+     */
 
     async create(
         createTestDto: CreateTestDto,
         scope: OrgBranchScope,
     ): Promise<TestResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Validate course exists and user has ownership
             await this.validateCourseAccess(
                 createTestDto.courseId,
@@ -126,7 +176,7 @@ export class TestService {
         filters: TestFilterDto,
         scope: OrgBranchScope,
     ): Promise<TestListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const {
                 courseId,
                 title,
@@ -410,7 +460,7 @@ export class TestService {
     }
 
     async findOne(id: number, userId?: string): Promise<TestDetailDto | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
                 relations: [
@@ -478,7 +528,7 @@ export class TestService {
         updateTestDto: UpdateTestDto,
         userId: string,
     ): Promise<TestResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
                 relations: ['course'],
@@ -522,7 +572,7 @@ export class TestService {
     }
 
     async remove(id: number, userId: string): Promise<void> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
             });
@@ -578,7 +628,7 @@ export class TestService {
         userId: string,
         isActive: boolean,
     ): Promise<TestResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
                 relations: ['course'],
@@ -618,7 +668,7 @@ export class TestService {
     }
 
     async getStats(id: number, userId: string): Promise<TestStatsDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
             });
@@ -661,7 +711,7 @@ export class TestService {
     }
 
     async getConfig(id: number, userId: string): Promise<TestConfigDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
                 relations: ['questions'],
@@ -717,7 +767,7 @@ export class TestService {
         courseId: number,
         userId: string,
     ): Promise<void> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const course = await this.courseRepository.findOne({
                 where: { courseId },
             });
@@ -743,7 +793,7 @@ export class TestService {
         testId: number,
         scope: OrgBranchScope,
     ): Promise<Test | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId },
                 relations: ['course', 'orgId', 'branchId'],
@@ -769,7 +819,7 @@ export class TestService {
      * Check if test is available for attempts
      */
     async isTestAvailableForAttempts(testId: number): Promise<boolean> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId, isActive: true },
             });
@@ -787,7 +837,7 @@ export class TestService {
         title: string;
         testType: string;
     } | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId },
                 select: [
@@ -818,7 +868,7 @@ export class TestService {
      * Update test statistics after attempt completion
      */
     async refreshTestStatistics(testId: number): Promise<void> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // This method can be called to refresh cached statistics
             // For now, we'll just verify the test exists
             const test = await this.testRepository.findOne({
@@ -853,7 +903,7 @@ export class TestService {
             passRate: number;
         }>
     > {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const query = this.testRepository
                 .createQueryBuilder('test')
                 .leftJoinAndSelect('test.course', 'course');

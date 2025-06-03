@@ -623,7 +623,9 @@ export class MediaManagerService {
                 }
 
                 // Mark as deleted instead of hard delete
-                await this.mediaRepository.update(id, { status: MediaFileStatus.DELETED });
+                await this.mediaRepository.update(id, {
+                    status: MediaFileStatus.DELETED,
+                });
 
                 // Also mark variants as deleted
                 await this.mediaRepository.update(

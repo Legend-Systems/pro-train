@@ -1817,13 +1817,13 @@ export class AuthController {
                         successCount: {
                             type: 'number',
                             example: 25,
-                            description:
-                                'Number of emails successfully queued',
+                            description: 'Number of emails successfully queued',
                         },
                         failedCount: {
                             type: 'number',
                             example: 0,
-                            description: 'Number of emails that failed to queue',
+                            description:
+                                'Number of emails that failed to queue',
                         },
                         failedEmails: {
                             type: 'array',
@@ -1876,7 +1876,8 @@ export class AuthController {
                 statusCode: { type: 'number', example: 429 },
                 message: {
                     type: 'string',
-                    example: 'Too many re-invite requests. Please try again later.',
+                    example:
+                        'Too many re-invite requests. Please try again later.',
                 },
                 error: { type: 'string', example: 'Too Many Requests' },
             },

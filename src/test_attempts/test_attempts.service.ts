@@ -5,9 +5,12 @@ import {
     ForbiddenException,
     ConflictException,
     Logger,
+    Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { CreateTestAttemptDto } from './dto/create-test_attempt.dto';
 import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
@@ -21,10 +24,55 @@ import { ResultsService } from '../results/results.service';
 import { AnswersService } from '../answers/answers.service';
 import { TestService } from '../test/test.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { RetryService } from '../common/services/retry.service';
 
 @Injectable()
 export class TestAttemptsService {
     private readonly logger = new Logger(TestAttemptsService.name);
+
+    // Cache key patterns with org/branch scoping
+    private readonly CACHE_KEYS = {
+        ATTEMPT_BY_ID: (attemptId: number, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:${attemptId}`,
+        USER_ATTEMPTS: (
+            userId: string,
+            testId: number | undefined,
+            filters: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:${userId}:attempts:test:${testId || 'all'}:${filters}`,
+        ATTEMPT_VALIDATION: (
+            testId: number,
+            userId: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:validation:test:${testId}:user:${userId}`,
+        ATTEMPT_STATS: (
+            testId: number | undefined,
+            userId: string | undefined,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:stats:test:${testId || 'all'}:user:${userId || 'all'}`,
+        TEST_ATTEMPTS: (
+            testId: number,
+            filters: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:${testId}:attempts:${filters}`,
+    };
+
+    // Cache TTL configurations (in seconds)
+    private readonly CACHE_TTL = {
+        ATTEMPT_DETAILS: 300, // 5 minutes - attempts change frequently
+        USER_ATTEMPTS: 180, // 3 minutes - user lists change often
+        ATTEMPT_VALIDATION: 120, // 2 minutes - validation might change
+        ATTEMPT_STATS: 600, // 10 minutes - stats change less frequently
+        TEST_ATTEMPTS: 300, // 5 minutes - test attempt lists
+    };
 
     constructor(
         @InjectRepository(TestAttempt)
@@ -34,39 +82,74 @@ export class TestAttemptsService {
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
         private readonly dataSource: DataSource,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
         private readonly resultsService: ResultsService,
         private readonly answersService: AnswersService,
         private readonly testService: TestService,
     ) {}
 
     /**
-     * Retry database operations with exponential backoff
+     * Cache invalidation helper for test attempts
      */
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries: number = 3,
-        delay: number = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error: any) {
-                if (attempt === maxRetries) {
-                    this.logger.error(
-                        `Operation failed after ${maxRetries} attempts`,
-                        error instanceof Error ? error.stack : String(error),
-                    );
-                    throw error;
-                }
-                this.logger.warn(
-                    `Operation failed, attempt ${attempt}/${maxRetries}. Retrying in ${delay}ms...`,
-                );
-                await new Promise(resolve =>
-                    setTimeout(resolve, delay * attempt),
-                );
-            }
+    private async invalidateAttemptCache(
+        attemptId: number,
+        userId?: string,
+        testId?: number,
+        orgId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        const keysToDelete = [
+            this.CACHE_KEYS.ATTEMPT_BY_ID(attemptId, orgId, branchId),
+        ];
+
+        if (userId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_ATTEMPTS(
+                    userId,
+                    testId,
+                    '',
+                    orgId,
+                    branchId,
+                ),
+                this.CACHE_KEYS.ATTEMPT_VALIDATION(
+                    testId!,
+                    userId,
+                    orgId,
+                    branchId,
+                ),
+            );
         }
-        throw new Error('Retry operation failed unexpectedly');
+
+        if (testId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.TEST_ATTEMPTS(testId, '', orgId, branchId),
+                this.CACHE_KEYS.ATTEMPT_STATS(testId, userId, orgId, branchId),
+            );
+        }
+
+        // Add general stats cache
+        keysToDelete.push(
+            this.CACHE_KEYS.ATTEMPT_STATS(
+                undefined,
+                undefined,
+                orgId,
+                branchId,
+            ),
+        );
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
 
     /**
@@ -77,7 +160,7 @@ export class TestAttemptsService {
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Get test details with org/branch validation using TestService
             const test = await this.testService.getTestForAttempt(
                 createAttemptDto.testId,
@@ -95,12 +178,26 @@ export class TestAttemptsService {
             }
 
             // Check if user has exceeded max attempts
-            const userAttempts = await this.testAttemptRepository.count({
-                where: {
+            const query = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', {
                     testId: createAttemptDto.testId,
-                    userId,
-                },
-            });
+                })
+                .andWhere('attempt.userId = :userId', { userId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const userAttempts = await query.getCount();
 
             if (userAttempts >= test.maxAttempts) {
                 throw new BadRequestException(
@@ -109,13 +206,29 @@ export class TestAttemptsService {
             }
 
             // Check if user has an active attempt
-            const activeAttempt = await this.testAttemptRepository.findOne({
-                where: {
+            const activeAttemptQuery = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', {
                     testId: createAttemptDto.testId,
-                    userId,
+                })
+                .andWhere('attempt.userId = :userId', { userId })
+                .andWhere('attempt.status = :status', {
                     status: AttemptStatus.IN_PROGRESS,
-                },
-            });
+                });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                activeAttemptQuery.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                activeAttemptQuery.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const activeAttempt = await activeAttemptQuery.getOne();
 
             if (activeAttempt) {
                 throw new ConflictException(
@@ -145,6 +258,15 @@ export class TestAttemptsService {
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
 
+            // Invalidate related caches
+            await this.invalidateAttemptCache(
+                savedAttempt.attemptId,
+                userId,
+                createAttemptDto.testId,
+                scope.orgId,
+                scope.branchId,
+            );
+
             return this.mapToResponseDto(savedAttempt);
         });
     }
@@ -157,7 +279,7 @@ export class TestAttemptsService {
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
@@ -176,6 +298,15 @@ export class TestAttemptsService {
             attempt.progressPercentage = 100;
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
+
+            // Invalidate related caches
+            await this.invalidateAttemptCache(
+                attemptId,
+                userId,
+                attempt.testId,
+                scope.orgId,
+                scope.branchId,
+            );
 
             // Trigger auto-marking and result creation flow
             try {
@@ -227,7 +358,7 @@ export class TestAttemptsService {
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
@@ -261,12 +392,21 @@ export class TestAttemptsService {
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
 
+            // Invalidate related caches
+            await this.invalidateAttemptCache(
+                attemptId,
+                userId,
+                attempt.testId,
+                scope.orgId,
+                scope.branchId,
+            );
+
             return this.mapToResponseDto(savedAttempt);
         });
     }
 
     /**
-     * Get user's test attempts
+     * Get user's test attempts with caching
      */
     async getUserAttempts(
         userId: string,
@@ -280,7 +420,25 @@ export class TestAttemptsService {
         page: number;
         pageSize: number;
     }> {
-        return this.retryOperation(async () => {
+        const cacheKey = this.CACHE_KEYS.USER_ATTEMPTS(
+            userId,
+            testId,
+            `${page}-${pageSize}`,
+            scope.orgId,
+            scope.branchId,
+        );
+
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+            return cached as {
+                attempts: TestAttemptResponseDto[];
+                total: number;
+                page: number;
+                pageSize: number;
+            };
+        }
+
+        const result = await this.retryService.executeDatabase(async () => {
             const query = this.testAttemptRepository
                 .createQueryBuilder('attempt')
                 .leftJoinAndSelect('attempt.test', 'test')
@@ -290,16 +448,14 @@ export class TestAttemptsService {
 
             // Apply org/branch scoping
             if (scope.orgId) {
-                query.andWhere(
-                    '(attempt.orgId IS NULL OR attempt.orgId = :orgId)',
-                    { orgId: scope.orgId },
-                );
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
             }
             if (scope.branchId) {
-                query.andWhere(
-                    '(attempt.branchId IS NULL OR attempt.branchId = :branchId)',
-                    { branchId: scope.branchId },
-                );
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
             }
 
             if (testId) {
@@ -322,17 +478,42 @@ export class TestAttemptsService {
                 pageSize,
             };
         });
+
+        await this.cacheManager.set(
+            cacheKey,
+            result,
+            this.CACHE_TTL.USER_ATTEMPTS,
+        );
+        return result;
     }
 
     /**
-     * Get attempt by ID with access control
+     * Get attempt by ID with access control and caching
      */
     async findOne(
         attemptId: number,
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
+        const cacheKey = this.CACHE_KEYS.ATTEMPT_BY_ID(
+            attemptId,
+            scope.orgId,
+            scope.branchId,
+        );
+
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+            const cachedAttempt = cached as TestAttemptResponseDto;
+            // Verify user access for cached data
+            if (cachedAttempt.userId !== userId) {
+                throw new ForbiddenException(
+                    'Access denied to this test attempt',
+                );
+            }
+            return cachedAttempt;
+        }
+
+        const result = await this.retryService.executeDatabase(async () => {
             const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
@@ -340,6 +521,13 @@ export class TestAttemptsService {
             );
             return this.mapToResponseDto(attempt);
         });
+
+        await this.cacheManager.set(
+            cacheKey,
+            result,
+            this.CACHE_TTL.ATTEMPT_DETAILS,
+        );
+        return result;
     }
 
     /**
@@ -350,7 +538,7 @@ export class TestAttemptsService {
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
                 userId,
@@ -366,55 +554,50 @@ export class TestAttemptsService {
             attempt.status = AttemptStatus.CANCELLED;
             const savedAttempt = await this.testAttemptRepository.save(attempt);
 
+            // Invalidate related caches
+            await this.invalidateAttemptCache(
+                attemptId,
+                userId,
+                attempt.testId,
+                scope.orgId,
+                scope.branchId,
+            );
+
             return this.mapToResponseDto(savedAttempt);
         });
     }
 
     /**
-     * Private helper to find attempt by ID and validate user access
+     * Private helper to find attempt by ID and validate user access with scope
      */
-    private async findAttemptByIdAndUser(
-        attemptId: number,
-        userId: string,
-    ): Promise<TestAttempt> {
-        const attempt = await this.testAttemptRepository.findOne({
-            where: {
-                attemptId,
-                userId,
-            },
-            relations: ['test', 'test.course'],
-        });
-
-        if (!attempt) {
-            throw new NotFoundException('Test attempt not found');
-        }
-
-        return attempt;
-    }
-
     private async findAttemptByIdAndUserWithScope(
         attemptId: number,
         userId: string,
         scope: OrgBranchScope,
     ): Promise<TestAttempt> {
-        const attempt = await this.testAttemptRepository.findOne({
-            where: {
-                attemptId,
-                userId,
-            },
-            relations: ['test', 'test.course', 'orgId', 'branchId'],
-        });
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .leftJoinAndSelect('attempt.test', 'test')
+            .leftJoinAndSelect('attempt.test.course', 'course')
+            .leftJoinAndSelect('attempt.orgId', 'orgId')
+            .leftJoinAndSelect('attempt.branchId', 'branchId')
+            .where('attempt.attemptId = :attemptId', { attemptId })
+            .andWhere('attempt.userId = :userId', { userId });
+
+        // Apply org/branch scoping
+        if (scope.orgId) {
+            query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
+        }
+        if (scope.branchId) {
+            query.andWhere('attempt.branchId = :branchId', {
+                branchId: scope.branchId,
+            });
+        }
+
+        const attempt = await query.getOne();
 
         if (!attempt) {
             throw new NotFoundException('Test attempt not found');
-        }
-
-        // Validate org/branch access
-        if (scope.orgId && attempt.orgId?.id !== scope.orgId) {
-            throw new ForbiddenException('Access denied to this test attempt');
-        }
-        if (scope.branchId && attempt.branchId?.id !== scope.branchId) {
-            throw new ForbiddenException('Access denied to this test attempt');
         }
 
         return attempt;
@@ -456,32 +639,50 @@ export class TestAttemptsService {
     }
 
     /**
-     * Get attempts for a specific test (instructor view)
+     * Get attempts for a specific test (instructor view) with caching and scoping
      */
     async findAttemptsByTest(
         testId: number,
-        userId: string,
+        scope: OrgBranchScope,
         filters?: TestAttemptFilterDto,
     ): Promise<TestAttemptListResponseDto> {
-        return this.retryOperation(async () => {
-            // Verify user has access to this test (is instructor/creator)
-            const test = await this.testRepository.findOne({
-                where: { testId },
-                relations: ['course'],
-            });
+        const filtersKey = JSON.stringify(filters || {});
+        const cacheKey = this.CACHE_KEYS.TEST_ATTEMPTS(
+            testId,
+            filtersKey,
+            scope.orgId,
+            scope.branchId,
+        );
 
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+            return cached as TestAttemptListResponseDto;
+        }
+
+        const result = await this.retryService.executeDatabase(async () => {
+            // Verify test exists and is accessible
+            const test = await this.testService.findOne(testId, scope.userId);
             if (!test) {
                 throw new NotFoundException('Test not found');
             }
-
-            // For now, allow any authenticated user to view attempts
-            // In a real system, you'd check if user is instructor/admin
 
             const query = this.testAttemptRepository
                 .createQueryBuilder('attempt')
                 .leftJoinAndSelect('attempt.test', 'test')
                 .leftJoinAndSelect('attempt.user', 'user')
                 .where('attempt.testId = :testId', { testId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
 
             // Apply filters
             if (filters?.status) {
@@ -530,21 +731,46 @@ export class TestAttemptsService {
                 hasPrevious: page > 1,
             };
         });
+
+        await this.cacheManager.set(
+            cacheKey,
+            result,
+            this.CACHE_TTL.TEST_ATTEMPTS,
+        );
+        return result;
     }
 
     /**
-     * Validate if user can attempt a test
+     * Validate if user can attempt a test with caching
      */
     async validateAttemptLimits(
         testId: number,
         userId: string,
+        scope: OrgBranchScope,
     ): Promise<{
         canAttempt: boolean;
         reason?: string;
         attemptsUsed: number;
         maxAttempts: number;
     }> {
-        return this.retryOperation(async () => {
+        const cacheKey = this.CACHE_KEYS.ATTEMPT_VALIDATION(
+            testId,
+            userId,
+            scope.orgId,
+            scope.branchId,
+        );
+
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+            return cached as {
+                canAttempt: boolean;
+                reason?: string;
+                attemptsUsed: number;
+                maxAttempts: number;
+            };
+        }
+
+        const result = await this.retryService.executeDatabase(async () => {
             // Use TestService to get test configuration
             const testConfig =
                 await this.testService.getTestConfiguration(testId);
@@ -562,17 +788,46 @@ export class TestAttemptsService {
                 };
             }
 
-            const attemptsUsed = await this.testAttemptRepository.count({
-                where: { testId, userId },
-            });
+            const attemptsQuery = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', { testId })
+                .andWhere('attempt.userId = :userId', { userId });
 
-            const activeAttempt = await this.testAttemptRepository.findOne({
-                where: {
-                    testId,
-                    userId,
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                attemptsQuery.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                attemptsQuery.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const attemptsUsed = await attemptsQuery.getCount();
+
+            const activeAttemptQuery = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', { testId })
+                .andWhere('attempt.userId = :userId', { userId })
+                .andWhere('attempt.status = :status', {
                     status: AttemptStatus.IN_PROGRESS,
-                },
-            });
+                });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                activeAttemptQuery.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                activeAttemptQuery.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const activeAttempt = await activeAttemptQuery.getOne();
 
             if (activeAttempt) {
                 return {
@@ -598,22 +853,44 @@ export class TestAttemptsService {
                 maxAttempts: testConfig.maxAttempts,
             };
         });
+
+        await this.cacheManager.set(
+            cacheKey,
+            result,
+            this.CACHE_TTL.ATTEMPT_VALIDATION,
+        );
+        return result;
     }
 
     /**
      * Calculate and update score for an attempt
      */
-    async calculateScore(attemptId: number): Promise<TestAttemptResponseDto> {
-        return this.retryOperation(async () => {
-            const attempt = await this.testAttemptRepository.findOne({
-                where: { attemptId },
-                relations: [
-                    'test',
-                    'answers',
-                    'answers.question',
-                    'answers.selectedOption',
-                ],
-            });
+    async calculateScore(
+        attemptId: number,
+        scope: OrgBranchScope,
+    ): Promise<TestAttemptResponseDto> {
+        return this.retryService.executeDatabase(async () => {
+            const query = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .leftJoinAndSelect('attempt.test', 'test')
+                .leftJoinAndSelect('attempt.answers', 'answers')
+                .leftJoinAndSelect('answers.question', 'question')
+                .leftJoinAndSelect('answers.selectedOption', 'selectedOption')
+                .where('attempt.attemptId = :attemptId', { attemptId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const attempt = await query.getOne();
 
             if (!attempt) {
                 throw new NotFoundException('Test attempt not found');
@@ -631,23 +908,56 @@ export class TestAttemptsService {
             attempt.progressPercentage = 100;
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
+
+            // Invalidate related caches
+            await this.invalidateAttemptCache(
+                attemptId,
+                attempt.userId,
+                attempt.testId,
+                scope.orgId,
+                scope.branchId,
+            );
+
             return this.mapToResponseDto(savedAttempt);
         });
     }
 
     /**
-     * Get statistics for test attempts
+     * Get statistics for test attempts with caching and scoping
      */
     async getStats(
+        scope: OrgBranchScope,
         testId?: number,
         userId?: string,
     ): Promise<TestAttemptStatsDto> {
-        return this.retryOperation(async () => {
+        const cacheKey = this.CACHE_KEYS.ATTEMPT_STATS(
+            testId,
+            userId,
+            scope.orgId,
+            scope.branchId,
+        );
+
+        const cached = await this.cacheManager.get(cacheKey);
+        if (cached) {
+            return cached as TestAttemptStatsDto;
+        }
+
+        const result = await this.retryService.executeDatabase(async () => {
             const query =
                 this.testAttemptRepository.createQueryBuilder('attempt');
 
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.where('attempt.orgId = :orgId', { orgId: scope.orgId });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
             if (testId) {
-                query.where('attempt.testId = :testId', { testId });
+                query.andWhere('attempt.testId = :testId', { testId });
             }
             if (userId) {
                 query.andWhere('attempt.userId = :userId', { userId });
@@ -723,5 +1033,12 @@ export class TestAttemptsService {
                 statusBreakdown,
             };
         });
+
+        await this.cacheManager.set(
+            cacheKey,
+            result,
+            this.CACHE_TTL.ATTEMPT_STATS,
+        );
+        return result;
     }
 }

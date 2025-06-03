@@ -19,7 +19,10 @@ import {
     StandardOperationResponse,
     CourseMaterialListApiResponse,
 } from './dto/course-material-response.dto';
-import { CourseMaterial, MaterialStatus } from './entities/course-material.entity';
+import {
+    CourseMaterial,
+    MaterialStatus,
+} from './entities/course-material.entity';
 import { Course } from '../course/entities/course.entity';
 import { User } from '../user/entities/user.entity';
 import {
@@ -892,7 +895,9 @@ export class CourseMaterialsService {
             }
 
             if (material.status === MaterialStatus.DELETED) {
-                throw new BadRequestException('Course material is already deleted');
+                throw new BadRequestException(
+                    'Course material is already deleted',
+                );
             }
 
             // Validate course access

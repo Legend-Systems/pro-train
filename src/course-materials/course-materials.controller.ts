@@ -1171,7 +1171,9 @@ export class CourseMaterialsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Soft deleting course material ${id} by user: ${scope.userId}`);
+            this.logger.log(
+                `Soft deleting course material ${id} by user: ${scope.userId}`,
+            );
 
             return await this.courseMaterialsService.softDelete(
                 id,
@@ -1247,7 +1249,8 @@ export class CourseMaterialsController {
             properties: {
                 message: {
                     type: 'string',
-                    example: 'Course material is not deleted and cannot be restored',
+                    example:
+                        'Course material is not deleted and cannot be restored',
                 },
                 status: {
                     type: 'string',
@@ -1286,7 +1289,9 @@ export class CourseMaterialsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Restoring course material ${id} by user: ${scope.userId}`);
+            this.logger.log(
+                `Restoring course material ${id} by user: ${scope.userId}`,
+            );
 
             return await this.courseMaterialsService.restoreMaterial(
                 id,
@@ -1357,9 +1362,12 @@ export class CourseMaterialsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<any> {
         try {
-            this.logger.log(`Getting deleted course materials for admin: ${scope.userId}`);
+            this.logger.log(
+                `Getting deleted course materials for admin: ${scope.userId}`,
+            );
 
-            const deletedMaterials = await this.courseMaterialsService.findDeleted();
+            const deletedMaterials =
+                await this.courseMaterialsService.findDeleted();
 
             this.logger.log(
                 `Retrieved ${deletedMaterials.length} deleted course materials for admin: ${scope.userId}`,
@@ -1438,7 +1446,8 @@ export class CourseMaterialsController {
             properties: {
                 message: {
                     type: 'string',
-                    example: 'Course material is not deleted and cannot be restored',
+                    example:
+                        'Course material is not deleted and cannot be restored',
                 },
                 status: {
                     type: 'string',
@@ -1477,7 +1486,9 @@ export class CourseMaterialsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Admin ${scope.userId} restoring course material: ${id}`);
+            this.logger.log(
+                `Admin ${scope.userId} restoring course material: ${id}`,
+            );
 
             const result = await this.courseMaterialsService.restoreMaterial(
                 id,

@@ -1,3 +1,3 @@
 export * from './services/retry.service';
 export * from './types';
-export * from './common.module'; 
+export * from './common.module';
