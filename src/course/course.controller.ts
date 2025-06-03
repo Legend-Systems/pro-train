@@ -562,14 +562,14 @@ export class CourseController {
     })
     async getStats(
         @Param('id', ParseIntPipe) id: number,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
-                `Getting stats for course ${id} by user: ${req.user.id}`,
+                `Getting stats for course ${id} by user: ${scope.userId}`,
             );
 
-            const stats = await this.courseService.getStats(id);
+            const stats = await this.courseService.getStats(id, scope);
 
             return {
                 success: true,
@@ -581,7 +581,7 @@ export class CourseController {
             };
         } catch (error) {
             this.logger.error(
-                `Error getting stats for course ${id} by user ${req.user.id}:`,
+                `Error getting stats for course ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -696,19 +696,15 @@ export class CourseController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateCourseDto: UpdateCourseDto,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Updating course ${id} by user: ${req.user.id}`);
+            this.logger.log(`Updating course ${id} by user: ${scope.userId}`);
 
-            return await this.courseService.update(
-                id,
-                updateCourseDto,
-                req.user.id,
-            );
+            return await this.courseService.update(id, updateCourseDto, scope);
         } catch (error) {
             this.logger.error(
-                `Error updating course ${id} by user ${req.user.id}:`,
+                `Error updating course ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -790,15 +786,15 @@ export class CourseController {
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Deleting course ${id} by user: ${req.user.id}`);
+            this.logger.log(`Deleting course ${id} by user: ${scope.userId}`);
 
-            return await this.courseService.remove(id, req.user.id);
+            return await this.courseService.remove(id, scope);
         } catch (error) {
             this.logger.error(
-                `Error deleting course ${id} by user ${req.user.id}:`,
+                `Error deleting course ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -908,7 +904,10 @@ export class CourseController {
             );
 
             // First validate ownership
-            await this.courseService.validateOwnership(id, req.user.id);
+            await this.courseService.validateOwnershipWithDeleted(
+                id,
+                req.user.id,
+            );
 
             return await this.courseService.softDelete(id, req.user.id);
         } catch (error) {

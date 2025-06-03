@@ -425,25 +425,34 @@ export class CourseService {
     async update(
         id: number,
         updateCourseDto: UpdateCourseDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const course = await this.findById(id);
+            const course = await this.findOne(id, scope);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
             // Validate ownership
-            await this.validateOwnership(id, userId);
+            await this.validateOwnership(id, scope.userId, scope);
 
-            Object.assign(course, updateCourseDto);
-            await this.courseRepository.save(course);
+            // Update the course directly using repository since we already have validated access
+            const existingCourse = await this.courseRepository.findOne({
+                where: { courseId: id },
+            });
+
+            if (!existingCourse) {
+                throw new NotFoundException(`Course with ID ${id} not found`);
+            }
+
+            Object.assign(existingCourse, updateCourseDto);
+            await this.courseRepository.save(existingCourse);
 
             // Invalidate course cache
-            await this.invalidateCourseCache(id, userId);
+            await this.invalidateCourseCache(id, scope.userId);
 
             this.logger.log(
-                `Course ${id} updated successfully by user ${userId}`,
+                `Course ${id} updated successfully by user ${scope.userId}`,
             );
 
             return {
@@ -456,16 +465,16 @@ export class CourseService {
 
     async remove(
         id: number,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const course = await this.findById(id);
+            const course = await this.findOne(id, scope);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
             // Validate ownership
-            await this.validateOwnership(id, userId);
+            await this.validateOwnership(id, scope.userId, scope);
 
             // Check if course has tests
             const testCount = await this.getCachedTestCount(id);
@@ -475,14 +484,23 @@ export class CourseService {
                 );
             }
 
-            await this.courseRepository.remove(course);
+            // Get the actual course entity for removal
+            const existingCourse = await this.courseRepository.findOne({
+                where: { courseId: id },
+            });
+
+            if (!existingCourse) {
+                throw new NotFoundException(`Course with ID ${id} not found`);
+            }
+
+            await this.courseRepository.remove(existingCourse);
 
             // Invalidate course cache
-            await this.invalidateCourseCache(id, userId);
+            await this.invalidateCourseCache(id, scope.userId);
             await this.invalidateCourseListCaches();
 
             this.logger.log(
-                `Course ${id} deleted successfully by user ${userId}`,
+                `Course ${id} deleted successfully by user ${scope.userId}`,
             );
 
             return {
@@ -493,7 +511,10 @@ export class CourseService {
         });
     }
 
-    async getStats(id: number): Promise<CourseStatsDto> {
+    async getStats(
+        id: number,
+        scope?: OrgBranchScope,
+    ): Promise<CourseStatsDto> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_STATS(id);
@@ -505,7 +526,7 @@ export class CourseService {
                 return cachedStats;
             }
 
-            const course = await this.findById(id);
+            const course = await this.findOne(id, scope);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
@@ -594,8 +615,28 @@ export class CourseService {
         });
     }
 
-    async validateOwnership(courseId: number, userId: string): Promise<void> {
-        const course = await this.findById(courseId);
+    async validateOwnership(
+        courseId: number,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<void> {
+        const course = await this.findOne(courseId, scope);
+        if (!course) {
+            throw new NotFoundException(`Course with ID ${courseId} not found`);
+        }
+
+        if (course.createdBy !== userId) {
+            throw new ForbiddenException(
+                'You are not authorized to modify this course',
+            );
+        }
+    }
+
+    async validateOwnershipWithDeleted(
+        courseId: number,
+        userId: string,
+    ): Promise<void> {
+        const course = await this.findByIdWithDeleted(courseId);
         if (!course) {
             throw new NotFoundException(`Course with ID ${courseId} not found`);
         }
