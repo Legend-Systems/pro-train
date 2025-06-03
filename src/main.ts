@@ -26,12 +26,6 @@ async function bootstrap() {
         }),
     );
 
-    // Enable CORS for frontend
-    app.enableCors({
-        origin: true,
-        credentials: true,
-    });
-
     // Setup Swagger documentation
     const config = new DocumentBuilder()
         .setTitle('trainpro api playground')
