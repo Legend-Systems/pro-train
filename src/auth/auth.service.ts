@@ -951,7 +951,8 @@ export class AuthService {
             for (const user of allUsers) {
                 try {
                     // Use the user's linked organization name dynamically, fallback to default if no org
-                    const organizationName = user.orgId?.name || 'Your Organization';
+                    const organizationName =
+                        user.orgId?.name || 'Your Organization';
 
                     const templateData = {
                         recipientName: `${user.firstName} ${user.lastName}`,

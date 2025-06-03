@@ -25,6 +25,7 @@ import { BulkAnswersDto } from './dto/bulk-answers.dto';
 import { AnswerResponseDto } from './dto/answer-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { StandardResponse } from '../common/types';
 
 @ApiTags('✍️ Answers')
 @Controller('answers')
@@ -111,8 +112,8 @@ export class AnswersController {
     async create(
         @Body() createAnswerDto: CreateAnswerDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<AnswerResponseDto> {
-        return this.answersService.create(createAnswerDto, scope.userId);
+    ): Promise<StandardResponse<AnswerResponseDto>> {
+        return this.answersService.create(createAnswerDto, scope);
     }
 
     @Post('bulk')
@@ -154,8 +155,8 @@ export class AnswersController {
     async bulkCreate(
         @Body() bulkAnswersDto: BulkAnswersDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<AnswerResponseDto[]> {
-        return this.answersService.bulkCreate(bulkAnswersDto, scope.userId);
+    ): Promise<StandardResponse<AnswerResponseDto[]>> {
+        return this.answersService.bulkCreate(bulkAnswersDto, scope);
     }
 
     @Get('attempt/:attemptId')
@@ -208,7 +209,7 @@ export class AnswersController {
         @Param('attemptId', ParseIntPipe) attemptId: number,
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<AnswerResponseDto[]> {
-        return this.answersService.findByAttempt(attemptId, scope.userId);
+        return this.answersService.findByAttempt(attemptId, scope);
     }
 
     @Put(':id')
@@ -281,8 +282,8 @@ export class AnswersController {
         @Param('id', ParseIntPipe) id: number,
         @Body() updateAnswerDto: UpdateAnswerDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<AnswerResponseDto> {
-        return this.answersService.update(id, updateAnswerDto, scope.userId);
+    ): Promise<StandardResponse<AnswerResponseDto>> {
+        return this.answersService.update(id, updateAnswerDto, scope);
     }
 
     @Post(':id/mark')
@@ -339,8 +340,8 @@ export class AnswersController {
         @Param('id', ParseIntPipe) id: number,
         @Body() markAnswerDto: MarkAnswerDto,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<AnswerResponseDto> {
-        return this.answersService.markAnswer(id, markAnswerDto, scope.userId);
+    ): Promise<StandardResponse<AnswerResponseDto>> {
+        return this.answersService.markAnswer(id, markAnswerDto, scope);
     }
 
     @Post('auto-mark/:attemptId')
@@ -385,8 +386,9 @@ export class AnswersController {
     })
     async autoMarkAttempt(
         @Param('attemptId', ParseIntPipe) attemptId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<{ message: string; markedQuestions: number }> {
-        await this.answersService.autoMark(attemptId);
+        await this.answersService.autoMark(attemptId, scope);
         return {
             message: `Auto-marking completed for attempt ${attemptId}`,
             markedQuestions: 0, // This would be returned from the service

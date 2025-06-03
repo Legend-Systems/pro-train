@@ -832,7 +832,10 @@ export class QuestionsService {
             await this.validateTestAccessWithScope(question.testId, scope);
 
             // Check if question has answers
-            const answersCount = await this.answersService.countByQuestion(id);
+            const answersCount = await this.answersService.countByQuestion(
+                id,
+                scope,
+            );
             if (answersCount > 0) {
                 throw new ConflictException(
                     'Cannot delete question that has submitted answers',
@@ -998,7 +1001,9 @@ export class QuestionsService {
         // Get actual counts from related services
         const [optionsCount, answersCount] = await Promise.all([
             this.questionsOptionsService.getOptionCount(question.questionId),
-            this.answersService.countByQuestion(question.questionId),
+            this.answersService.countByQuestion(question.questionId, {
+                userId: 'system', // Using system scope for count queries
+            }),
         ]);
 
         // Get media file information if the question has media

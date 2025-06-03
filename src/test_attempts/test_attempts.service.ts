@@ -184,7 +184,7 @@ export class TestAttemptsService {
                 );
 
                 // Step 1: Auto-mark objective questions
-                await this.answersService.autoMark(attemptId);
+                await this.answersService.autoMark(attemptId, scope);
                 this.logger.log(
                     `Auto-marking completed for attempt ${attemptId}`,
                 );
