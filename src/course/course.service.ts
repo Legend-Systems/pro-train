@@ -26,7 +26,6 @@ import { Test } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
 import { UserService } from '../user/user.service';
-import { OrgBranchScopingService } from '../auth/services/org-branch-scoping.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
 
@@ -75,7 +74,6 @@ export class CourseService {
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
         private readonly userService: UserService,
-        private readonly orgBranchScopingService: OrgBranchScopingService,
         private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
@@ -133,10 +131,15 @@ export class CourseService {
     }
 
     private async invalidateCourseListCaches(): Promise<void> {
-        // Note: This is a simplified approach. In production, you might want to
-        // maintain a list of active org/branch cache keys or use cache tags
-        // For now, we'll just clear specific pattern-based keys
-        // await this.cacheManager.reset(); // This method might not exist in all cache implementations
+        // Clear general course list caches
+        const keysToInvalidate = [this.CACHE_KEYS.ALL_COURSES];
+
+        await Promise.all(
+            keysToInvalidate.map(key => this.cacheManager.del(key)),
+        );
+
+        // Note: In production, consider implementing cache tags or maintaining
+        // a registry of active cache keys for more granular invalidation
     }
 
     private async invalidateUserCoursesCache(userId: string): Promise<void> {
@@ -674,7 +677,10 @@ export class CourseService {
     async findByBranch(branchId: string): Promise<Course[]> {
         return this.retryOperation(async () => {
             return this.courseRepository.find({
-                where: { branchId: { id: branchId }, status: CourseStatus.ACTIVE },
+                where: {
+                    branchId: { id: branchId },
+                    status: CourseStatus.ACTIVE,
+                },
                 relations: ['creator', 'orgId', 'branchId'],
             });
         });
@@ -690,7 +696,7 @@ export class CourseService {
         }
 
         const count = await this.testRepository.count({
-            where: { courseId },
+            where: { courseId, isActive: true },
         });
 
         await this.cacheManager.set(
@@ -742,7 +748,9 @@ export class CourseService {
             });
 
             if (!course) {
-                throw new NotFoundException(`Course with ID ${courseId} not found`);
+                throw new NotFoundException(
+                    `Course with ID ${courseId} not found`,
+                );
             }
 
             if (course.status === CourseStatus.DELETED) {
@@ -752,6 +760,7 @@ export class CourseService {
             // Update status to DELETED
             await this.courseRepository.update(courseId, {
                 status: CourseStatus.DELETED,
+                deletedBy: { id: deletedBy },
             });
 
             // Invalidate course cache
@@ -780,7 +789,9 @@ export class CourseService {
             });
 
             if (!course) {
-                throw new NotFoundException(`Course with ID ${courseId} not found`);
+                throw new NotFoundException(
+                    `Course with ID ${courseId} not found`,
+                );
             }
 
             if (course.status !== CourseStatus.DELETED) {
@@ -792,6 +803,7 @@ export class CourseService {
             // Update status to ACTIVE
             await this.courseRepository.update(courseId, {
                 status: CourseStatus.ACTIVE,
+                deletedBy: { id: restoredBy },
             });
 
             // Invalidate course cache

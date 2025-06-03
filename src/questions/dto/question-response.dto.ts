@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { QuestionType } from '../entities/question.entity';
+import { MediaFileResponseDto } from '../../media-manager/dto/media-response.dto';
 
 export class QuestionResponseDto {
     @ApiProperty({
@@ -38,6 +39,35 @@ export class QuestionResponseDto {
         example: 1,
     })
     orderIndex: number;
+
+    @ApiProperty({
+        description: 'Media file ID for questions with image/video content',
+        example: 123,
+        required: false,
+    })
+    mediaFileId?: number;
+
+    @ApiProperty({
+        description: 'Whether this question has associated media content',
+        example: false,
+    })
+    hasMedia: boolean;
+
+    @ApiProperty({
+        description:
+            'Instructions for media content (e.g., "Watch the video and answer:", "Examine the diagram:")',
+        example: 'Watch the video demonstration and then answer:',
+        required: false,
+    })
+    mediaInstructions?: string;
+
+    @ApiProperty({
+        description:
+            'Complete media file information including URL and metadata',
+        type: () => MediaFileResponseDto,
+        required: false,
+    })
+    mediaFile?: MediaFileResponseDto;
 
     @ApiProperty({
         description: 'Question creation timestamp',

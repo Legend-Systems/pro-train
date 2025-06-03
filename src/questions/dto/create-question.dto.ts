@@ -56,4 +56,24 @@ export class CreateQuestionDto {
     @IsOptional()
     @Min(1)
     orderIndex?: number;
+
+    @ApiProperty({
+        description:
+            'Media file ID from media-manager for image/video questions',
+        example: 123,
+        required: false,
+    })
+    @IsOptional()
+    @IsNumber()
+    mediaFileId?: number;
+
+    @ApiProperty({
+        description:
+            'Instructions for media content (e.g., "Watch the video and answer:", "Examine the diagram:")',
+        example: 'Watch the video demonstration and then answer:',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    mediaInstructions?: string;
 }

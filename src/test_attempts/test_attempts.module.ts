@@ -7,12 +7,14 @@ import { Test } from '../test/entities/test.entity';
 import { User } from '../user/entities/user.entity';
 import { ResultsModule } from '../results/results.module';
 import { AnswersModule } from '../answers/answers.module';
+import { TestModule } from '../test/test.module';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([TestAttempt, Test, User]),
         ResultsModule,
         AnswersModule,
+        TestModule,
     ],
     controllers: [TestAttemptsController],
     providers: [TestAttemptsService],

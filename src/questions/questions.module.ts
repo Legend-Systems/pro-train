@@ -8,6 +8,7 @@ import { Test } from '../test/entities/test.entity';
 import { TestModule } from '../test/test.module';
 import { AnswersModule } from '../answers/answers.module';
 import { QuestionsOptionsModule } from '../questions_options/questions_options.module';
+import { MediaManagerModule } from '../media-manager/media-manager.module';
 
 @Module({
     imports: [
@@ -19,6 +20,7 @@ import { QuestionsOptionsModule } from '../questions_options/questions_options.m
         forwardRef(() => TestModule),
         AnswersModule,
         forwardRef(() => QuestionsOptionsModule),
+        MediaManagerModule,
     ],
     controllers: [QuestionsController],
     providers: [QuestionsService],

@@ -19,6 +19,7 @@ import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptListResponseDto } from './dto/test-attempt-list-response.dto';
 import { ResultsService } from '../results/results.service';
 import { AnswersService } from '../answers/answers.service';
+import { TestService } from '../test/test.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
@@ -35,6 +36,7 @@ export class TestAttemptsService {
         private readonly dataSource: DataSource,
         private readonly resultsService: ResultsService,
         private readonly answersService: AnswersService,
+        private readonly testService: TestService,
     ) {}
 
     /**
@@ -76,22 +78,16 @@ export class TestAttemptsService {
         userId: string,
     ): Promise<TestAttemptResponseDto> {
         return this.retryOperation(async () => {
-            // Get test details with org/branch validation
-            const test = await this.testRepository.findOne({
-                where: { testId: createAttemptDto.testId },
-                relations: ['course', 'orgId', 'branchId'],
-            });
+            // Get test details with org/branch validation using TestService
+            const test = await this.testService.getTestForAttempt(
+                createAttemptDto.testId,
+                scope,
+            );
 
             if (!test) {
-                throw new NotFoundException('Test not found');
-            }
-
-            // Validate org/branch access
-            if (scope.orgId && test.orgId?.id !== scope.orgId) {
-                throw new ForbiddenException('Access denied to this test');
-            }
-            if (scope.branchId && test.branchId?.id !== scope.branchId) {
-                throw new ForbiddenException('Access denied to this test');
+                throw new NotFoundException(
+                    'Test not found or not accessible in your organization/branch',
+                );
             }
 
             if (!test.isActive) {
@@ -198,6 +194,12 @@ export class TestAttemptsService {
                     await this.resultsService.createFromAttempt(attemptId);
                 this.logger.log(
                     `Result created for attempt ${attemptId}: ${result.resultId}`,
+                );
+
+                // Step 3: Refresh test statistics
+                await this.testService.refreshTestStatistics(attempt.testId);
+                this.logger.log(
+                    `Test statistics refreshed for test ${attempt.testId}`,
                 );
 
                 this.logger.log(
@@ -543,20 +545,20 @@ export class TestAttemptsService {
         maxAttempts: number;
     }> {
         return this.retryOperation(async () => {
-            const test = await this.testRepository.findOne({
-                where: { testId },
-            });
+            // Use TestService to get test configuration
+            const testConfig =
+                await this.testService.getTestConfiguration(testId);
 
-            if (!test) {
+            if (!testConfig) {
                 throw new NotFoundException('Test not found');
             }
 
-            if (!test.isActive) {
+            if (!testConfig.isActive) {
                 return {
                     canAttempt: false,
                     reason: 'Test is not active',
                     attemptsUsed: 0,
-                    maxAttempts: test.maxAttempts,
+                    maxAttempts: testConfig.maxAttempts,
                 };
             }
 
@@ -577,23 +579,23 @@ export class TestAttemptsService {
                     canAttempt: false,
                     reason: 'Active attempt already exists',
                     attemptsUsed,
-                    maxAttempts: test.maxAttempts,
+                    maxAttempts: testConfig.maxAttempts,
                 };
             }
 
-            if (attemptsUsed >= test.maxAttempts) {
+            if (attemptsUsed >= testConfig.maxAttempts) {
                 return {
                     canAttempt: false,
-                    reason: `Maximum attempts (${test.maxAttempts}) exceeded`,
+                    reason: `Maximum attempts (${testConfig.maxAttempts}) exceeded`,
                     attemptsUsed,
-                    maxAttempts: test.maxAttempts,
+                    maxAttempts: testConfig.maxAttempts,
                 };
             }
 
             return {
                 canAttempt: true,
                 attemptsUsed,
-                maxAttempts: test.maxAttempts,
+                maxAttempts: testConfig.maxAttempts,
             };
         });
     }

@@ -6,6 +6,7 @@ import {
     Logger,
     Inject,
     forwardRef,
+    BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryRunner, DataSource } from 'typeorm';
@@ -24,6 +25,8 @@ import { Test } from '../test/entities/test.entity';
 import { TestService } from '../test/test.service';
 import { AnswersService } from '../answers/answers.service';
 import { QuestionsOptionsService } from '../questions_options/questions_options.service';
+import { MediaManagerService } from '../media-manager/media-manager.service';
+import { MediaFileResponseDto } from '../media-manager/dto/media-response.dto';
 
 // Type definitions for query results
 interface MaxOrderResult {
@@ -72,6 +75,7 @@ export class QuestionsService {
         private readonly answersService: AnswersService,
         @Inject(forwardRef(() => QuestionsOptionsService))
         private readonly questionsOptionsService: QuestionsOptionsService,
+        private readonly mediaManagerService: MediaManagerService,
     ) {}
 
     /**
@@ -215,6 +219,20 @@ export class QuestionsService {
                 scope.userId,
             );
 
+            // Validate media file if provided
+            if (createQuestionDto.mediaFileId) {
+                try {
+                    await this.mediaManagerService.getFileById(
+                        createQuestionDto.mediaFileId,
+                        scope,
+                    );
+                } catch {
+                    throw new BadRequestException(
+                        `Invalid media file ID: ${createQuestionDto.mediaFileId}`,
+                    );
+                }
+            }
+
             // Get test information to inherit org and branch
             const test = await this.testRepository.findOne({
                 where: { testId: createQuestionDto.testId },
@@ -256,6 +274,7 @@ export class QuestionsService {
 
             const question = this.questionRepository.create({
                 ...createQuestionDto,
+                hasMedia: !!createQuestionDto.mediaFileId,
                 orgId: test.orgId,
                 branchId: test.branchId,
             });
@@ -785,6 +804,22 @@ export class QuestionsService {
             this.answersService.countByQuestion(question.questionId),
         ]);
 
+        // Get media file information if the question has media
+        let mediaFile: MediaFileResponseDto | undefined = undefined;
+        if (question.mediaFileId) {
+            try {
+                mediaFile = await this.mediaManagerService.getFileById(
+                    question.mediaFileId,
+                );
+            } catch (error) {
+                this.logger.warn(
+                    `Failed to load media file ${question.mediaFileId} for question ${question.questionId}:`,
+                    error,
+                );
+                // Media file might be deleted or inaccessible, continue without it
+            }
+        }
+
         return {
             questionId: question.questionId,
             testId: question.testId,
@@ -792,6 +827,10 @@ export class QuestionsService {
             questionType: question.questionType,
             points: question.points,
             orderIndex: question.orderIndex,
+            mediaFileId: question.mediaFileId,
+            hasMedia: question.hasMedia || false,
+            mediaInstructions: question.mediaInstructions,
+            mediaFile,
             createdAt: question.createdAt,
             updatedAt: question.updatedAt,
             test: question.test

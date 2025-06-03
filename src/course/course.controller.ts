@@ -170,7 +170,8 @@ export class CourseController {
             properties: {
                 message: {
                     type: 'string',
-                    example: 'User with ID xxx not found',
+                    example:
+                        'User with ID a1b2c3d4-e5f6-7890-abcd-ef1234567890 not found',
                 },
                 status: { type: 'string', example: 'error' },
                 code: { type: 'number', example: 404 },

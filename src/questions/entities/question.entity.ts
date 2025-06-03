@@ -10,10 +10,19 @@ import {
     OneToMany,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsEnum, IsNumber, Min } from 'class-validator';
+import {
+    IsString,
+    IsNotEmpty,
+    IsEnum,
+    IsNumber,
+    Min,
+    IsOptional,
+    IsBoolean,
+} from 'class-validator';
 import { Test } from '../../test/entities/test.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { MediaFile } from '../../media-manager/entities/media-manager.entity';
 
 export enum QuestionType {
     MULTIPLE_CHOICE = 'multiple_choice',
@@ -26,6 +35,7 @@ export enum QuestionType {
 @Entity('questions')
 @Index('IDX_QUESTION_TEST', ['testId'])
 @Index('IDX_QUESTION_ORDER', ['testId', 'orderIndex'])
+@Index('IDX_QUESTION_MEDIA', ['mediaFileId'])
 @Check('CHK_QUESTION_POINTS', 'points > 0')
 export class Question {
     @PrimaryGeneratedColumn()
@@ -90,6 +100,36 @@ export class Question {
     @Min(1)
     orderIndex: number;
 
+    @Column({ nullable: true })
+    @ApiProperty({
+        description: 'Media file ID for questions with image/video content',
+        example: 123,
+        required: false,
+    })
+    @IsOptional()
+    @IsNumber()
+    mediaFileId?: number;
+
+    @Column({ default: false })
+    @ApiProperty({
+        description: 'Whether this question has associated media content',
+        example: false,
+        default: false,
+    })
+    @IsBoolean()
+    hasMedia: boolean;
+
+    @Column('text', { nullable: true })
+    @ApiProperty({
+        description:
+            'Instructions for media content (e.g., "Watch the video and answer:", "Examine the diagram above:")',
+        example: 'Watch the video demonstration and then answer:',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    mediaInstructions?: string;
+
     @CreateDateColumn()
     @ApiProperty({
         description: 'Question creation timestamp',
@@ -125,6 +165,15 @@ export class Question {
 
     @OneToMany('QuestionOption', 'question')
     options: any[];
+
+    @ManyToOne(() => MediaFile, { nullable: true, onDelete: 'SET NULL' })
+    @ApiProperty({
+        description:
+            'Associated media file (image, video, document) for this question',
+        type: () => MediaFile,
+        required: false,
+    })
+    mediaFile?: MediaFile;
 
     constructor(partial: Partial<Question>) {
         Object.assign(this, partial);

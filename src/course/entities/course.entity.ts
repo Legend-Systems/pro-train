@@ -108,6 +108,9 @@ export class Course {
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
     creator: User;
 
+    @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+    deletedBy?: User;
+
     @OneToMany(() => Test, 'course')
     tests: Test[];
 
