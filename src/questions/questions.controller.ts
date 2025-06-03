@@ -45,7 +45,7 @@ import {
 } from './dto/question-response.dto';
 import { StandardOperationResponse } from '../user/dto/common-response.dto';
 
-@ApiTags('❓ Questions Management')
+@ApiTags('❓ Questions Management with Media Support')
 @Controller('questions')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
@@ -66,35 +66,51 @@ export class QuestionsController {
     @ApiOperation({
         summary: '➕ Create New Question',
         description: `
-      **Creates a new question for a test with comprehensive validation**
+      **Creates a new question for a test with comprehensive validation and media support**
       
       This endpoint allows authorized users to create questions for tests within their organization scope:
       - Validates test access and permissions
       - Automatically assigns organization and branch context
       - Supports various question types (multiple choice, true/false, etc.)
+      - **NEW: Media integration** - attach images, videos, or documents to questions
       - Auto-increments order index if not provided
       - Comprehensive caching invalidation
+      
+      **Media Integration:**
+      - Link media files from @/media-manager using mediaFileId
+      - Supports images (JPEG, PNG, WebP, GIF), videos (MP4, WebM), documents (PDF)
+      - Add custom instructions for media content (e.g., "Watch the video and answer:")
+      - Media files are validated for organization/branch access
+      - Automatic hasMedia flag setting
+      
+      **Question Types with Media Examples:**
+      - **Text Question**: Traditional text-only questions
+      - **Image Question**: "Examine the diagram above and identify the design pattern"
+      - **Video Question**: "Watch the debugging session and answer which technique was used"
+      - **Document Question**: "Review the code snippet and find the error"
       
       **Security Features:**
       - Requires valid JWT authentication
       - Organization/branch scope validation
       - Test ownership verification
+      - Media file access validation
       
       **Use Cases:**
-      - Test content creation
-      - Question bank building
-      - Educational content management
-      - Assessment development
+      - Test content creation with rich media
+      - Visual assessment development
+      - Code review questions with screenshots
+      - Tutorial-based learning assessments
     `,
         operationId: 'createQuestion',
     })
     @ApiBody({
         type: CreateQuestionDto,
-        description: 'Question creation data',
+        description: 'Question creation data with optional media attachment',
         examples: {
             'multiple-choice': {
                 summary: '🔘 Multiple Choice Question',
-                description: 'Creates a multiple choice question',
+                description:
+                    'Creates a traditional text-only multiple choice question',
                 value: {
                     testId: 1,
                     questionText:
@@ -102,6 +118,49 @@ export class QuestionsController {
                     questionType: 'multiple_choice',
                     points: 5,
                     orderIndex: 1,
+                },
+            },
+            'image-question': {
+                summary: '🖼️ Image-Based Question',
+                description:
+                    'Creates a question with an attached image for visual analysis',
+                value: {
+                    testId: 1,
+                    questionText: 'What design pattern is demonstrated?',
+                    questionType: 'multiple_choice',
+                    points: 8,
+                    mediaFileId: 123,
+                    mediaInstructions:
+                        'Examine the UML diagram above and identify the pattern:',
+                },
+            },
+            'video-question': {
+                summary: '🎥 Video-Based Question',
+                description:
+                    'Creates a question with an attached video for demonstration-based assessment',
+                value: {
+                    testId: 1,
+                    questionText:
+                        'Which debugging technique was primarily used?',
+                    questionType: 'multiple_choice',
+                    points: 10,
+                    mediaFileId: 456,
+                    mediaInstructions:
+                        'Watch the debugging session video and then answer:',
+                },
+            },
+            'document-question': {
+                summary: '📄 Document-Based Question',
+                description:
+                    'Creates a question with an attached document for code review or analysis',
+                value: {
+                    testId: 1,
+                    questionText: 'What is the error in the provided code?',
+                    questionType: 'short_answer',
+                    points: 15,
+                    mediaFileId: 789,
+                    mediaInstructions:
+                        'Review the code snippet in the document and identify the issue:',
                 },
             },
             'true-false': {
@@ -133,6 +192,8 @@ export class QuestionsController {
                         'Question text is required',
                         'Points must be a positive number',
                         'Invalid question type',
+                        'Invalid media file ID: 123',
+                        'Media file does not exist or access denied',
                     ],
                 },
                 status: { type: 'string', example: 'error' },
@@ -344,13 +405,27 @@ export class QuestionsController {
     @ApiOperation({
         summary: '🔍 Get Question by ID',
         description: `
-      **Retrieves a single question with comprehensive details**
+      **Retrieves a single question with comprehensive details and media information**
       
       This endpoint provides detailed question information including:
       - Complete question data with test context
+      - **Media integration**: Full media file information with URLs when attached
+      - Media instructions and hasMedia flag
       - Related options count (when implemented)
       - Answer statistics (when implemented)
       - Comprehensive caching for performance
+      
+      **Media Information Included:**
+      - Media file details (originalName, url, type, size)
+      - Media metadata (dimensions for images, duration for videos)
+      - Media variants (thumbnails, different sizes)
+      - Access-controlled URLs from @/media-manager
+      
+      **Response Examples:**
+      - **Text Question**: Standard question data without media fields
+      - **Image Question**: Includes mediaFile object with image URL and dimensions
+      - **Video Question**: Includes mediaFile object with video URL and metadata
+      - **Document Question**: Includes mediaFile object with document URL and info
     `,
         operationId: 'getQuestionById',
     })
@@ -363,6 +438,60 @@ export class QuestionsController {
         status: HttpStatus.OK,
         description: '✅ Question retrieved successfully',
         type: QuestionApiResponse,
+        examples: {
+            'text-question': {
+                summary: '📝 Text Question Response',
+                value: {
+                    success: true,
+                    message: 'Question retrieved successfully',
+                    data: {
+                        questionId: 1,
+                        testId: 5,
+                        questionText:
+                            'What is the time complexity of binary search?',
+                        questionType: 'multiple_choice',
+                        points: 5,
+                        orderIndex: 1,
+                        mediaFileId: null,
+                        hasMedia: false,
+                        mediaInstructions: null,
+                        mediaFile: null,
+                        optionsCount: 4,
+                        answersCount: 12,
+                    },
+                },
+            },
+            'image-question': {
+                summary: '🖼️ Image Question Response',
+                value: {
+                    success: true,
+                    message: 'Question retrieved successfully',
+                    data: {
+                        questionId: 2,
+                        testId: 5,
+                        questionText: 'What design pattern is demonstrated?',
+                        questionType: 'multiple_choice',
+                        points: 8,
+                        orderIndex: 2,
+                        mediaFileId: 123,
+                        hasMedia: true,
+                        mediaInstructions:
+                            'Examine the UML diagram above and identify the pattern:',
+                        mediaFile: {
+                            id: 123,
+                            originalName: 'design-pattern-diagram.png',
+                            url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/uuid-design-pattern-diagram.png',
+                            type: 'image',
+                            width: 800,
+                            height: 600,
+                            size: 245760,
+                        },
+                        optionsCount: 4,
+                        answersCount: 8,
+                    },
+                },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
