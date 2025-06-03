@@ -2,6 +2,7 @@ import {
     Injectable,
     NotFoundException,
     ConflictException,
+    ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -13,6 +14,8 @@ import { UpdateOrgDto } from './dto/update-org.dto';
 import { CreateBranchDto } from '../branch/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branch/dto/update-branch.dto';
 import { OrganizationCreatedEvent, BranchCreatedEvent } from '../common/events';
+import { StandardResponse } from '../common/types';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class OrgService {
@@ -56,8 +59,8 @@ export class OrgService {
     // Organization CRUD operations
     async createOrganization(
         createOrgDto: CreateOrgDto,
-    ): Promise<Organization> {
-        return this.retryOperation(async () => {
+    ): Promise<StandardResponse<Organization>> {
+        const organization = await this.retryOperation(async () => {
             // Check if organization name already exists
             const existingOrg = await this.organizationRepository.findOne({
                 where: { name: createOrgDto.name },
@@ -88,6 +91,12 @@ export class OrgService {
 
             return savedOrganization;
         });
+
+        return {
+            success: true,
+            message: 'Organization created successfully',
+            data: organization,
+        };
     }
 
     async findAllOrganizations(): Promise<Organization[]> {
@@ -96,6 +105,25 @@ export class OrgService {
                 relations: ['branches'],
                 order: { createdAt: 'DESC' },
             });
+        });
+    }
+
+    // Scoped version - returns only user's organization
+    async findAllOrganizationsScoped(
+        scope: OrgBranchScope,
+    ): Promise<Organization[]> {
+        return this.retryOperation(async () => {
+            if (!scope.orgId) {
+                return []; // User not assigned to any organization
+            }
+
+            const organization = await this.organizationRepository.find({
+                where: { id: scope.orgId },
+                relations: ['branches'],
+                order: { createdAt: 'DESC' },
+            });
+
+            return organization;
         });
     }
 
@@ -114,11 +142,26 @@ export class OrgService {
         return organization;
     }
 
+    // Scoped version - validates user has access to the organization
+    async findOrganizationByIdScoped(
+        id: string,
+        scope: OrgBranchScope,
+    ): Promise<Organization> {
+        const organization = await this.findOrganizationById(id);
+
+        // Validate user has access to this organization
+        if (!scope.orgId || scope.orgId !== id) {
+            throw new ForbiddenException('Access denied to this organization');
+        }
+
+        return organization;
+    }
+
     async updateOrganization(
         id: string,
         updateOrgDto: UpdateOrgDto,
-    ): Promise<Organization> {
-        return this.retryOperation(async () => {
+    ): Promise<StandardResponse<Organization>> {
+        const organization = await this.retryOperation(async () => {
             // Check if organization exists
             const organization = await this.findOrganizationById(id);
 
@@ -138,21 +181,33 @@ export class OrgService {
             await this.organizationRepository.update(id, updateOrgDto);
             return await this.findOrganizationById(id);
         });
+
+        return {
+            success: true,
+            message: 'Organization updated successfully',
+            data: organization,
+        };
     }
 
-    async deleteOrganization(id: string): Promise<void> {
-        return this.retryOperation(async () => {
+    async deleteOrganization(id: string): Promise<StandardResponse<null>> {
+        await this.retryOperation(async () => {
             const organization = await this.findOrganizationById(id);
             await this.organizationRepository.remove(organization);
         });
+
+        return {
+            success: true,
+            message: 'Organization deleted successfully',
+            data: null,
+        };
     }
 
     // Branch CRUD operations
     async createBranch(
         organizationId: string,
         createBranchDto: CreateBranchDto,
-    ): Promise<Branch> {
-        return this.retryOperation(async () => {
+    ): Promise<StandardResponse<Branch>> {
+        const branch = await this.retryOperation(async () => {
             const organization =
                 await this.findOrganizationById(organizationId);
 
@@ -180,6 +235,12 @@ export class OrgService {
 
             return savedBranch;
         });
+
+        return {
+            success: true,
+            message: 'Branch created successfully',
+            data: branch,
+        };
     }
 
     async findAllBranches(organizationId: string): Promise<Branch[]> {
@@ -189,6 +250,35 @@ export class OrgService {
 
             return await this.branchRepository.find({
                 where: { organization: { id: organizationId } },
+                relations: ['organization'],
+                order: { createdAt: 'DESC' },
+            });
+        });
+    }
+
+    // Scoped version - returns only branches user has access to
+    async findAllBranchesScoped(scope: OrgBranchScope): Promise<Branch[]> {
+        return this.retryOperation(async () => {
+            if (!scope.orgId) {
+                return []; // User not assigned to any organization
+            }
+
+            // If user has branchId, return only their branch
+            if (scope.branchId) {
+                const branch = await this.branchRepository.find({
+                    where: {
+                        id: scope.branchId,
+                        organization: { id: scope.orgId },
+                    },
+                    relations: ['organization'],
+                    order: { createdAt: 'DESC' },
+                });
+                return branch;
+            }
+
+            // Otherwise, return all branches in their organization
+            return await this.branchRepository.find({
+                where: { organization: { id: scope.orgId } },
                 relations: ['organization'],
                 order: { createdAt: 'DESC' },
             });
@@ -215,26 +305,59 @@ export class OrgService {
         return branch;
     }
 
+    // Scoped version - validates user has access to the branch
+    async findBranchByIdScoped(
+        organizationId: string,
+        branchId: string,
+        scope: OrgBranchScope,
+    ): Promise<Branch> {
+        const branch = await this.findBranchById(organizationId, branchId);
+
+        // Validate user has access to this organization
+        if (!scope.orgId || scope.orgId !== organizationId) {
+            throw new ForbiddenException('Access denied to this organization');
+        }
+
+        // If user has a specific branch, validate they can access this branch
+        if (scope.branchId && scope.branchId !== branchId) {
+            throw new ForbiddenException('Access denied to this branch');
+        }
+
+        return branch;
+    }
+
     async updateBranch(
         organizationId: string,
         branchId: string,
         updateBranchDto: UpdateBranchDto,
-    ): Promise<Branch> {
-        return this.retryOperation(async () => {
-            const branch = await this.findBranchById(organizationId, branchId);
+    ): Promise<StandardResponse<Branch>> {
+        const branch = await this.retryOperation(async () => {
+            await this.findBranchById(organizationId, branchId);
             await this.branchRepository.update(branchId, updateBranchDto);
             return await this.findBranchById(organizationId, branchId);
         });
+
+        return {
+            success: true,
+            message: 'Branch updated successfully',
+            data: branch,
+        };
     }
 
     async deleteBranch(
         organizationId: string,
         branchId: string,
-    ): Promise<void> {
-        return this.retryOperation(async () => {
+    ): Promise<StandardResponse<null>> {
+        await this.retryOperation(async () => {
             const branch = await this.findBranchById(organizationId, branchId);
             await this.branchRepository.remove(branch);
         });
+
+        return {
+            success: true,
+            message: 'Branch deleted successfully',
+            data: null,
+        };
     }
 
     // Additional utility methods

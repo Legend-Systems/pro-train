@@ -22,6 +22,9 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BranchService } from './branch.service';
 import { UpdateBranchDto } from './dto/update-branch.dto';
+import { StandardResponse } from '../common/types';
+import { Branch } from './entities/branch.entity';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('🏪 Branch Management')
 @Controller('branches')
@@ -41,148 +44,33 @@ export class BranchController {
 
     @Get()
     @ApiOperation({
-        summary: '📋 List All Branches',
+        summary: '🏢 Get My Branches (Scoped)',
         description: `
-        **Retrieves all branches across all organizations**
+        **Get User's Branches - Scoped Access**
         
-        **🏪 Complete Branch Directory:**
-        - All branches from every organization on the platform
-        - Branch details including contact information and management
-        - Associated organization information for context
-        - Operational status and availability data
+        Returns only branches that the authenticated user has access to.
+        - If user is assigned to a specific branch, returns only that branch
+        - If user is assigned to organization but no specific branch, returns all branches in their org
+        - If user is not assigned to any organization, returns empty array
         
-        **📊 Data Included:**
-        - Branch profiles and contact details
-        - Operating hours and management information
-        - Parent organization relationships
-        - Geographic distribution insights
-        
-        **🎯 Administrative Use Cases:**
-        - **Platform Management**: Monitor all branch locations globally
-        - **Resource Planning**: Understand total capacity across platform
-        - **Support Operations**: Route inquiries to appropriate branches
-        - **Analytics**: Generate cross-organizational reports
-        - **Compliance**: Ensure all locations meet standards
-        
-        **💡 Business Intelligence:**
-        - Geographic distribution analysis
-        - Branch density and coverage assessment
-        - Resource allocation optimization
-        - Performance benchmarking across organizations
+        **🎯 Use Cases:**
+        - Dashboard branch selection
+        - User branch context
+        - Scoped data access
         `,
-        operationId: 'getAllBranches',
+        operationId: 'getMyBranches',
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Branches retrieved successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Operation success status',
-                },
-                message: {
-                    type: 'string',
-                    example: 'All branches retrieved successfully',
-                    description: 'Human-readable success message',
-                },
-                data: {
-                    type: 'array',
-                    description: 'List of all branches across organizations',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            id: {
-                                type: 'string',
-                                example: 'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
-                                description: 'Branch identifier',
-                            },
-                            name: {
-                                type: 'string',
-                                example: 'Medical Center Campus',
-                                description: 'Branch name',
-                            },
-                            address: {
-                                type: 'string',
-                                example: '450 Medical Plaza Drive, CA 90095',
-                                description: 'Branch address',
-                            },
-                            contactNumber: {
-                                type: 'string',
-                                example: '+1-310-825-9111',
-                                description: 'Branch contact phone',
-                            },
-                            email: {
-                                type: 'string',
-                                example: 'medcenter@university.edu',
-                                description: 'Branch email',
-                            },
-                            managerName: {
-                                type: 'string',
-                                example: 'Dr. Sarah Johnson',
-                                description: 'Branch manager',
-                            },
-                            isActive: {
-                                type: 'boolean',
-                                example: true,
-                                description: 'Branch status',
-                            },
-                            organization: {
-                                type: 'object',
-                                properties: {
-                                    id: {
-                                        type: 'string',
-                                        example:
-                                            'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                                    },
-                                    name: {
-                                        type: 'string',
-                                        example: 'Stanford University',
-                                    },
-                                    isActive: {
-                                        type: 'boolean',
-                                        example: true,
-                                    },
-                                },
-                            },
-                            createdAt: {
-                                type: 'string',
-                                example: '2025-01-01T00:00:00.000Z',
-                                description: 'Creation timestamp',
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        description: '✅ User branches retrieved successfully',
     })
-    @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 401 },
-                message: { type: 'string', example: 'Unauthorized' },
-            },
-        },
-    })
-    @ApiResponse({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        description: '🔥 Internal server error during data retrieval',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 500 },
-                message: { type: 'string', example: 'Internal server error' },
-            },
-        },
-    })
-    async findAll() {
-        this.logger.log('Retrieving all branches');
-        return await this.branchService.findAll();
+    async findAll(@OrgBranchScope() scope: any) {
+        const branches = await this.branchService.findAllScoped(scope);
+        return {
+            success: true,
+            message: 'Branches retrieved successfully',
+            data: branches,
+        };
     }
 
     @Get(':id')
@@ -375,9 +263,14 @@ export class BranchController {
             },
         },
     })
-    async findOne(@Param('id') id: string) {
+    async findOne(@Param('id') id: string, @OrgBranchScope() scope: any) {
         this.logger.log(`Retrieving branch: ${id}`);
-        return await this.branchService.findById(id);
+        const branch = await this.branchService.findByIdScoped(id, scope);
+        return {
+            success: true,
+            message: 'Branch retrieved successfully',
+            data: branch,
+        };
     }
 
     @Put(':id')
@@ -587,8 +480,11 @@ export class BranchController {
     async update(
         @Param('id') id: string,
         @Body() updateBranchDto: UpdateBranchDto,
-    ) {
+        @OrgBranchScope() scope: any,
+    ): Promise<StandardResponse<Branch>> {
         this.logger.log(`Updating branch: ${id}`);
+        // First validate user has access to this branch
+        await this.branchService.findByIdScoped(id, scope);
         return await this.branchService.update(id, updateBranchDto);
     }
 
@@ -756,8 +652,22 @@ export class BranchController {
             },
         },
     })
-    async remove(@Param('id') id: string) {
+    async remove(@Param('id') id: string, @OrgBranchScope() scope: any) {
         this.logger.log(`Deleting branch: ${id}`);
-        return await this.branchService.remove(id);
+        // First validate user has access to this branch
+        await this.branchService.findByIdScoped(id, scope);
+        await this.branchService.remove(id);
+        return {
+            success: true,
+            message: 'Branch deleted successfully',
+            data: {
+                deletedBranchId: id,
+                deletedAt: new Date().toISOString(),
+                affectedRecords: {
+                    userAssignments: 0, // This would be calculated in real implementation
+                    activeExams: 0, // This would be calculated in real implementation
+                },
+            },
+        };
     }
 }

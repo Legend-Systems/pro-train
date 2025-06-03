@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Branch } from './entities/branch.entity';
 import { UpdateBranchDto } from './dto/update-branch.dto';
+import { StandardResponse } from '../common/types';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @Injectable()
 export class BranchService {
@@ -49,6 +55,35 @@ export class BranchService {
         });
     }
 
+    // Scoped version - returns only branches user has access to
+    async findAllScoped(scope: OrgBranchScope): Promise<Branch[]> {
+        return this.retryOperation(async () => {
+            if (!scope.orgId) {
+                return []; // User not assigned to any organization
+            }
+
+            // If user has branchId, return only their branch
+            if (scope.branchId) {
+                const branch = await this.branchRepository.find({
+                    where: {
+                        id: scope.branchId,
+                        organization: { id: scope.orgId },
+                    },
+                    relations: ['organization'],
+                    order: { createdAt: 'DESC' },
+                });
+                return branch;
+            }
+
+            // Otherwise, return all branches in their organization
+            return await this.branchRepository.find({
+                where: { organization: { id: scope.orgId } },
+                relations: ['organization'],
+                order: { createdAt: 'DESC' },
+            });
+        });
+    }
+
     async findOne(id: string): Promise<Branch | null> {
         return this.retryOperation(async () => {
             return await this.branchRepository.findOne({
@@ -66,22 +101,51 @@ export class BranchService {
         return branch;
     }
 
+    // Scoped version - validates user has access to the branch
+    async findByIdScoped(id: string, scope: OrgBranchScope): Promise<Branch> {
+        const branch = await this.findById(id);
+
+        // Validate user has access to this organization
+        if (!scope.orgId || scope.orgId !== branch.organization.id) {
+            throw new ForbiddenException('Access denied to this branch');
+        }
+
+        // If user has a specific branch, validate they can access this branch
+        if (scope.branchId && scope.branchId !== id) {
+            throw new ForbiddenException('Access denied to this branch');
+        }
+
+        return branch;
+    }
+
     async update(
         id: string,
         updateBranchDto: UpdateBranchDto,
-    ): Promise<Branch> {
-        return this.retryOperation(async () => {
+    ): Promise<StandardResponse<Branch>> {
+        const branch = await this.retryOperation(async () => {
             await this.findById(id); // Verify branch exists
             await this.branchRepository.update(id, updateBranchDto);
             return await this.findById(id);
         });
+
+        return {
+            success: true,
+            message: 'Branch updated successfully',
+            data: branch,
+        };
     }
 
-    async remove(id: string): Promise<void> {
-        return this.retryOperation(async () => {
+    async remove(id: string): Promise<StandardResponse<null>> {
+        await this.retryOperation(async () => {
             const branch = await this.findById(id);
             await this.branchRepository.remove(branch);
         });
+
+        return {
+            success: true,
+            message: 'Branch deleted successfully',
+            data: null,
+        };
     }
 
     // Additional utility methods

@@ -22,6 +22,7 @@ import {
     UserDeactivatedEvent,
     UserRestoredEvent,
 } from '../common/events';
+import { RetryService } from '../common/services/retry.service';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -50,33 +51,8 @@ export class UserService {
         private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
     ) {}
-
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries = 3,
-        delay = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                const isConnectionError =
-                    error instanceof Error &&
-                    (error.message.includes('ECONNRESET') ||
-                        error.message.includes('Connection lost') ||
-                        error.message.includes('connect ETIMEDOUT'));
-
-                if (isConnectionError && attempt < maxRetries) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                    continue;
-                }
-                throw error;
-            }
-        }
-        throw new Error('Max retries exceeded');
-    }
 
     /**
      * Cache helper methods
@@ -104,7 +80,7 @@ export class UserService {
     async create(
         createUserDto: CreateUserDto,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const { avatar, ...userData } = createUserDto;
             const userToCreate: Partial<User> = { ...userData };
 
@@ -186,7 +162,7 @@ export class UserService {
     }
 
     async findAll(): Promise<User[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const users = await this.userRepository.find({
                 where: { status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId', 'avatar'],
@@ -200,7 +176,7 @@ export class UserService {
     }
 
     async findOne(id: string): Promise<User | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const user = await this.userRepository.findOne({
                 where: { id, status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId', 'avatar'],
@@ -214,7 +190,7 @@ export class UserService {
     }
 
     async findByEmail(email: string): Promise<User | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(email);
             const cachedUser = await this.cacheManager.get<User>(cacheKey);
@@ -244,7 +220,7 @@ export class UserService {
     }
 
     async findByEmailWithFullDetails(email: string): Promise<User | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const user = await this.userRepository.findOne({
                 where: { email },
                 relations: ['orgId', 'branchId', 'avatar'],
@@ -258,7 +234,7 @@ export class UserService {
     }
 
     async findById(id: string): Promise<User | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USER_BY_ID(id);
             const cachedUser = await this.cacheManager.get<User>(cacheKey);
@@ -288,7 +264,7 @@ export class UserService {
     }
 
     async findByOrganization(orgId: string): Promise<User[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USER_ORG(orgId);
             const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
@@ -323,7 +299,7 @@ export class UserService {
     }
 
     async findByBranch(branchId: string): Promise<User[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USER_BRANCH(branchId);
             const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
@@ -531,7 +507,7 @@ export class UserService {
         branchId?: string,
         assignedBy?: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const updateData: Record<string, any> = {};
 
             if (orgId) {
@@ -581,7 +557,7 @@ export class UserService {
         userId: string,
         hashedPassword: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const result = await this.userRepository.update(userId, {
                 password: hashedPassword,
             });
@@ -602,7 +578,7 @@ export class UserService {
      * Mark user email as verified
      */
     async verifyEmail(userId: string): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const result = await this.userRepository.update(userId, {
                 emailVerified: true,
             });
@@ -626,7 +602,7 @@ export class UserService {
         userId: string,
         deactivatedBy?: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if user exists and is not already deleted
             const user = await this.userRepository.findOne({
                 where: { id: userId },
@@ -678,7 +654,7 @@ export class UserService {
         userId: string,
         restoredBy?: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if user exists and is deleted
             const user = await this.userRepository.findOne({
                 where: { id: userId },
@@ -728,7 +704,7 @@ export class UserService {
      * Find all soft-deleted users (for admin purposes)
      */
     async findDeleted(): Promise<User[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const users = await this.userRepository.find({
                 where: { status: UserStatus.DELETED },
                 relations: ['orgId', 'branchId', 'avatar'],
@@ -738,39 +714,6 @@ export class UserService {
             return Promise.all(
                 users.map(user => this.loadAvatarVariants(user)),
             );
-        });
-    }
-
-    /**
-     * Find all users with any status (for admin purposes)
-     */
-    async findAllWithDeleted(): Promise<User[]> {
-        return this.retryOperation(async () => {
-            const users = await this.userRepository.find({
-                relations: ['orgId', 'branchId', 'avatar'],
-            });
-
-            // Load avatar variants for all users
-            return Promise.all(
-                users.map(user => this.loadAvatarVariants(user)),
-            );
-        });
-    }
-
-    /**
-     * Find user by ID including deleted users (for admin purposes)
-     */
-    async findByIdWithDeleted(id: string): Promise<User | null> {
-        return this.retryOperation(async () => {
-            const user = await this.userRepository.findOne({
-                where: { id },
-                relations: ['orgId', 'branchId', 'avatar'],
-            });
-
-            if (user) {
-                return this.loadAvatarVariants(user);
-            }
-            return user;
         });
     }
 }

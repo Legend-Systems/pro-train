@@ -26,6 +26,10 @@ import { CreateOrgDto } from './dto/create-org.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
 import { CreateBranchDto } from '../branch/dto/create-branch.dto';
 import { UpdateBranchDto } from '../branch/dto/update-branch.dto';
+import { StandardResponse } from '../common/types';
+import { Organization } from './entities/org.entity';
+import { Branch } from '../branch/entities/branch.entity';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('🏢 Organization & Branch Management')
 @Controller('organizations')
@@ -243,143 +247,73 @@ export class OrgController {
             },
         },
     })
-    async createOrganization(@Body() createOrgDto: CreateOrgDto) {
+    async createOrganization(
+        @Body() createOrgDto: CreateOrgDto,
+    ): Promise<StandardResponse<Organization>> {
         this.logger.log(`Creating organization: ${createOrgDto.name}`);
         return await this.orgService.createOrganization(createOrgDto);
     }
 
     @Get()
     @ApiOperation({
-        summary: '📋 List All Organizations',
+        summary: '🏢 Get My Organizations (Scoped)',
         description: `
-        **Organization Directory - Complete Platform Overview**
+        **Get User's Organizations - Scoped Access**
         
-        **🔍 What This Provides:**
-        - Complete list of all organizations in the trainpro platform
-        - Hierarchical view showing organizations with their branches
-        - Administrative overview for platform management
-        - Quick access to organizational statistics and health
-        
-        **📊 Data Included:**
-        - Organization profiles and branding information
-        - Associated branches with location details
-        - Active/inactive status for each organization
-        - Creation timestamps for audit and reporting
+        Returns only organizations that the authenticated user has access to.
+        - If user is assigned to an organization, returns only that organization
+        - If user is not assigned to any organization, returns empty array
         
         **🎯 Use Cases:**
-        - **Platform Administration**: Monitor all organizations on the platform
-        - **Onboarding Support**: Help new organizations understand the ecosystem
-        - **Analytics Dashboards**: Generate platform-wide usage reports
-        - **Customer Success**: Track organizational growth and expansion
-        - **Sales Intelligence**: Identify opportunities for service expansion
+        - Dashboard organization selection
+        - User organization context
+        - Scoped data access
         `,
-        operationId: 'getAllOrganizations',
+        operationId: 'getMyOrganizations',
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description:
-            '✅ Organizations retrieved successfully with branch relationships',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Operation success status',
-                },
-                message: {
-                    type: 'string',
-                    example: 'Organizations retrieved successfully',
-                    description: 'Human-readable success message',
-                },
-                data: {
-                    type: 'array',
-                    description: 'List of organizations with branches',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            id: {
-                                type: 'string',
-                                example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-                                description: 'Organization identifier',
-                            },
-                            name: {
-                                type: 'string',
-                                example: 'Stanford University',
-                                description: 'Organization name',
-                            },
-                            description: {
-                                type: 'string',
-                                example: 'Leading research university',
-                                description: 'Organization description',
-                            },
-                            isActive: {
-                                type: 'boolean',
-                                example: true,
-                                description: 'Organization status',
-                            },
-                            branches: {
-                                type: 'array',
-                                description: 'Associated branches',
-                                items: {
-                                    type: 'object',
-                                    properties: {
-                                        id: {
-                                            type: 'string',
-                                            example:
-                                                'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
-                                        },
-                                        name: {
-                                            type: 'string',
-                                            example: 'Medical Center Campus',
-                                        },
-                                        address: {
-                                            type: 'string',
-                                            example: '450 Medical Plaza Drive',
-                                        },
-                                        isActive: {
-                                            type: 'boolean',
-                                            example: true,
-                                        },
-                                    },
-                                },
-                            },
-                            createdAt: {
-                                type: 'string',
-                                example: '2025-01-01T00:00:00.000Z',
-                                description: 'Creation timestamp',
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        description: '✅ User organizations retrieved successfully',
+    })
+    async findAllOrganizations(@OrgBranchScope() scope: any) {
+        const organizations =
+            await this.orgService.findAllOrganizationsScoped(scope);
+        return {
+            success: true,
+            message: 'Organizations retrieved successfully',
+            data: organizations,
+        };
+    }
+
+    @Get('my/organizations')
+    @ApiOperation({
+        summary: '🏢 Get My Organizations (Scoped)',
+        description: `
+        **Get User's Organizations - Scoped Access**
+        
+        Returns only organizations that the authenticated user has access to.
+        - If user is assigned to an organization, returns only that organization
+        - If user is not assigned to any organization, returns empty array
+        
+        **🎯 Use Cases:**
+        - Dashboard organization selection
+        - User organization context
+        - Scoped data access
+        `,
+        operationId: 'getMyOrganizations',
     })
     @ApiResponse({
-        status: HttpStatus.UNAUTHORIZED,
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 401 },
-                message: { type: 'string', example: 'Unauthorized' },
-            },
-        },
+        status: HttpStatus.OK,
+        description: '✅ User organizations retrieved successfully',
     })
-    @ApiResponse({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        description: '🔥 Internal server error during data retrieval',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 500 },
-                message: { type: 'string', example: 'Internal server error' },
-            },
-        },
-    })
-    async findAllOrganizations() {
-        this.logger.log('Retrieving all organizations');
-        return await this.orgService.findAllOrganizations();
+    async findMyOrganizations(@OrgBranchScope() scope: any) {
+        const organizations =
+            await this.orgService.findAllOrganizationsScoped(scope);
+        return {
+            success: true,
+            message: 'Organizations retrieved successfully',
+            data: organizations,
+        };
     }
 
     @Get(':id')
@@ -587,9 +521,12 @@ export class OrgController {
             },
         },
     })
-    async findOrganizationById(@Param('id') id: string) {
+    async findOrganizationById(
+        @Param('id') id: string,
+        @OrgBranchScope() scope: any,
+    ) {
         this.logger.log(`Retrieving organization: ${id}`);
-        return await this.orgService.findOrganizationById(id);
+        return await this.orgService.findOrganizationByIdScoped(id, scope);
     }
 
     @Get(':id/stats')
@@ -736,8 +673,13 @@ export class OrgController {
             },
         },
     })
-    async getOrganizationStats(@Param('id') id: string) {
+    async getOrganizationStats(
+        @Param('id') id: string,
+        @OrgBranchScope() scope: any,
+    ) {
         this.logger.log(`Retrieving statistics for organization: ${id}`);
+        // First validate user has access to this organization
+        await this.orgService.findOrganizationByIdScoped(id, scope);
         return await this.orgService.getOrganizationStats(id);
     }
 
@@ -955,8 +897,11 @@ export class OrgController {
     async updateOrganization(
         @Param('id') id: string,
         @Body() updateOrgDto: UpdateOrgDto,
-    ) {
+        @OrgBranchScope() scope: any,
+    ): Promise<StandardResponse<Organization>> {
         this.logger.log(`Updating organization: ${id}`);
+        // First validate user has access to this organization
+        await this.orgService.findOrganizationByIdScoped(id, scope);
         return await this.orgService.updateOrganization(id, updateOrgDto);
     }
 
@@ -1094,8 +1039,13 @@ export class OrgController {
             },
         },
     })
-    async deleteOrganization(@Param('id') id: string) {
+    async deleteOrganization(
+        @Param('id') id: string,
+        @OrgBranchScope() scope: any,
+    ) {
         this.logger.log(`Deleting organization: ${id}`);
+        // First validate user has access to this organization
+        await this.orgService.findOrganizationByIdScoped(id, scope);
         await this.orgService.deleteOrganization(id);
     }
 
@@ -1380,10 +1330,13 @@ export class OrgController {
     async createBranch(
         @Param('organizationId') organizationId: string,
         @Body() createBranchDto: CreateBranchDto,
-    ) {
+        @OrgBranchScope() scope: any,
+    ): Promise<StandardResponse<Branch>> {
         this.logger.log(
             `Creating branch "${createBranchDto.name}" in organization: ${organizationId}`,
         );
+        // First validate user has access to this organization
+        await this.orgService.findOrganizationByIdScoped(organizationId, scope);
         return await this.orgService.createBranch(
             organizationId,
             createBranchDto,
@@ -1431,11 +1384,47 @@ export class OrgController {
         status: HttpStatus.NOT_FOUND,
         description: '❌ Organization not found - Cannot list branches',
     })
-    async findAllBranches(@Param('organizationId') organizationId: string) {
+    async findAllBranches(
+        @Param('organizationId') organizationId: string,
+        @OrgBranchScope() scope: any,
+    ) {
         this.logger.log(
             `Retrieving branches for organization: ${organizationId}`,
         );
+        // First validate user has access to this organization
+        await this.orgService.findOrganizationByIdScoped(organizationId, scope);
         return await this.orgService.findAllBranches(organizationId);
+    }
+
+    @Get('my/branches')
+    @ApiOperation({
+        summary: '🏢 Get My Branches (Scoped)',
+        description: `
+        **Get User's Branches - Scoped Access**
+        
+        Returns only branches that the authenticated user has access to.
+        - If user is assigned to a specific branch, returns only that branch
+        - If user is assigned to organization but no specific branch, returns all branches in their org
+        - If user is not assigned to any organization, returns empty array
+        
+        **🎯 Use Cases:**
+        - Dashboard branch selection
+        - User branch context
+        - Scoped data access
+        `,
+        operationId: 'getMyBranches',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User branches retrieved successfully',
+    })
+    async findMyBranches(@OrgBranchScope() scope: any) {
+        const branches = await this.orgService.findAllBranchesScoped(scope);
+        return {
+            success: true,
+            message: 'Branches retrieved successfully',
+            data: branches,
+        };
     }
 
     @Get(':organizationId/branches/:branchId')
@@ -1480,11 +1469,16 @@ export class OrgController {
     async findBranchById(
         @Param('organizationId') organizationId: string,
         @Param('branchId') branchId: string,
+        @OrgBranchScope() scope: any,
     ) {
         this.logger.log(
             `Retrieving branch ${branchId} from organization: ${organizationId}`,
         );
-        return await this.orgService.findBranchById(organizationId, branchId);
+        return await this.orgService.findBranchByIdScoped(
+            organizationId,
+            branchId,
+            scope,
+        );
     }
 
     @Put(':organizationId/branches/:branchId')
@@ -1541,9 +1535,16 @@ export class OrgController {
         @Param('organizationId') organizationId: string,
         @Param('branchId') branchId: string,
         @Body() updateBranchDto: UpdateBranchDto,
-    ) {
+        @OrgBranchScope() scope: any,
+    ): Promise<StandardResponse<Branch>> {
         this.logger.log(
             `Updating branch ${branchId} in organization: ${organizationId}`,
+        );
+        // First validate user has access to this branch
+        await this.orgService.findBranchByIdScoped(
+            organizationId,
+            branchId,
+            scope,
         );
         return await this.orgService.updateBranch(
             organizationId,
@@ -1607,9 +1608,16 @@ export class OrgController {
     async deleteBranch(
         @Param('organizationId') organizationId: string,
         @Param('branchId') branchId: string,
+        @OrgBranchScope() scope: any,
     ) {
         this.logger.log(
             `Deleting branch ${branchId} from organization: ${organizationId}`,
+        );
+        // First validate user has access to this branch
+        await this.orgService.findBranchByIdScoped(
+            organizationId,
+            branchId,
+            scope,
         );
         await this.orgService.deleteBranch(organizationId, branchId);
     }

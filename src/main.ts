@@ -23,8 +23,10 @@ async function bootstrap() {
             'X-Requested-With',
             'Accept',
             'Origin',
+            'Access-Control-Allow-Credentials',
         ],
         credentials: true, // Allow cookies and auth headers
+        optionsSuccessStatus: 200, // Some legacy browsers choke on 204
     });
 
     // Security: Use helmet for security headers

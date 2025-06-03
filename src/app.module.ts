@@ -36,6 +36,7 @@ import { MediaManagerModule } from './media-manager/media-manager.module';
 import { MediaFile } from './media-manager/entities/media-manager.entity';
 import { CourseMaterialsModule } from './course-materials/course-materials.module';
 import { CourseMaterial } from './course-materials/entities/course-material.entity';
+import { CommonModule } from './common/common.module';
 
 @Module({
     imports: [
@@ -112,6 +113,7 @@ import { CourseMaterial } from './course-materials/entities/course-material.enti
             inject: [ConfigService],
         }),
 
+        CommonModule,
         UserModule,
         AuthModule,
         CourseModule,

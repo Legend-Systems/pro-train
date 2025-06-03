@@ -28,6 +28,7 @@ import { Result } from '../results/entities/result.entity';
 import { UserService } from '../user/user.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
+import { RetryService } from '../common/services/retry.service';
 
 @Injectable()
 export class CourseService {
@@ -77,33 +78,8 @@ export class CourseService {
         private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
     ) {}
-
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries = 3,
-        delay = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                const isConnectionError =
-                    error instanceof Error &&
-                    (error.message.includes('ECONNRESET') ||
-                        error.message.includes('Connection lost') ||
-                        error.message.includes('connect ETIMEDOUT'));
-
-                if (isConnectionError && attempt < maxRetries) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                    continue;
-                }
-                throw error;
-            }
-        }
-        throw new Error('Max retries exceeded');
-    }
 
     /**
      * Cache helper methods
@@ -172,7 +148,7 @@ export class CourseService {
         createCourseDto: CreateCourseDto,
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Validate user exists
             const user = await this.userService.findById(scope.userId);
             if (!user) {
@@ -227,7 +203,7 @@ export class CourseService {
         filters: CourseFilterDto,
         scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.generateCacheKeyForCourses(filters, 'all');
 
@@ -357,7 +333,7 @@ export class CourseService {
         id: number,
         scope?: OrgBranchScope,
     ): Promise<CourseDetailDto | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_DETAIL(id);
 
@@ -451,7 +427,7 @@ export class CourseService {
         updateCourseDto: UpdateCourseDto,
         userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const course = await this.findById(id);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
@@ -482,7 +458,7 @@ export class CourseService {
         id: number,
         userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const course = await this.findById(id);
             if (!course) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
@@ -518,7 +494,7 @@ export class CourseService {
     }
 
     async getStats(id: number): Promise<CourseStatsDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_STATS(id);
 
@@ -632,7 +608,7 @@ export class CourseService {
     }
 
     async findById(id: number): Promise<Course | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_BY_ID(id);
 
@@ -666,7 +642,7 @@ export class CourseService {
     }
 
     async findByOrganization(orgId: string): Promise<Course[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             return this.courseRepository.find({
                 where: { orgId: { id: orgId }, status: CourseStatus.ACTIVE },
                 relations: ['creator', 'orgId', 'branchId'],
@@ -675,7 +651,7 @@ export class CourseService {
     }
 
     async findByBranch(branchId: string): Promise<Course[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             return this.courseRepository.find({
                 where: {
                     branchId: { id: branchId },
@@ -740,7 +716,7 @@ export class CourseService {
         courseId: number,
         deletedBy?: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if course exists and is not already deleted
             const course = await this.courseRepository.findOne({
                 where: { courseId },
@@ -781,7 +757,7 @@ export class CourseService {
         courseId: number,
         restoredBy?: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if course exists and is deleted
             const course = await this.courseRepository.findOne({
                 where: { courseId },
@@ -821,7 +797,7 @@ export class CourseService {
      * Find all soft-deleted courses (for admin purposes)
      */
     async findDeleted(): Promise<Course[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const courses = await this.courseRepository.find({
                 where: { status: CourseStatus.DELETED },
                 relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
@@ -835,7 +811,7 @@ export class CourseService {
      * Find all courses with any status (for admin purposes)
      */
     async findAllWithDeleted(): Promise<Course[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const courses = await this.courseRepository.find({
                 relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
             });
@@ -848,7 +824,7 @@ export class CourseService {
      * Find course by ID including deleted courses (for admin purposes)
      */
     async findByIdWithDeleted(id: number): Promise<Course | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const course = await this.courseRepository.findOne({
                 where: { courseId: id },
                 relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
