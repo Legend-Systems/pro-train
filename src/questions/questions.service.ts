@@ -27,31 +27,60 @@ import { AnswersService } from '../answers/answers.service';
 import { QuestionsOptionsService } from '../questions_options/questions_options.service';
 import { MediaManagerService } from '../media-manager/media-manager.service';
 import { MediaFileResponseDto } from '../media-manager/dto/media-response.dto';
+import { RetryService } from '../common/services/retry.service';
 
 // Type definitions for query results
 interface MaxOrderResult {
     maxOrder: number | null;
 }
 
-interface TotalPointsResult {
-    total: string | null;
-}
-
 @Injectable()
 export class QuestionsService {
     private readonly logger = new Logger(QuestionsService.name);
 
-    // Cache keys with comprehensive coverage
+    // Cache keys with comprehensive coverage and org/branch scope
     private readonly CACHE_KEYS = {
-        QUESTION_BY_ID: (id: number) => `question:${id}`,
-        QUESTIONS_BY_TEST: (testId: number, filters: string) =>
-            `questions:test:${testId}:${filters}`,
-        QUESTION_STATS: (testId: number) => `question:stats:${testId}`,
-        QUESTION_LIST: (filters: string) => `questions:list:${filters}`,
-        QUESTION_COUNT: (testId: number) => `question:count:${testId}`,
-        TEST_QUESTIONS_CACHE: (testId: number) => `test:${testId}:questions`,
-        USER_QUESTIONS: (userId: string) => `user:${userId}:questions`,
-        ALL_QUESTIONS: 'questions:all',
+        QUESTION_BY_ID: (id: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question:${id}`,
+        QUESTIONS_BY_TEST: (
+            testId: number,
+            filters: string,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:questions:test:${testId}:${filters}`,
+        QUESTION_STATS: (testId: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question:stats:${testId}`,
+        QUESTION_LIST: (filters: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:questions:list:${filters}`,
+        QUESTION_COUNT: (testId: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question:count:${testId}`,
+        TEST_QUESTIONS_CACHE: (
+            testId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:test:${testId}:questions`,
+        USER_QUESTIONS: (userId: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:user:${userId}:questions`,
+        ALL_QUESTIONS: (orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:questions:all`,
     };
 
     // Cache TTL in seconds with different durations for different data types
@@ -76,53 +105,28 @@ export class QuestionsService {
         @Inject(forwardRef(() => QuestionsOptionsService))
         private readonly questionsOptionsService: QuestionsOptionsService,
         private readonly mediaManagerService: MediaManagerService,
+        private readonly retryService: RetryService,
     ) {}
 
     /**
-     * Retry database operations with exponential backoff
-     */
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries: number = 3,
-        delay: number = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                if (attempt === maxRetries) {
-                    this.logger.error(
-                        `Operation failed after ${maxRetries} attempts`,
-                        error instanceof Error ? error.stack : String(error),
-                    );
-                    throw error;
-                }
-                this.logger.warn(
-                    `Operation failed, attempt ${attempt}/${maxRetries}. Retrying in ${delay}ms...`,
-                );
-                await new Promise(resolve =>
-                    setTimeout(resolve, delay * attempt),
-                );
-            }
-        }
-        throw new Error('Retry operation failed unexpectedly');
-    }
-
-    /**
-     * Comprehensive cache invalidation methods
+     * Comprehensive cache invalidation methods with org/branch scope
      */
     private async invalidateQuestionCache(
         questionId: number,
         testId?: number,
+        orgId?: number,
+        branchId?: number,
     ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.QUESTION_BY_ID(questionId)];
+        const keysToDelete = [
+            this.CACHE_KEYS.QUESTION_BY_ID(questionId, orgId, branchId),
+        ];
 
         if (testId) {
             // Invalidate all test-related caches
             keysToDelete.push(
-                this.CACHE_KEYS.QUESTION_STATS(testId),
-                this.CACHE_KEYS.QUESTION_COUNT(testId),
-                this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId),
+                this.CACHE_KEYS.QUESTION_STATS(testId, orgId, branchId),
+                this.CACHE_KEYS.QUESTION_COUNT(testId, orgId, branchId),
+                this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId, orgId, branchId),
             );
 
             // Invalidate pattern-based keys for test questions with different filters
@@ -131,7 +135,7 @@ export class QuestionsService {
         }
 
         // Also invalidate general question lists
-        keysToDelete.push(this.CACHE_KEYS.ALL_QUESTIONS);
+        keysToDelete.push(this.CACHE_KEYS.ALL_QUESTIONS(orgId, branchId));
 
         await Promise.all(
             keysToDelete.map(async key => {
@@ -147,12 +151,16 @@ export class QuestionsService {
         );
     }
 
-    private async invalidateTestQuestionsCache(testId: number): Promise<void> {
+    private async invalidateTestQuestionsCache(
+        testId: number,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.QUESTION_STATS(testId),
-            this.CACHE_KEYS.QUESTION_COUNT(testId),
-            this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId),
-            this.CACHE_KEYS.ALL_QUESTIONS,
+            this.CACHE_KEYS.QUESTION_STATS(testId, orgId, branchId),
+            this.CACHE_KEYS.QUESTION_COUNT(testId, orgId, branchId),
+            this.CACHE_KEYS.TEST_QUESTIONS_CACHE(testId, orgId, branchId),
+            this.CACHE_KEYS.ALL_QUESTIONS(orgId, branchId),
         ];
 
         await Promise.all(
@@ -169,10 +177,14 @@ export class QuestionsService {
         );
     }
 
-    private async invalidateUserQuestionsCache(userId: string): Promise<void> {
+    private async invalidateUserQuestionsCache(
+        userId: string,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.USER_QUESTIONS(userId),
-            this.CACHE_KEYS.ALL_QUESTIONS,
+            this.CACHE_KEYS.USER_QUESTIONS(userId, orgId, branchId),
+            this.CACHE_KEYS.ALL_QUESTIONS(orgId, branchId),
         ];
 
         await Promise.all(
@@ -192,6 +204,8 @@ export class QuestionsService {
     private generateCacheKeyForTestQuestions(
         testId: number,
         filters?: QuestionFilterDto,
+        orgId?: number,
+        branchId?: number,
     ): string {
         const filterKey = JSON.stringify({
             questionType: filters?.questionType,
@@ -202,7 +216,12 @@ export class QuestionsService {
             page: filters?.page,
             pageSize: filters?.pageSize,
         });
-        return this.CACHE_KEYS.QUESTIONS_BY_TEST(testId, filterKey);
+        return this.CACHE_KEYS.QUESTIONS_BY_TEST(
+            testId,
+            filterKey,
+            orgId,
+            branchId,
+        );
     }
 
     /**
@@ -212,7 +231,7 @@ export class QuestionsService {
         createQuestionDto: CreateQuestionDto,
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Validate test access
             await this.validateTestAccess(
                 createQuestionDto.testId,
@@ -282,8 +301,24 @@ export class QuestionsService {
 
             // Comprehensive cache invalidation
             await Promise.all([
-                this.invalidateTestQuestionsCache(createQuestionDto.testId),
-                this.invalidateUserQuestionsCache(scope.userId),
+                this.invalidateTestQuestionsCache(
+                    createQuestionDto.testId,
+                    test.orgId
+                        ? Number(test.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    test.branchId
+                        ? Number(test.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
+                ),
+                this.invalidateUserQuestionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(
@@ -305,7 +340,7 @@ export class QuestionsService {
         bulkCreateDto: BulkCreateQuestionsDto,
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
             await queryRunner.startTransaction();
@@ -334,9 +369,17 @@ export class QuestionsService {
                 // Comprehensive cache invalidation for all affected tests
                 await Promise.all([
                     ...Array.from(testIds).map(testId =>
-                        this.invalidateTestQuestionsCache(testId),
+                        this.invalidateTestQuestionsCache(
+                            testId,
+                            scope.orgId ? Number(scope.orgId) : undefined,
+                            scope.branchId ? Number(scope.branchId) : undefined,
+                        ),
                     ),
-                    this.invalidateUserQuestionsCache(scope.userId),
+                    this.invalidateUserQuestionsCache(
+                        scope.userId,
+                        scope.orgId ? Number(scope.orgId) : undefined,
+                        scope.branchId ? Number(scope.branchId) : undefined,
+                    ),
                 ]);
 
                 this.logger.log(
@@ -362,14 +405,16 @@ export class QuestionsService {
      */
     async findByTest(
         testId: number,
-        userId?: string,
+        scope: OrgBranchScope,
         filters?: QuestionFilterDto,
     ): Promise<QuestionListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.generateCacheKeyForTestQuestions(
                 testId,
                 filters,
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
             );
 
             try {
@@ -391,15 +436,27 @@ export class QuestionsService {
                 );
             }
 
-            // Validate test access if userId provided
-            if (userId) {
-                await this.validateTestAccess(testId, userId);
-            }
+            // Validate test access with scope
+            await this.validateTestAccessWithScope(testId, scope);
 
             const query = this.questionRepository
                 .createQueryBuilder('question')
                 .leftJoinAndSelect('question.test', 'test')
+                .leftJoinAndSelect('question.orgId', 'org')
+                .leftJoinAndSelect('question.branchId', 'branch')
                 .where('question.testId = :testId', { testId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
 
             // Apply filters
             if (filters?.questionType) {
@@ -428,34 +485,30 @@ export class QuestionsService {
                 });
             }
 
-            // Order by index
+            // Apply sorting (use orderIndex by default)
             query.orderBy('question.orderIndex', 'ASC');
 
-            // Pagination
+            // Apply pagination
             const page = filters?.page || 1;
-            const pageSize = filters?.pageSize || 10;
-            const offset = (page - 1) * pageSize;
+            const pageSize = Math.min(filters?.pageSize || 50, 100); // Cap at 100
+            const skip = (page - 1) * pageSize;
 
-            const [questions, total] = await query
-                .skip(offset)
-                .take(pageSize)
-                .getManyAndCount();
+            query.skip(skip).take(pageSize);
 
-            const totalPointsResult = await this.questionRepository
-                .createQueryBuilder('question')
-                .select('SUM(question.points)', 'total')
-                .where('question.testId = :testId', { testId })
-                .getRawOne<TotalPointsResult>();
+            const [questions, total] = await query.getManyAndCount();
 
-            const result = {
-                questions: await Promise.all(
-                    questions.map(q => this.mapToResponseDto(q)),
-                ),
+            // Map to response DTOs
+            const questionDtos = await Promise.all(
+                questions.map(question => this.mapToResponseDto(question)),
+            );
+
+            const result: QuestionListResponseDto = {
+                questions: questionDtos,
                 total,
                 page,
                 pageSize,
                 totalPages: Math.ceil(total / pageSize),
-                totalPoints: parseInt(totalPointsResult?.total || '0'),
+                totalPoints: questions.reduce((sum, q) => sum + q.points, 0),
             };
 
             // Cache the result with error handling
@@ -480,8 +533,11 @@ export class QuestionsService {
     /**
      * Find a single question by ID with comprehensive caching
      */
-    async findOne(id: number, userId?: string): Promise<QuestionResponseDto> {
-        return this.retryOperation(async () => {
+    async findOne(
+        id: number,
+        scope: OrgBranchScope,
+    ): Promise<QuestionResponseDto> {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.QUESTION_BY_ID(id);
 
@@ -500,26 +556,36 @@ export class QuestionsService {
                 );
             }
 
-            const question = await this.questionRepository.findOne({
-                where: { questionId: id },
-                relations: [
-                    'test',
-                    'test.course',
-                    'test.course.orgId',
-                    'test.course.branchId',
-                    'orgId',
-                    'branchId',
-                ],
-            });
+            const query = this.questionRepository
+                .createQueryBuilder('question')
+                .leftJoinAndSelect('question.test', 'test')
+                .leftJoinAndSelect('test.course', 'course')
+                .leftJoinAndSelect('course.orgId', 'course_org')
+                .leftJoinAndSelect('course.branchId', 'course_branch')
+                .leftJoinAndSelect('question.orgId', 'org')
+                .leftJoinAndSelect('question.branchId', 'branch')
+                .where('question.questionId = :id', { id });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const question = await query.getOne();
 
             if (!question) {
                 throw new NotFoundException(`Question with ID ${id} not found`);
             }
 
-            // Validate test access if userId provided
-            if (userId) {
-                await this.validateTestAccess(question.testId, userId);
-            }
+            // Validate test access with scope
+            await this.validateTestAccessWithScope(question.testId, scope);
 
             const result = await this.mapToResponseDto(question);
 
@@ -548,20 +614,36 @@ export class QuestionsService {
     async update(
         id: number,
         updateQuestionDto: UpdateQuestionDto,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
-            const question = await this.questionRepository.findOne({
-                where: { questionId: id },
-                relations: ['test'],
-            });
+        return this.retryService.executeDatabase(async () => {
+            const query = this.questionRepository
+                .createQueryBuilder('question')
+                .leftJoinAndSelect('question.test', 'test')
+                .leftJoinAndSelect('question.orgId', 'org')
+                .leftJoinAndSelect('question.branchId', 'branch')
+                .where('question.questionId = :id', { id });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const question = await query.getOne();
 
             if (!question) {
                 throw new NotFoundException(`Question with ID ${id} not found`);
             }
 
-            // Validate test access
-            await this.validateTestAccess(question.testId, userId);
+            // Validate test access with scope
+            await this.validateTestAccessWithScope(question.testId, scope);
 
             // Check for order index conflicts if updating
             if (
@@ -587,8 +669,25 @@ export class QuestionsService {
 
             // Comprehensive cache invalidation
             await Promise.all([
-                this.invalidateQuestionCache(id, question.testId),
-                this.invalidateUserQuestionsCache(userId),
+                this.invalidateQuestionCache(
+                    id,
+                    question.testId,
+                    question.orgId
+                        ? Number(question.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    question.branchId
+                        ? Number(question.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
+                ),
+                this.invalidateUserQuestionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(`Question ${id} updated successfully`);
@@ -607,11 +706,11 @@ export class QuestionsService {
     async reorder(
         testId: number,
         reorderData: { questionId: number; newOrderIndex: number }[],
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
-            // Validate test access
-            await this.validateTestAccess(testId, userId);
+        return this.retryService.executeDatabase(async () => {
+            // Validate test access with scope
+            await this.validateTestAccessWithScope(testId, scope);
 
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
@@ -619,6 +718,33 @@ export class QuestionsService {
 
             try {
                 for (const { questionId, newOrderIndex } of reorderData) {
+                    // Verify each question belongs to the correct org/branch
+                    const question = await this.questionRepository.findOne({
+                        where: { questionId, testId },
+                        relations: ['orgId', 'branchId'],
+                    });
+
+                    if (!question) {
+                        throw new NotFoundException(
+                            `Question with ID ${questionId} not found`,
+                        );
+                    }
+
+                    // Validate org/branch scope for each question
+                    if (scope.orgId && question.orgId?.id !== scope.orgId) {
+                        throw new ForbiddenException(
+                            `Question ${questionId} does not belong to your organization`,
+                        );
+                    }
+                    if (
+                        scope.branchId &&
+                        question.branchId?.id !== scope.branchId
+                    ) {
+                        throw new ForbiddenException(
+                            `Question ${questionId} does not belong to your branch`,
+                        );
+                    }
+
                     await queryRunner.manager.update(
                         Question,
                         { questionId, testId },
@@ -630,11 +756,24 @@ export class QuestionsService {
 
                 // Comprehensive cache invalidation
                 await Promise.all([
-                    this.invalidateTestQuestionsCache(testId),
-                    this.invalidateUserQuestionsCache(userId),
+                    this.invalidateTestQuestionsCache(
+                        testId,
+                        scope.orgId ? Number(scope.orgId) : undefined,
+                        scope.branchId ? Number(scope.branchId) : undefined,
+                    ),
+                    this.invalidateUserQuestionsCache(
+                        scope.userId,
+                        scope.orgId ? Number(scope.orgId) : undefined,
+                        scope.branchId ? Number(scope.branchId) : undefined,
+                    ),
                     // Invalidate individual question caches
                     ...reorderData.map(({ questionId }) =>
-                        this.invalidateQuestionCache(questionId, testId),
+                        this.invalidateQuestionCache(
+                            questionId,
+                            testId,
+                            scope.orgId ? Number(scope.orgId) : undefined,
+                            scope.branchId ? Number(scope.branchId) : undefined,
+                        ),
                     ),
                 ]);
 
@@ -661,36 +800,68 @@ export class QuestionsService {
      */
     async remove(
         id: number,
-        userId: string,
+        scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
-            const question = await this.questionRepository.findOne({
-                where: { questionId: id },
-                relations: ['test'],
-            });
+        return this.retryService.executeDatabase(async () => {
+            const query = this.questionRepository
+                .createQueryBuilder('question')
+                .leftJoinAndSelect('question.test', 'test')
+                .leftJoinAndSelect('question.orgId', 'org')
+                .leftJoinAndSelect('question.branchId', 'branch')
+                .where('question.questionId = :id', { id });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const question = await query.getOne();
 
             if (!question) {
                 throw new NotFoundException(`Question with ID ${id} not found`);
             }
 
-            // Validate test access
-            await this.validateTestAccess(question.testId, userId);
+            // Validate test access with scope
+            await this.validateTestAccessWithScope(question.testId, scope);
 
             // Check if question has answers
             const answersCount = await this.answersService.countByQuestion(id);
             if (answersCount > 0) {
                 throw new ConflictException(
-                    'Cannot delete question that has answers',
+                    'Cannot delete question that has submitted answers',
                 );
             }
 
-            const testId = question.testId;
             await this.questionRepository.remove(question);
 
             // Comprehensive cache invalidation
             await Promise.all([
-                this.invalidateQuestionCache(id, testId),
-                this.invalidateUserQuestionsCache(userId),
+                this.invalidateQuestionCache(
+                    id,
+                    question.testId,
+                    question.orgId
+                        ? Number(question.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    question.branchId
+                        ? Number(question.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
+                ),
+                this.invalidateUserQuestionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(`Question ${id} deleted successfully`);
@@ -704,11 +875,23 @@ export class QuestionsService {
     }
 
     /**
-     * Get question count for a test with caching
+     * Get question count for a test with caching and scope validation
      */
-    async getQuestionCount(testId: number): Promise<number> {
-        return this.retryOperation(async () => {
-            const cacheKey = this.CACHE_KEYS.QUESTION_COUNT(testId);
+    async getQuestionCount(
+        testId: number,
+        scope?: OrgBranchScope,
+    ): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            // Validate test access if scope is provided
+            if (scope) {
+                await this.validateTestAccessWithScope(testId, scope);
+            }
+
+            const cacheKey = this.CACHE_KEYS.QUESTION_COUNT(
+                testId,
+                scope?.orgId ? Number(scope.orgId) : undefined,
+                scope?.branchId ? Number(scope.branchId) : undefined,
+            );
 
             try {
                 const cachedCount =
@@ -726,9 +909,23 @@ export class QuestionsService {
                 );
             }
 
-            const count = await this.questionRepository.count({
-                where: { testId },
-            });
+            const query = this.questionRepository
+                .createQueryBuilder('question')
+                .where('question.testId = :testId', { testId });
+
+            // Apply org/branch scoping if scope is provided
+            if (scope?.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope?.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const count = await query.getCount();
 
             try {
                 await this.cacheManager.set(
@@ -808,6 +1005,7 @@ export class QuestionsService {
         let mediaFile: MediaFileResponseDto | undefined = undefined;
         if (question.mediaFileId) {
             try {
+                // Skip scope validation for media file access (relations not loaded)
                 mediaFile = await this.mediaManagerService.getFileById(
                     question.mediaFileId,
                 );
@@ -843,5 +1041,15 @@ export class QuestionsService {
             optionsCount,
             answersCount,
         };
+    }
+
+    /**
+     * Validate test access with scope
+     */
+    private async validateTestAccessWithScope(
+        testId: number,
+        scope: OrgBranchScope,
+    ): Promise<void> {
+        await this.validateTestAccess(testId, scope.userId);
     }
 }

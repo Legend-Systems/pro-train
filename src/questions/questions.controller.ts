@@ -234,7 +234,7 @@ export class QuestionsController {
     })
     async create(
         @Body() createQuestionDto: CreateQuestionDto,
-        @OrgBranchScope() scope: any,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
@@ -284,7 +284,7 @@ export class QuestionsController {
     })
     async createBulk(
         @Body() bulkCreateDto: BulkCreateQuestionsDto,
-        @OrgBranchScope() scope: any,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
@@ -365,6 +365,7 @@ export class QuestionsController {
     async findByTest(
         @Param('testId', ParseIntPipe) testId: number,
         @Query() filters: QuestionFilterDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse> {
         try {
@@ -374,7 +375,7 @@ export class QuestionsController {
 
             const result = await this.questionsService.findByTest(
                 testId,
-                req.user.id,
+                scope,
                 filters,
             );
 
@@ -510,15 +511,13 @@ export class QuestionsController {
     })
     async findOne(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(`Getting question ${id} by user: ${req.user.id}`);
 
-            const question = await this.questionsService.findOne(
-                id,
-                req.user.id,
-            );
+            const question = await this.questionsService.findOne(id, scope);
 
             return {
                 success: true,
@@ -568,6 +567,7 @@ export class QuestionsController {
     async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionDto: UpdateQuestionDto,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
@@ -576,7 +576,7 @@ export class QuestionsController {
             return await this.questionsService.update(
                 id,
                 updateQuestionDto,
-                req.user.id,
+                scope,
             );
         } catch (error) {
             this.logger.error(
@@ -627,6 +627,7 @@ export class QuestionsController {
     async reorder(
         @Param('testId', ParseIntPipe) testId: number,
         @Body() reorderData: { questionId: number; newOrderIndex: number }[],
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
@@ -637,7 +638,7 @@ export class QuestionsController {
             return await this.questionsService.reorder(
                 testId,
                 reorderData,
-                req.user.id,
+                scope,
             );
         } catch (error) {
             this.logger.error(
@@ -674,12 +675,13 @@ export class QuestionsController {
     })
     async remove(
         @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Deleting question ${id} by user: ${req.user.id}`);
 
-            return await this.questionsService.remove(id, req.user.id);
+            return await this.questionsService.remove(id, scope);
         } catch (error) {
             this.logger.error(
                 `Error deleting question ${id} by user ${req.user.id}:`,
@@ -739,6 +741,7 @@ export class QuestionsController {
     })
     async getQuestionCount(
         @Param('testId', ParseIntPipe) testId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse> {
         try {
@@ -746,7 +749,10 @@ export class QuestionsController {
                 `Getting question count for test ${testId} by user: ${req.user.id}`,
             );
 
-            const count = await this.questionsService.getQuestionCount(testId);
+            const count = await this.questionsService.getQuestionCount(
+                testId,
+                scope,
+            );
 
             return {
                 success: true,

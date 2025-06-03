@@ -23,7 +23,6 @@ import {
     ApiSecurity,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { GetUser } from '../auth/decorators/get-user.decorator';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { QuestionsOptionsService } from './questions_options.service';
 import { CreateQuestionOptionDto } from './dto/create-questions_option.dto';
@@ -155,17 +154,15 @@ export class QuestionsOptionsController {
     async create(
         @Body() createQuestionOptionDto: CreateQuestionOptionDto,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Creating option for question ${createQuestionOptionDto.questionId} by user: ${userId}`,
+                `Creating option for question ${createQuestionOptionDto.questionId} by user: ${scope.userId}`,
             );
 
             const result = await this.questionsOptionsService.create(
                 createQuestionOptionDto,
                 scope,
-                userId,
             );
 
             this.logger.log(`Question option created successfully`);
@@ -173,7 +170,7 @@ export class QuestionsOptionsController {
             return result;
         } catch (error) {
             this.logger.error(
-                `Error creating question option for user ${userId}:`,
+                `Error creating question option for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -273,25 +270,25 @@ export class QuestionsOptionsController {
     async createBulk(
         @Body() bulkCreateDto: BulkCreateOptionsDto,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Creating ${bulkCreateDto.options.length} options for question ${bulkCreateDto.questionId} by user: ${userId}`,
+                `Creating bulk options for question ${bulkCreateDto.questionId} by user: ${scope.userId}`,
             );
 
             const result = await this.questionsOptionsService.createBulk(
                 bulkCreateDto,
                 scope,
-                userId,
             );
 
-            this.logger.log(`Question options created successfully in bulk`);
+            this.logger.log(
+                `${bulkCreateDto.options.length} question options created successfully in bulk`,
+            );
 
             return result;
         } catch (error) {
             this.logger.error(
-                `Error creating bulk question options for user ${userId}:`,
+                `Error creating bulk question options for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -353,27 +350,19 @@ export class QuestionsOptionsController {
     async findByQuestion(
         @Param('questionId', ParseIntPipe) questionId: number,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<QuestionOptionListResponseDto> {
         try {
             this.logger.log(
-                `Fetching options for question ${questionId} by user: ${userId}`,
+                `Fetching options for question ${questionId} by user: ${scope.userId}`,
             );
 
-            const result = await this.questionsOptionsService.findByQuestion(
+            return await this.questionsOptionsService.findByQuestion(
                 questionId,
                 scope,
-                userId,
             );
-
-            this.logger.log(
-                `Retrieved ${result.options.length} options for question ${questionId}`,
-            );
-
-            return result;
         } catch (error) {
             this.logger.error(
-                `Error fetching options for question ${questionId} by user ${userId}:`,
+                `Error fetching question options for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -435,25 +424,16 @@ export class QuestionsOptionsController {
     async findOne(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<QuestionOptionResponseDto> {
         try {
             this.logger.log(
-                `Fetching question option ${id} by user: ${userId}`,
+                `Fetching question option ${id} by user: ${scope.userId}`,
             );
 
-            const option = await this.questionsOptionsService.findOne(
-                id,
-                scope,
-                userId,
-            );
-
-            this.logger.log(`Question option ${id} retrieved successfully`);
-
-            return option;
+            return await this.questionsOptionsService.findOne(id, scope);
         } catch (error) {
             this.logger.error(
-                `Error fetching question option ${id} by user ${userId}:`,
+                `Error fetching question option ${id} for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -554,18 +534,16 @@ export class QuestionsOptionsController {
         @Param('id', ParseIntPipe) id: number,
         @Body() updateQuestionOptionDto: UpdateQuestionOptionDto,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Updating question option ${id} by user: ${userId}`,
+                `Updating question option ${id} by user: ${scope.userId}`,
             );
 
             const result = await this.questionsOptionsService.update(
                 id,
                 updateQuestionOptionDto,
                 scope,
-                userId,
             );
 
             this.logger.log(`Question option ${id} updated successfully`);
@@ -573,7 +551,7 @@ export class QuestionsOptionsController {
             return result;
         } catch (error) {
             this.logger.error(
-                `Error updating question option ${id} by user ${userId}:`,
+                `Error updating question option ${id} for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;
@@ -656,25 +634,20 @@ export class QuestionsOptionsController {
     async remove(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
-        @GetUser('id') userId: string,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Deleting question option ${id} by user: ${userId}`,
+                `Deleting question option ${id} by user: ${scope.userId}`,
             );
 
-            const result = await this.questionsOptionsService.remove(
-                id,
-                scope,
-                userId,
-            );
+            const result = await this.questionsOptionsService.remove(id, scope);
 
             this.logger.log(`Question option ${id} deleted successfully`);
 
             return result;
         } catch (error) {
             this.logger.error(
-                `Error deleting question option ${id} by user ${userId}:`,
+                `Error deleting question option ${id} for user ${scope.userId}:`,
                 error instanceof Error ? error.message : String(error),
             );
             throw error;

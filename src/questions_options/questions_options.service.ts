@@ -20,25 +20,58 @@ import { Question } from '../questions/entities/question.entity';
 import { QuestionsService } from '../questions/questions.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardOperationResponse } from '../user/dto/common-response.dto';
+import { RetryService } from '../common/services/retry.service';
 
 @Injectable()
 export class QuestionsOptionsService {
     private readonly logger = new Logger(QuestionsOptionsService.name);
 
-    // Cache keys with comprehensive coverage
+    // Cache keys with comprehensive coverage and org/branch scope
     private readonly CACHE_KEYS = {
-        OPTION_BY_ID: (id: number) => `question-option:${id}`,
-        OPTIONS_BY_QUESTION: (questionId: number) =>
-            `question-options:question:${questionId}`,
-        OPTION_STATS: (questionId: number) =>
-            `question-option:stats:${questionId}`,
-        OPTION_LIST: (filters: string) => `question-options:list:${filters}`,
-        QUESTION_OPTIONS_COUNT: (questionId: number) =>
-            `question:${questionId}:options:count`,
-        USER_OPTIONS: (userId: string) => `user:${userId}:options`,
-        ALL_OPTIONS: 'question-options:all',
-        CORRECT_OPTIONS: (questionId: number) =>
-            `question:${questionId}:correct-options`,
+        OPTION_BY_ID: (id: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question-option:${id}`,
+        OPTIONS_BY_QUESTION: (
+            questionId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question-options:question:${questionId}`,
+        OPTION_STATS: (questionId: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question-option:stats:${questionId}`,
+        OPTION_LIST: (filters: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question-options:list:${filters}`,
+        QUESTION_OPTIONS_COUNT: (
+            questionId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question:${questionId}:options:count`,
+        USER_OPTIONS: (userId: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:user:${userId}:options`,
+        ALL_OPTIONS: (orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question-options:all`,
+        CORRECT_OPTIONS: (
+            questionId: number,
+            orgId?: number,
+            branchId?: number,
+        ) =>
+            `org:${orgId || 'global'}:branch:${
+                branchId || 'global'
+            }:question:${questionId}:correct-options`,
     };
 
     // Cache TTL in seconds with different durations for different data types
@@ -61,58 +94,41 @@ export class QuestionsOptionsService {
         private readonly questionsService: QuestionsService,
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
     ) {}
 
     /**
-     * Retry database operations with exponential backoff
-     */
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries: number = 3,
-        delay: number = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                if (attempt === maxRetries) {
-                    this.logger.error(
-                        `Operation failed after ${maxRetries} attempts`,
-                        error instanceof Error ? error.stack : String(error),
-                    );
-                    throw error;
-                }
-                this.logger.warn(
-                    `Operation failed, attempt ${attempt}/${maxRetries}. Retrying in ${delay}ms...`,
-                );
-                await new Promise(resolve =>
-                    setTimeout(resolve, delay * attempt),
-                );
-            }
-        }
-        throw new Error('Retry operation failed unexpectedly');
-    }
-
-    /**
-     * Comprehensive cache invalidation methods
+     * Comprehensive cache invalidation methods with org/branch scope
      */
     private async invalidateOptionCache(
         optionId: number,
         questionId?: number,
+        orgId?: number,
+        branchId?: number,
     ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.OPTION_BY_ID(optionId)];
+        const keysToDelete = [
+            this.CACHE_KEYS.OPTION_BY_ID(optionId, orgId, branchId),
+        ];
 
         if (questionId) {
             keysToDelete.push(
-                this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
-                this.CACHE_KEYS.OPTION_STATS(questionId),
-                this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId),
-                this.CACHE_KEYS.CORRECT_OPTIONS(questionId),
+                this.CACHE_KEYS.OPTIONS_BY_QUESTION(
+                    questionId,
+                    orgId,
+                    branchId,
+                ),
+                this.CACHE_KEYS.OPTION_STATS(questionId, orgId, branchId),
+                this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(
+                    questionId,
+                    orgId,
+                    branchId,
+                ),
+                this.CACHE_KEYS.CORRECT_OPTIONS(questionId, orgId, branchId),
             );
         }
 
         // Also invalidate general option lists
-        keysToDelete.push(this.CACHE_KEYS.ALL_OPTIONS);
+        keysToDelete.push(this.CACHE_KEYS.ALL_OPTIONS(orgId, branchId));
 
         await Promise.all(
             keysToDelete.map(async key => {
@@ -130,13 +146,15 @@ export class QuestionsOptionsService {
 
     private async invalidateQuestionOptionsCache(
         questionId: number,
+        orgId?: number,
+        branchId?: number,
     ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId),
-            this.CACHE_KEYS.OPTION_STATS(questionId),
-            this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId),
-            this.CACHE_KEYS.CORRECT_OPTIONS(questionId),
-            this.CACHE_KEYS.ALL_OPTIONS,
+            this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId, orgId, branchId),
+            this.CACHE_KEYS.OPTION_STATS(questionId, orgId, branchId),
+            this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId, orgId, branchId),
+            this.CACHE_KEYS.CORRECT_OPTIONS(questionId, orgId, branchId),
+            this.CACHE_KEYS.ALL_OPTIONS(orgId, branchId),
         ];
 
         await Promise.all(
@@ -153,10 +171,14 @@ export class QuestionsOptionsService {
         );
     }
 
-    private async invalidateUserOptionsCache(userId: string): Promise<void> {
+    private async invalidateUserOptionsCache(
+        userId: string,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
         const keysToDelete = [
-            this.CACHE_KEYS.USER_OPTIONS(userId),
-            this.CACHE_KEYS.ALL_OPTIONS,
+            this.CACHE_KEYS.USER_OPTIONS(userId, orgId, branchId),
+            this.CACHE_KEYS.ALL_OPTIONS(orgId, branchId),
         ];
 
         await Promise.all(
@@ -179,19 +201,31 @@ export class QuestionsOptionsService {
     async create(
         createQuestionOptionDto: CreateQuestionOptionDto,
         scope: OrgBranchScope,
-        userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Validate question access with scope
             await this.validateQuestionAccessWithScope(
                 createQuestionOptionDto.questionId,
                 scope,
-                userId,
             );
 
-            const option = this.questionOptionRepository.create(
-                createQuestionOptionDto,
-            );
+            // Get question information to inherit org and branch
+            const question = await this.questionRepository.findOne({
+                where: { questionId: createQuestionOptionDto.questionId },
+                relations: ['orgId', 'branchId'],
+            });
+
+            if (!question) {
+                throw new NotFoundException(
+                    `Question with ID ${createQuestionOptionDto.questionId} not found`,
+                );
+            }
+
+            const option = this.questionOptionRepository.create({
+                ...createQuestionOptionDto,
+                orgId: question.orgId,
+                branchId: question.branchId,
+            });
             const savedOption =
                 await this.questionOptionRepository.save(option);
 
@@ -199,8 +233,22 @@ export class QuestionsOptionsService {
             await Promise.all([
                 this.invalidateQuestionOptionsCache(
                     createQuestionOptionDto.questionId,
+                    question.orgId
+                        ? Number(question.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    question.branchId
+                        ? Number(question.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
                 ),
-                this.invalidateUserOptionsCache(userId),
+                this.invalidateUserOptionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(
@@ -221,15 +269,25 @@ export class QuestionsOptionsService {
     async createBulk(
         bulkCreateDto: BulkCreateOptionsDto,
         scope: OrgBranchScope,
-        userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Validate question access with scope
             await this.validateQuestionAccessWithScope(
                 bulkCreateDto.questionId,
                 scope,
-                userId,
             );
+
+            // Get question information to inherit org and branch
+            const question = await this.questionRepository.findOne({
+                where: { questionId: bulkCreateDto.questionId },
+                relations: ['orgId', 'branchId'],
+            });
+
+            if (!question) {
+                throw new NotFoundException(
+                    `Question with ID ${bulkCreateDto.questionId} not found`,
+                );
+            }
 
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
@@ -239,10 +297,12 @@ export class QuestionsOptionsService {
                 const createdOptions: QuestionOption[] = [];
 
                 for (const optionData of bulkCreateDto.options) {
-                    const optionDto: CreateQuestionOptionDto = {
+                    const optionDto = {
                         questionId: bulkCreateDto.questionId,
                         optionText: optionData.optionText,
                         isCorrect: optionData.isCorrect,
+                        orgId: question.orgId,
+                        branchId: question.branchId,
                     };
 
                     const option = queryRunner.manager.create(
@@ -259,8 +319,22 @@ export class QuestionsOptionsService {
                 await Promise.all([
                     this.invalidateQuestionOptionsCache(
                         bulkCreateDto.questionId,
+                        question.orgId
+                            ? Number(question.orgId)
+                            : scope.orgId
+                              ? Number(scope.orgId)
+                              : undefined,
+                        question.branchId
+                            ? Number(question.branchId)
+                            : scope.branchId
+                              ? Number(scope.branchId)
+                              : undefined,
                     ),
-                    this.invalidateUserOptionsCache(userId),
+                    this.invalidateUserOptionsCache(
+                        scope.userId,
+                        scope.orgId ? Number(scope.orgId) : undefined,
+                        scope.branchId ? Number(scope.branchId) : undefined,
+                    ),
                 ]);
 
                 this.logger.log(
@@ -287,11 +361,14 @@ export class QuestionsOptionsService {
     async findByQuestion(
         questionId: number,
         scope: OrgBranchScope,
-        userId?: string,
     ): Promise<QuestionOptionListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.OPTIONS_BY_QUESTION(questionId);
+            const cacheKey = this.CACHE_KEYS.OPTIONS_BY_QUESTION(
+                questionId,
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
 
             try {
                 const cachedResult =
@@ -313,11 +390,7 @@ export class QuestionsOptionsService {
             }
 
             // Validate question access with scope
-            await this.validateQuestionAccessWithScope(
-                questionId,
-                scope,
-                userId,
-            );
+            await this.validateQuestionAccessWithScope(questionId, scope);
 
             const [options, total] = await this.questionOptionRepository
                 .createQueryBuilder('option')
@@ -373,11 +446,14 @@ export class QuestionsOptionsService {
     async findOne(
         id: number,
         scope: OrgBranchScope,
-        userId?: string,
     ): Promise<QuestionOptionResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.OPTION_BY_ID(id);
+            const cacheKey = this.CACHE_KEYS.OPTION_BY_ID(
+                id,
+                scope.orgId ? Number(scope.orgId) : undefined,
+                scope.branchId ? Number(scope.branchId) : undefined,
+            );
 
             try {
                 const cachedOption =
@@ -411,7 +487,6 @@ export class QuestionsOptionsService {
             await this.validateQuestionAccessWithScope(
                 option.questionId,
                 scope,
-                userId,
             );
 
             const result = this.mapToResponseDto(option);
@@ -442,9 +517,8 @@ export class QuestionsOptionsService {
         id: number,
         updateQuestionOptionDto: UpdateQuestionOptionDto,
         scope: OrgBranchScope,
-        userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
                 relations: ['question'],
@@ -460,7 +534,6 @@ export class QuestionsOptionsService {
             await this.validateQuestionAccessWithScope(
                 option.questionId,
                 scope,
-                userId,
             );
 
             Object.assign(option, updateQuestionOptionDto);
@@ -468,8 +541,25 @@ export class QuestionsOptionsService {
 
             // Comprehensive cache invalidation
             await Promise.all([
-                this.invalidateOptionCache(id, option.questionId),
-                this.invalidateUserOptionsCache(userId),
+                this.invalidateOptionCache(
+                    id,
+                    option.questionId,
+                    option.question?.orgId
+                        ? Number(option.question.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    option.question?.branchId
+                        ? Number(option.question.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
+                ),
+                this.invalidateUserOptionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(`Question option ${id} updated successfully`);
@@ -488,9 +578,8 @@ export class QuestionsOptionsService {
     async remove(
         id: number,
         scope: OrgBranchScope,
-        userId: string,
     ): Promise<StandardOperationResponse> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const option = await this.questionOptionRepository.findOne({
                 where: { optionId: id },
                 relations: ['question'],
@@ -506,7 +595,6 @@ export class QuestionsOptionsService {
             await this.validateQuestionAccessWithScope(
                 option.questionId,
                 scope,
-                userId,
             );
 
             // TODO: Check if option has answers (will be implemented in Answers module)
@@ -520,8 +608,25 @@ export class QuestionsOptionsService {
 
             // Comprehensive cache invalidation
             await Promise.all([
-                this.invalidateOptionCache(id, questionId),
-                this.invalidateUserOptionsCache(userId),
+                this.invalidateOptionCache(
+                    id,
+                    questionId,
+                    option.question?.orgId
+                        ? Number(option.question.orgId)
+                        : scope.orgId
+                          ? Number(scope.orgId)
+                          : undefined,
+                    option.question?.branchId
+                        ? Number(option.question.branchId)
+                        : scope.branchId
+                          ? Number(scope.branchId)
+                          : undefined,
+                ),
+                this.invalidateUserOptionsCache(
+                    scope.userId,
+                    scope.orgId ? Number(scope.orgId) : undefined,
+                    scope.branchId ? Number(scope.branchId) : undefined,
+                ),
             ]);
 
             this.logger.log(`Question option ${id} deleted successfully`);
@@ -537,9 +642,17 @@ export class QuestionsOptionsService {
     /**
      * Get option count for a question with caching
      */
-    async getOptionCount(questionId: number): Promise<number> {
-        return this.retryOperation(async () => {
-            const cacheKey = this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(questionId);
+    async getOptionCount(
+        questionId: number,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const cacheKey = this.CACHE_KEYS.QUESTION_OPTIONS_COUNT(
+                questionId,
+                orgId,
+                branchId,
+            );
 
             try {
                 const cachedCount =
@@ -582,9 +695,17 @@ export class QuestionsOptionsService {
     /**
      * Get correct options for a question with caching
      */
-    async getCorrectOptions(questionId: number): Promise<QuestionOption[]> {
-        return this.retryOperation(async () => {
-            const cacheKey = this.CACHE_KEYS.CORRECT_OPTIONS(questionId);
+    async getCorrectOptions(
+        questionId: number,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<QuestionOption[]> {
+        return this.retryService.executeDatabase(async () => {
+            const cacheKey = this.CACHE_KEYS.CORRECT_OPTIONS(
+                questionId,
+                orgId,
+                branchId,
+            );
 
             try {
                 const cachedOptions =
@@ -626,14 +747,21 @@ export class QuestionsOptionsService {
     }
 
     /**
-     * Validate question access and ownership
+     * Validate question access and ownership (deprecated - use validateQuestionAccessWithScope)
      */
     private async validateQuestionAccess(
         questionId: number,
         userId: string,
     ): Promise<void> {
+        // Create a minimal scope for backward compatibility
+        const scope: OrgBranchScope = {
+            userId,
+            orgId: undefined,
+            branchId: undefined,
+        };
+
         try {
-            await this.questionsService.findOne(questionId, userId);
+            await this.questionsService.findOne(questionId, scope);
         } catch (error) {
             if (error instanceof NotFoundException) {
                 throw new NotFoundException(
@@ -652,11 +780,10 @@ export class QuestionsOptionsService {
     private async validateQuestionAccessWithScope(
         questionId: number,
         scope: OrgBranchScope,
-        userId?: string,
     ): Promise<void> {
         try {
-            // Use questions service to validate access (it only accepts 2 params)
-            await this.questionsService.findOne(questionId, userId);
+            // Use questions service to validate access with scope
+            await this.questionsService.findOne(questionId, scope);
         } catch (error) {
             if (error instanceof NotFoundException) {
                 throw new NotFoundException(
