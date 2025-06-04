@@ -219,6 +219,54 @@ export class SessionResponseDto {
         required: false,
     })
     branch?: BranchInfo;
+
+    @ApiProperty({
+        description:
+            'Organizations the user can access based on their role level',
+        type: [OrgInfo],
+        required: false,
+        example: [
+            {
+                id: '1',
+                name: 'Legend Systems',
+                avatar: 'https://example.com/logo.png',
+            },
+        ],
+    })
+    accessibleOrganizations?: OrgInfo[];
+
+    @ApiProperty({
+        description: 'Branches the user can access based on their role level',
+        type: [BranchInfo],
+        required: false,
+        example: [
+            {
+                id: '1',
+                name: 'Denver',
+                email: 'sales@legendsystems.co.za',
+                organizationId: '1',
+            },
+        ],
+    })
+    accessibleBranches?: (BranchInfo & { organizationId: string })[];
+
+    @ApiProperty({
+        description: 'User permissions based on their role level',
+        type: Object,
+        required: false,
+        example: {
+            canAccessAllOrganizations: false,
+            canAccessAllBranches: false,
+            crossOrgAccess: true,
+            crossBranchAccess: true,
+        },
+    })
+    permissions?: {
+        canAccessAllOrganizations: boolean;
+        canAccessAllBranches: boolean;
+        crossOrgAccess: boolean;
+        crossBranchAccess: boolean;
+    };
 }
 
 export class StandardApiResponse<T = any> {

@@ -6,7 +6,7 @@ import {
     NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { User } from '../user/entities/user.entity';
+import { User, UserRole } from '../user/entities/user.entity';
 import { UserService } from '../user/user.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { SignInDto } from '../user/dto/sign-in.dto';
@@ -38,6 +38,7 @@ import {
     ImageVariant,
     MediaFile,
 } from '../media-manager/entities/media-manager.entity';
+import { OrgService } from '../org/org.service';
 
 @Injectable()
 export class AuthService {
@@ -50,6 +51,7 @@ export class AuthService {
         private readonly emailTemplateService: EmailTemplateService,
         private readonly emailQueueService: EmailQueueService,
         private readonly configService: ConfigService,
+        private readonly orgService: OrgService,
     ) {}
 
     /**
@@ -89,6 +91,167 @@ export class AuthService {
         }
 
         return response;
+    }
+
+    /**
+     * Get accessible organizations and branches based on user's role level
+     */
+    private async getAccessibleData(user: User): Promise<{
+        accessibleOrganizations: {
+            id: string;
+            name: string;
+            avatar?: string;
+        }[];
+        accessibleBranches: {
+            id: string;
+            name: string;
+            email?: string;
+            address?: string;
+            contactNumber?: string;
+            managerName?: string;
+            organizationId: string;
+        }[];
+        permissions: {
+            canAccessAllOrganizations: boolean;
+            canAccessAllBranches: boolean;
+            crossOrgAccess: boolean;
+            crossBranchAccess: boolean;
+        };
+    }> {
+        const permissions = {
+            canAccessAllOrganizations: false,
+            canAccessAllBranches: false,
+            crossOrgAccess: false,
+            crossBranchAccess: false,
+        };
+
+        let accessibleOrganizations: {
+            id: string;
+            name: string;
+            avatar?: string;
+            branches?: any[];
+        }[] = [];
+        let accessibleBranches: {
+            id: string;
+            name: string;
+            email?: string;
+            address?: string;
+            contactNumber?: string;
+            managerName?: string;
+            organization?: { id: string };
+            organizationId?: string;
+        }[] = [];
+
+        switch (user.role) {
+            case UserRole.BRANDON:
+                // BRANDON - Super admin, access to everything
+                permissions.canAccessAllOrganizations = true;
+                permissions.canAccessAllBranches = true;
+                permissions.crossOrgAccess = true;
+                permissions.crossBranchAccess = true;
+
+                accessibleOrganizations =
+                    await this.orgService.findAllOrganizations();
+                // Get all branches across all organizations
+                for (const org of accessibleOrganizations) {
+                    if (org.branches && Array.isArray(org.branches)) {
+                        accessibleBranches.push(...org.branches);
+                    }
+                }
+                break;
+
+            case UserRole.ADMIN:
+                // ADMIN - Organization admin, can manage users within org (+ cross-org when allowed)
+                permissions.crossOrgAccess = true; // Admins can have cross-org access when allowed
+                permissions.crossBranchAccess = true;
+
+                if (user.orgId) {
+                    // Get user's organization and all its branches
+                    try {
+                        const userOrg =
+                            await this.orgService.findOrganizationById(
+                                user.orgId.id,
+                            );
+                        accessibleOrganizations = [userOrg];
+                        accessibleBranches = userOrg.branches || [];
+                    } catch {
+                        // If user's org not found, they have access to their assigned data only
+                        if (user.orgId) {
+                            accessibleOrganizations = [user.orgId];
+                        }
+                        if (user.branchId) {
+                            accessibleBranches = [user.branchId];
+                        }
+                    }
+                } else {
+                    // Admin without org assignment - no additional access
+                    accessibleOrganizations = [];
+                    accessibleBranches = [];
+                }
+                break;
+
+            case UserRole.OWNER:
+                // OWNER - Organization owner, can manage users within their organization
+                permissions.crossBranchAccess = true; // Owners have access to all branches within their org
+
+                if (user.orgId) {
+                    try {
+                        const userOrg =
+                            await this.orgService.findOrganizationById(
+                                user.orgId.id,
+                            );
+                        accessibleOrganizations = [userOrg];
+                        accessibleBranches = userOrg.branches || [];
+                    } catch {
+                        // If user's org not found, they have access to their assigned data only
+                        if (user.orgId) {
+                            accessibleOrganizations = [user.orgId];
+                        }
+                        if (user.branchId) {
+                            accessibleBranches = [user.branchId];
+                        }
+                    }
+                } else {
+                    // Owner without org assignment
+                    accessibleOrganizations = [];
+                    accessibleBranches = [];
+                }
+                break;
+
+            case UserRole.USER:
+            default:
+                // USER - Regular user, access only to their specific org and branch
+                if (user.orgId) {
+                    accessibleOrganizations = [user.orgId];
+                }
+                if (user.branchId) {
+                    accessibleBranches = [user.branchId];
+                }
+                break;
+        }
+
+        // Transform the data to include only necessary fields
+        const transformedOrgs = accessibleOrganizations.map(org => ({
+            id: String(org.id),
+            name: String(org.name),
+            avatar: org.avatar || undefined,
+        }));
+
+        const transformedBranches = accessibleBranches.map(branch => ({
+            id: String(branch.id),
+            name: String(branch.name),
+            email: branch.email || undefined,
+            address: branch.address || undefined,
+            contactNumber: branch.contactNumber || undefined,
+            managerName: branch.managerName || undefined,
+            organizationId: String(branch.organization?.id || branch.organizationId || ''),
+        }));
+
+        return {
+            accessibleOrganizations: transformedOrgs,
+            accessibleBranches: transformedBranches,
+            permissions,
+        };
     }
 
     async signUp(
@@ -260,6 +423,9 @@ export class AuthService {
             excludeExtraneousValues: true,
         });
 
+        // Get accessible organizations and branches based on user's role
+        const accessData = await this.getAccessibleData(user);
+
         // Return user without password
         const userResponse: UserResponseDto = {
             uid: user.id,
@@ -297,6 +463,10 @@ export class AuthService {
                           managerName: user.branchId.managerName,
                       }
                     : undefined,
+                // Add role-based accessible data
+                accessibleOrganizations: accessData.accessibleOrganizations,
+                accessibleBranches: accessData.accessibleBranches,
+                permissions: accessData.permissions,
             },
             message: 'User signed in successfully',
         };

@@ -1145,7 +1145,6 @@ export class UserService {
             userRole?: string;
         },
     ): Promise<StandardOperationResponse> {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { avatar, branchId, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
@@ -1160,6 +1159,43 @@ export class UserService {
             dataToUpdate.avatar = avatar
                 ? ({ id: avatar } as MediaFile)
                 : undefined;
+        }
+
+        // Handle branch assignment if provided
+        if (branchId !== undefined) {
+            if (branchId) {
+                // Validate that the branch exists and belongs to the correct organization
+                const branchRepo =
+                    this.userRepository.manager.getRepository(Branch);
+                const branch = await branchRepo.findOne({
+                    where: { id: branchId },
+                    relations: ['organization'],
+                });
+
+                if (!branch) {
+                    throw new NotFoundException(
+                        `Branch with ID ${branchId} not found`,
+                    );
+                }
+
+                // Validate organization scope if provided
+                if (scope?.orgId && branch.organization?.id !== scope.orgId) {
+                    throw new BadRequestException(
+                        `Branch ${branchId} does not belong to the specified organization`,
+                    );
+                }
+
+                dataToUpdate.branchId = { id: branchId } as Branch;
+                // Also set the organization from the branch if not already set
+                if (branch.organization) {
+                    dataToUpdate.orgId = {
+                        id: branch.organization.id,
+                    } as Organization;
+                }
+            } else {
+                // Clear branch assignment
+                dataToUpdate.branchId = undefined;
+            }
         }
 
         await this.userRepository.update(id, dataToUpdate);

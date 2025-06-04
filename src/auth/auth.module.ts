@@ -11,12 +11,14 @@ import { OrgRoleGuard } from './guards/org-role.guard';
 import { UserModule } from '../user/user.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
+import { OrgModule } from '../org/org.module';
 
 @Module({
     imports: [
         UserModule,
         LeaderboardModule,
         CommunicationsModule,
+        OrgModule,
         PassportModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],

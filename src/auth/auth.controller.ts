@@ -690,6 +690,96 @@ export class AuthController {
                                 },
                             },
                         },
+                        accessibleOrganizations: {
+                            type: 'array',
+                            description:
+                                'Organizations the user can access based on their role level',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: {
+                                        type: 'string',
+                                        example: '1',
+                                        description:
+                                            'Organization unique identifier',
+                                    },
+                                    name: {
+                                        type: 'string',
+                                        example: 'Legend Systems',
+                                        description: 'Organization name',
+                                    },
+                                    avatar: {
+                                        type: 'string',
+                                        example: 'https://example.com/logo.png',
+                                        description: 'Organization logo URL',
+                                        nullable: true,
+                                    },
+                                },
+                            },
+                        },
+                        accessibleBranches: {
+                            type: 'array',
+                            description:
+                                'Branches the user can access based on their role level',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: {
+                                        type: 'string',
+                                        example: '1',
+                                        description: 'Branch unique identifier',
+                                    },
+                                    name: {
+                                        type: 'string',
+                                        example: 'Denver',
+                                        description: 'Branch name',
+                                    },
+                                    email: {
+                                        type: 'string',
+                                        example: 'sales@legendsystems.co.za',
+                                        description: 'Branch email address',
+                                        nullable: true,
+                                    },
+                                    organizationId: {
+                                        type: 'string',
+                                        example: '1',
+                                        description:
+                                            'Organization ID this branch belongs to',
+                                    },
+                                },
+                            },
+                        },
+                        permissions: {
+                            type: 'object',
+                            description:
+                                'User permissions based on their role level',
+                            properties: {
+                                canAccessAllOrganizations: {
+                                    type: 'boolean',
+                                    example: false,
+                                    description:
+                                        'Whether user can access all organizations',
+                                },
+                                canAccessAllBranches: {
+                                    type: 'boolean',
+                                    example: false,
+                                    description:
+                                        'Whether user can access all branches',
+                                },
+                                crossOrgAccess: {
+                                    type: 'boolean',
+                                    example: true,
+                                    description:
+                                        'Whether user can access across organizations',
+                                },
+                                crossBranchAccess: {
+                                    type: 'boolean',
+                                    example: true,
+                                    description:
+                                        'Whether user can access across branches',
+                                },
+                            },
+                        },
                     },
                 },
             },
