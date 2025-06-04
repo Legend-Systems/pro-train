@@ -242,12 +242,13 @@ export class Communication {
     })
     updatedAt: Date;
 
-    @ManyToOne(() => Organization, { nullable: false })
+    @ManyToOne(() => Organization, { nullable: true })
     @ApiProperty({
         description: 'Organization this communication belongs to',
         type: () => Organization,
+        required: false,
     })
-    orgId: Organization;
+    orgId?: Organization;
 
     @ManyToOne(() => Branch, { nullable: true })
     @ApiProperty({

@@ -14,6 +14,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { StandardOperationResponse } from './dto/common-response.dto';
 import { User, UserStatus } from './entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
+import { Organization } from '../org/entities/org.entity';
+import { Branch } from '../branch/entities/branch.entity';
 import {
     UserCreatedEvent,
     UserProfileUpdatedEvent,
@@ -79,6 +81,7 @@ export class UserService {
 
     async create(
         createUserDto: CreateUserDto,
+        scope?: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             const { avatar, password, ...userData } = createUserDto;
@@ -94,13 +97,21 @@ export class UserService {
                 userToCreate.avatar = { id: avatar } as MediaFile;
             }
 
+            // Set organization and branch from scope if available
+            if (scope?.orgId) {
+                userToCreate.orgId = { id: scope.orgId } as Organization;
+            }
+            if (scope?.branchId) {
+                userToCreate.branchId = { id: scope.branchId } as Branch;
+            }
+
             const user = this.userRepository.create(userToCreate);
             const savedUser = await this.userRepository.save(user);
 
             // Invalidate list caches since a new user was created
             await this.invalidateUserListCaches();
 
-            // Emit user created event
+            // Emit user created event with organization and branch information
             this.eventEmitter.emit(
                 'user.created',
                 new UserCreatedEvent(
@@ -108,9 +119,9 @@ export class UserService {
                     savedUser.email,
                     savedUser.firstName,
                     savedUser.lastName,
-                    savedUser.orgId?.id,
+                    savedUser.orgId?.id || scope?.orgId,
                     savedUser.orgId?.name,
-                    savedUser.branchId?.id,
+                    savedUser.branchId?.id || scope?.branchId,
                     savedUser.branchId?.name,
                     savedUser.avatar?.id?.toString(),
                 ),
@@ -166,10 +177,24 @@ export class UserService {
         return user;
     }
 
-    async findAll(): Promise<User[]> {
+    async findAll(scope?: {
+        orgId?: string;
+        branchId?: string;
+        userId: string;
+    }): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
+            const whereCondition: any = { status: UserStatus.ACTIVE };
+
+            // Apply org/branch scoping if provided
+            if (scope?.orgId) {
+                whereCondition.orgId = { id: scope.orgId };
+            }
+            if (scope?.branchId) {
+                whereCondition.branchId = { id: scope.branchId };
+            }
+
             const users = await this.userRepository.find({
-                where: { status: UserStatus.ACTIVE },
+                where: whereCondition,
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
@@ -341,6 +366,7 @@ export class UserService {
     async update(
         id: string,
         updateUserDto: UpdateUserDto,
+        scope?: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardOperationResponse> {
         const { avatar, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };

@@ -39,6 +39,7 @@ import {
 } from './dto/common-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
+import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('👤 User & Profile Management')
 @Controller('user')
@@ -163,6 +164,8 @@ export class UserController {
     })
     async createUser(
         @Body() createUserDto: CreateUserDto,
+        @OrgBranchScope()
+        scope: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Creating new user: ${createUserDto.email}`);
@@ -178,7 +181,7 @@ export class UserController {
                 throw new ConflictException('Email address already in use');
             }
 
-            await this.userService.create(createUserDto);
+            await this.userService.create(createUserDto, scope);
 
             this.logger.log(
                 `User created successfully: ${createUserDto.email}`,
@@ -266,13 +269,15 @@ export class UserController {
         @Query('status') status?: string,
         @Query('orgId') orgId?: string,
         @Query('branchId') branchId?: string,
+        @OrgBranchScope()
+        scope?: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
                 `Getting all users - page: ${page}, limit: ${limit}`,
             );
 
-            const users = await this.userService.findAll();
+            const users = await this.userService.findAll(scope);
 
             // Filter users based on query parameters
             let filteredUsers = users;
@@ -468,6 +473,8 @@ export class UserController {
     async updateUserById(
         @Param('id') id: string,
         @Body() updateUserDto: UpdateUserDto,
+        @OrgBranchScope()
+        scope?: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Updating user by ID: ${id}`);
@@ -497,7 +504,7 @@ export class UserController {
                 );
             }
 
-            const result = await this.userService.update(id, updateData);
+            const result = await this.userService.update(id, updateData, scope);
 
             this.logger.log(`User updated successfully: ${id}`);
 
