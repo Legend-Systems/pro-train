@@ -5,8 +5,10 @@ import {
     IsOptional,
     Matches,
     IsNumber,
+    IsEnum,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole } from '../entities/user.entity';
 
 /**
  * Data Transfer Object for creating a new user account
@@ -88,6 +90,20 @@ export class CreateUserDto {
         { message: 'Avatar must be a valid media file ID' },
     )
     avatar?: number;
+
+    @ApiProperty({
+        description:
+            'User role in the system for permission and access control',
+        example: UserRole.USER,
+        enum: UserRole,
+        required: false,
+        type: String,
+        title: 'User Role',
+        default: UserRole.USER,
+    })
+    @IsOptional()
+    @IsEnum(UserRole, { message: 'Role must be a valid user role' })
+    role?: UserRole;
 
     @ApiProperty({
         description:

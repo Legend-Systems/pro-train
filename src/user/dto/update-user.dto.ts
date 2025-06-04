@@ -4,10 +4,12 @@ import {
     IsOptional,
     IsString,
     MinLength,
+    IsEnum,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
+import { UserRole } from '../entities/user.entity';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
     @ApiProperty({
@@ -65,4 +67,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
         { message: 'Avatar must be a valid media file ID' },
     )
     avatar?: number;
+
+    @ApiProperty({
+        description:
+            'Updated user role in the system for permission and access control',
+        example: UserRole.ADMIN,
+        enum: UserRole,
+        required: false,
+        type: String,
+        title: 'User Role',
+    })
+    @IsOptional()
+    @IsEnum(UserRole, { message: 'Role must be a valid user role' })
+    role?: UserRole;
 }
