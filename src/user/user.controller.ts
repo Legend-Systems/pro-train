@@ -270,7 +270,12 @@ export class UserController {
     async getAllUsers(
         @Query() filters: UserFilterDto,
         @OrgBranchScope()
-        scope?: { orgId?: string; branchId?: string; userId: string },
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
@@ -435,7 +440,12 @@ export class UserController {
         @Param('id') id: string,
         @Body() updateUserDto: UpdateUserDto,
         @OrgBranchScope()
-        scope?: { orgId?: string; branchId?: string; userId: string },
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Updating user by ID: ${id}`);

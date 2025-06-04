@@ -85,17 +85,22 @@ export class UserService {
     }
 
     /**
-     * Cache helper methods
+     * Comprehensive cache invalidation methods following module standards
      */
     private async invalidateUserCache(
         userId: string,
         email?: string,
         orgId?: string,
         branchId?: string,
+        avatarId?: number,
     ): Promise<void> {
-        const keysToDelete = [
+        const keysToDelete: string[] = [];
+
+        // Individual user caches with org/branch scoping
+        keysToDelete.push(
             this.CACHE_KEYS.USER_BY_ID(userId, orgId, branchId),
-        ];
+            this.CACHE_KEYS.USER_DETAIL(userId, orgId, branchId),
+        );
 
         if (email) {
             keysToDelete.push(
@@ -103,8 +108,21 @@ export class UserService {
             );
         }
 
-        // Also invalidate list cache
-        keysToDelete.push(this.CACHE_KEYS.USERS_LIST('', orgId, branchId));
+        if (avatarId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_AVATAR_VARIANTS(avatarId, orgId, branchId),
+            );
+        }
+
+        // Also invalidate global scoped caches for this user
+        keysToDelete.push(
+            this.CACHE_KEYS.USER_BY_ID(userId),
+            this.CACHE_KEYS.USER_DETAIL(userId),
+        );
+
+        if (email) {
+            keysToDelete.push(this.CACHE_KEYS.USER_BY_EMAIL(email));
+        }
 
         await Promise.all(
             keysToDelete.map(async key => {
@@ -124,9 +142,28 @@ export class UserService {
         orgId?: string,
         branchId?: string,
     ): Promise<void> {
-        // Clear general user list caches
-        const keysToInvalidate = [this.CACHE_KEYS.ALL_USERS(orgId, branchId)];
+        const keysToInvalidate: string[] = [];
 
+        // All user list caches for this org/branch scope
+        keysToInvalidate.push(this.CACHE_KEYS.ALL_USERS(orgId, branchId));
+
+        // Organization and branch specific caches with empty filters
+        if (orgId) {
+            keysToInvalidate.push(
+                this.CACHE_KEYS.USERS_BY_ORG(orgId, '', branchId),
+            );
+        }
+
+        if (branchId) {
+            keysToInvalidate.push(
+                this.CACHE_KEYS.USERS_BY_BRANCH(branchId, '', orgId),
+            );
+        }
+
+        // Also invalidate global scoped list caches
+        keysToInvalidate.push(this.CACHE_KEYS.ALL_USERS());
+
+        // Delete known specific cache keys
         await Promise.all(
             keysToInvalidate.map(async key => {
                 try {
@@ -140,8 +177,54 @@ export class UserService {
             }),
         );
 
-        // Note: In production, consider implementing cache tags or maintaining
-        // a registry of active cache keys for more granular invalidation
+        // Note: For filtered list caches with various combinations, we invalidate
+        // the main list caches and rely on cache TTL for other specific filters.
+        // In production, consider implementing cache tags or maintaining
+        // a registry of active cache keys for more granular invalidation.
+        this.logger.debug(
+            `Invalidated user list caches for org:${orgId || 'global'}, branch:${branchId || 'global'}`,
+        );
+    }
+
+    /**
+     * Comprehensive cache invalidation for user operations
+     * Follows module standards for org/branch scoped invalidation
+     */
+    private async invalidateAllUserCaches(
+        userId: string,
+        user?: Partial<User>,
+        orgId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        // Invalidate individual user caches
+        await this.invalidateUserCache(
+            userId,
+            user?.email,
+            orgId,
+            branchId,
+            user?.avatar?.id,
+        );
+
+        // Invalidate list caches for the affected org/branch scope
+        await this.invalidateUserListCaches(orgId, branchId);
+
+        // If user has different org/branch in their data, invalidate those too
+        if (user?.orgId?.id && user.orgId.id !== orgId) {
+            await this.invalidateUserListCaches(user.orgId.id, branchId);
+        }
+        if (user?.branchId?.id && user.branchId.id !== branchId) {
+            await this.invalidateUserListCaches(orgId, user.branchId.id);
+        }
+        if (
+            user?.orgId?.id &&
+            user?.branchId?.id &&
+            (user.orgId.id !== orgId || user.branchId.id !== branchId)
+        ) {
+            await this.invalidateUserListCaches(
+                user.orgId.id,
+                user.branchId.id,
+            );
+        }
     }
 
     private generateCacheKeyForUsers(
@@ -201,8 +284,13 @@ export class UserService {
             const user = this.userRepository.create(userToCreate);
             const savedUser = await this.userRepository.save(user);
 
-            // Invalidate list caches since a new user was created
-            await this.invalidateUserListCaches(scope?.orgId, scope?.branchId);
+            // Comprehensive cache invalidation for new user creation
+            await this.invalidateAllUserCaches(
+                savedUser.id,
+                savedUser,
+                scope?.orgId,
+                scope?.branchId,
+            );
 
             // Emit user created event with organization and branch information
             this.eventEmitter.emit(
@@ -279,6 +367,27 @@ export class UserService {
         userRole?: string;
     }): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
+            // Check cache first
+            const cacheKey = this.CACHE_KEYS.ALL_USERS(
+                scope?.orgId,
+                scope?.branchId,
+            );
+
+            try {
+                const cachedUsers =
+                    await this.cacheManager.get<User[]>(cacheKey);
+
+                if (cachedUsers) {
+                    this.logger.debug(`Cache hit for all users: ${cacheKey}`);
+                    return cachedUsers;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
             // Build query with proper scoping
             const queryBuilder = this.userRepository
                 .createQueryBuilder('user')
@@ -312,9 +421,26 @@ export class UserService {
             const users = await queryBuilder.getMany();
 
             // Load avatar variants for all users
-            return Promise.all(
+            const usersWithVariants = await Promise.all(
                 users.map(user => this.loadAvatarVariants(user)),
             );
+
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    usersWithVariants,
+                    this.CACHE_TTL.USERS_ALL * 1000,
+                );
+                this.logger.debug(`Cache set for all users: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            return usersWithVariants;
         });
     }
 
@@ -452,13 +578,46 @@ export class UserService {
 
     async findOne(id: string): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
+            // Check cache first - note: using global scope for findOne
+            const cacheKey = this.CACHE_KEYS.USER_BY_ID(id);
+
+            try {
+                const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
+                if (cachedUser) {
+                    this.logger.debug(`Cache hit for user: ${cacheKey}`);
+                    return cachedUser;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            // If not in cache, fetch from database
             const user = await this.userRepository.findOne({
                 where: { id, status: UserStatus.ACTIVE },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
             if (user) {
-                return this.loadAvatarVariants(user);
+                const userWithVariants = await this.loadAvatarVariants(user);
+                // Cache the result with error handling
+                try {
+                    await this.cacheManager.set(
+                        cacheKey,
+                        userWithVariants,
+                        this.CACHE_TTL.USER * 1000,
+                    );
+                    this.logger.debug(`Cache set for user: ${cacheKey}`);
+                } catch (error) {
+                    this.logger.warn(
+                        `Cache set failed for key ${cacheKey}:`,
+                        error,
+                    );
+                }
+                return userWithVariants;
             }
             return user;
         });
@@ -515,13 +674,50 @@ export class UserService {
 
     async findByEmailWithFullDetails(email: string): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
+            // Check cache first - using global scope for full details
+            const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(email);
+
+            try {
+                const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
+                if (cachedUser) {
+                    this.logger.debug(
+                        `Cache hit for user by email: ${cacheKey}`,
+                    );
+                    return cachedUser;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            // If not in cache, fetch from database
             const user = await this.userRepository.findOne({
                 where: { email },
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
             if (user) {
-                return this.loadAvatarVariants(user);
+                const userWithVariants = await this.loadAvatarVariants(user);
+                // Cache the result with error handling
+                try {
+                    await this.cacheManager.set(
+                        cacheKey,
+                        userWithVariants,
+                        this.CACHE_TTL.USER * 1000,
+                    );
+                    this.logger.debug(
+                        `Cache set for user by email: ${cacheKey}`,
+                    );
+                } catch (error) {
+                    this.logger.warn(
+                        `Cache set failed for key ${cacheKey}:`,
+                        error,
+                    );
+                }
+                return userWithVariants;
             }
             return user;
         });
@@ -531,10 +727,19 @@ export class UserService {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USER_BY_ID(id);
-            const cachedUser = await this.cacheManager.get<User>(cacheKey);
 
-            if (cachedUser) {
-                return cachedUser;
+            try {
+                const cachedUser = await this.cacheManager.get<User>(cacheKey);
+
+                if (cachedUser) {
+                    this.logger.debug(`Cache hit for user by ID: ${cacheKey}`);
+                    return cachedUser;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             // If not in cache, fetch from database
@@ -545,12 +750,20 @@ export class UserService {
 
             if (user) {
                 const userWithVariants = await this.loadAvatarVariants(user);
-                // Cache the result
-                await this.cacheManager.set(
-                    cacheKey,
-                    userWithVariants,
-                    this.CACHE_TTL.USER * 1000, // Convert to milliseconds
-                );
+                // Cache the result with error handling
+                try {
+                    await this.cacheManager.set(
+                        cacheKey,
+                        userWithVariants,
+                        this.CACHE_TTL.USER * 1000, // Convert to milliseconds
+                    );
+                    this.logger.debug(`Cache set for user by ID: ${cacheKey}`);
+                } catch (error) {
+                    this.logger.warn(
+                        `Cache set failed for key ${cacheKey}:`,
+                        error,
+                    );
+                }
                 return userWithVariants;
             }
             return user;
@@ -561,10 +774,22 @@ export class UserService {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USERS_BY_ORG(orgId, '');
-            const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
 
-            if (cachedUsers) {
-                return cachedUsers;
+            try {
+                const cachedUsers =
+                    await this.cacheManager.get<User[]>(cacheKey);
+
+                if (cachedUsers) {
+                    this.logger.debug(
+                        `Cache hit for users by org: ${cacheKey}`,
+                    );
+                    return cachedUsers;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             // If not in cache, fetch from database
@@ -581,12 +806,20 @@ export class UserService {
                 users.map(user => this.loadAvatarVariants(user)),
             );
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                usersWithVariants,
-                this.CACHE_TTL.USER_LIST * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    usersWithVariants,
+                    this.CACHE_TTL.USER_LIST * 1000,
+                );
+                this.logger.debug(`Cache set for users by org: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return usersWithVariants;
         });
@@ -596,10 +829,22 @@ export class UserService {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
             const cacheKey = this.CACHE_KEYS.USERS_BY_BRANCH(branchId, '');
-            const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
 
-            if (cachedUsers) {
-                return cachedUsers;
+            try {
+                const cachedUsers =
+                    await this.cacheManager.get<User[]>(cacheKey);
+
+                if (cachedUsers) {
+                    this.logger.debug(
+                        `Cache hit for users by branch: ${cacheKey}`,
+                    );
+                    return cachedUsers;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
             }
 
             // If not in cache, fetch from database
@@ -616,12 +861,20 @@ export class UserService {
                 users.map(user => this.loadAvatarVariants(user)),
             );
 
-            // Cache the result
-            await this.cacheManager.set(
-                cacheKey,
-                usersWithVariants,
-                this.CACHE_TTL.USER_LIST * 1000,
-            );
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    usersWithVariants,
+                    this.CACHE_TTL.USER_LIST * 1000,
+                );
+                this.logger.debug(`Cache set for users by branch: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
 
             return usersWithVariants;
         });
@@ -655,14 +908,16 @@ export class UserService {
 
         await this.userRepository.update(id, dataToUpdate);
 
-        // Invalidate user cache with org/branch scope
-        await this.invalidateUserCache(
+        // Get updated user data for comprehensive cache invalidation
+        const updatedUser = await this.userRepository.findOne({
+            where: { id },
+            relations: ['orgId', 'branchId', 'avatar'],
+        });
+
+        // Comprehensive cache invalidation with org/branch scope
+        await this.invalidateAllUserCaches(
             id,
-            existingUser.email,
-            scope?.orgId || existingUser.orgId?.id,
-            scope?.branchId || existingUser.branchId?.id,
-        );
-        await this.invalidateUserListCaches(
+            updatedUser || existingUser,
             scope?.orgId || existingUser.orgId?.id,
             scope?.branchId || existingUser.branchId?.id,
         );
@@ -675,49 +930,166 @@ export class UserService {
     }
 
     async remove(id: string): Promise<StandardOperationResponse> {
-        const result = await this.userRepository.delete(id);
-        if (result.affected === 0) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
+        return this.retryService.executeDatabase(async () => {
+            // Get user first for cache invalidation
+            const user = await this.userRepository.findOne({
+                where: { id },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
 
-        return {
-            message: 'User deleted successfully',
-            status: 'success',
-            code: 200,
-        };
+            if (!user) {
+                throw new NotFoundException(`User with ID ${id} not found`);
+            }
+
+            // Delete the user
+            const result = await this.userRepository.delete(id);
+            if (result.affected === 0) {
+                throw new NotFoundException(`User with ID ${id} not found`);
+            }
+
+            // Comprehensive cache invalidation with org/branch scope for deleted user
+            await this.invalidateAllUserCaches(
+                id,
+                user,
+                user.orgId?.id,
+                user.branchId?.id,
+            );
+
+            return {
+                message: 'User deleted successfully',
+                status: 'success',
+                code: 200,
+            };
+        });
     }
 
     async updateProfile(
         id: string,
         updateData: Partial<UpdateUserDto>,
     ): Promise<StandardOperationResponse> {
-        try {
-            const { avatar, ...profileData } = updateData;
-            const dataToUpdate: Partial<User> = { ...profileData };
+        return this.retryService.executeDatabase(async () => {
+            try {
+                const { avatar, ...profileData } = updateData;
+                const dataToUpdate: Partial<User> = { ...profileData };
 
-            // Get user first for cache invalidation and event data
+                // Get user first for cache invalidation and event data
+                const user = await this.findById(id);
+                if (!user) {
+                    throw new NotFoundException(`User with ID ${id} not found`);
+                }
+
+                // Convert avatar ID to MediaFile reference if provided
+                if (avatar !== undefined) {
+                    dataToUpdate.avatar = avatar
+                        ? ({ id: avatar } as MediaFile)
+                        : undefined;
+                }
+
+                await this.userRepository.update(id, dataToUpdate);
+
+                // Get updated user data for comprehensive cache invalidation
+                const updatedUser = await this.userRepository.findOne({
+                    where: { id },
+                    relations: ['orgId', 'branchId', 'avatar'],
+                });
+
+                // Comprehensive cache invalidation with org/branch scope
+                await this.invalidateAllUserCaches(
+                    id,
+                    updatedUser || user,
+                    user.orgId?.id,
+                    user.branchId?.id,
+                );
+
+                // Emit user profile updated event
+                const updatedFields = Object.keys(updateData);
+                this.eventEmitter.emit(
+                    'user.profile.updated',
+                    new UserProfileUpdatedEvent(
+                        user.id,
+                        user.email,
+                        user.firstName,
+                        user.lastName,
+                        user.orgId?.id,
+                        user.orgId?.name,
+                        user.branchId?.id,
+                        user.branchId?.name,
+                        user.avatar?.id?.toString(),
+                        updatedFields,
+                    ),
+                );
+
+                return {
+                    message: 'Profile updated successfully',
+                    status: 'success',
+                    code: 200,
+                };
+            } catch (error) {
+                if (error instanceof NotFoundException) {
+                    return {
+                        message: error.message,
+                        status: 'error',
+                        code: 404,
+                    };
+                }
+                throw error;
+            }
+        });
+    }
+
+    async changePassword(
+        id: string,
+        currentPassword: string,
+        newPassword: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryService.executeDatabase(async () => {
             const user = await this.findById(id);
             if (!user) {
-                throw new NotFoundException(`User with ID ${id} not found`);
+                return {
+                    message: `User with ID ${id} not found`,
+                    status: 'error',
+                    code: 404,
+                };
             }
 
-            // Convert avatar ID to MediaFile reference if provided
-            if (avatar !== undefined) {
-                dataToUpdate.avatar = avatar
-                    ? ({ id: avatar } as MediaFile)
-                    : undefined;
+            // Verify current password
+            const isCurrentPasswordValid = await bcrypt.compare(
+                currentPassword,
+                user.password,
+            );
+            if (!isCurrentPasswordValid) {
+                return {
+                    message: 'Current password is incorrect',
+                    status: 'error',
+                    code: 400,
+                };
             }
 
-            await this.userRepository.update(id, dataToUpdate);
+            // Hash new password
+            const saltRounds = 12;
+            const hashedNewPassword = await bcrypt.hash(
+                newPassword,
+                saltRounds,
+            );
 
-            // Invalidate user cache
-            await this.invalidateUserCache(id, user.email);
+            // Update password
+            await this.userRepository.update(id, {
+                password: hashedNewPassword,
+            });
 
-            // Emit user profile updated event
-            const updatedFields = Object.keys(updateData);
+            // Invalidate user cache after password change (user data shouldn't change much, so simple invalidation)
+            await this.invalidateUserCache(
+                id,
+                user.email,
+                user.orgId?.id,
+                user.branchId?.id,
+                user.avatar?.id,
+            );
+
+            // Emit password changed event
             this.eventEmitter.emit(
-                'user.profile.updated',
-                new UserProfileUpdatedEvent(
+                'user.password.changed',
+                new UserPasswordChangedEvent(
                     user.id,
                     user.email,
                     user.firstName,
@@ -726,84 +1098,15 @@ export class UserService {
                     user.orgId?.name,
                     user.branchId?.id,
                     user.branchId?.name,
-                    user.avatar?.id?.toString(),
-                    updatedFields,
                 ),
             );
 
             return {
-                message: 'Profile updated successfully',
+                message: 'Password changed successfully',
                 status: 'success',
                 code: 200,
             };
-        } catch (error) {
-            if (error instanceof NotFoundException) {
-                return {
-                    message: error.message,
-                    status: 'error',
-                    code: 404,
-                };
-            }
-            throw error;
-        }
-    }
-
-    async changePassword(
-        id: string,
-        currentPassword: string,
-        newPassword: string,
-    ): Promise<StandardOperationResponse> {
-        const user = await this.findById(id);
-        if (!user) {
-            return {
-                message: `User with ID ${id} not found`,
-                status: 'error',
-                code: 404,
-            };
-        }
-
-        // Verify current password
-        const isCurrentPasswordValid = await bcrypt.compare(
-            currentPassword,
-            user.password,
-        );
-        if (!isCurrentPasswordValid) {
-            return {
-                message: 'Current password is incorrect',
-                status: 'error',
-                code: 400,
-            };
-        }
-
-        // Hash new password
-        const saltRounds = 12;
-        const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-        // Update password
-        await this.userRepository.update(id, {
-            password: hashedNewPassword,
         });
-
-        // Emit password changed event
-        this.eventEmitter.emit(
-            'user.password.changed',
-            new UserPasswordChangedEvent(
-                user.id,
-                user.email,
-                user.firstName,
-                user.lastName,
-                user.orgId?.id,
-                user.orgId?.name,
-                user.branchId?.id,
-                user.branchId?.name,
-            ),
-        );
-
-        return {
-            message: 'Password changed successfully',
-            status: 'success',
-            code: 200,
-        };
     }
 
     /**
@@ -816,6 +1119,12 @@ export class UserService {
         assignedBy?: string,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
+            // Get user first for cache invalidation
+            const existingUser = await this.findOne(userId);
+            if (!existingUser) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
             const updateData: Record<string, any> = {};
 
             if (orgId) {
@@ -832,6 +1141,20 @@ export class UserService {
             if (!user) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            // Comprehensive cache invalidation for both old and new org/branch scopes
+            await this.invalidateAllUserCaches(
+                userId,
+                existingUser,
+                existingUser.orgId?.id,
+                existingUser.branchId?.id,
+            );
+            await this.invalidateAllUserCaches(
+                userId,
+                user,
+                user.orgId?.id,
+                user.branchId?.id,
+            );
 
             // Emit user organization/branch assignment event
             this.eventEmitter.emit(
@@ -866,6 +1189,16 @@ export class UserService {
         hashedPassword: string,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
+            // Get user first for cache invalidation
+            const user = await this.userRepository.findOne({
+                where: { id: userId },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
             const result = await this.userRepository.update(userId, {
                 password: hashedPassword,
             });
@@ -873,6 +1206,15 @@ export class UserService {
             if (result.affected === 0) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            // Invalidate user cache after password update
+            await this.invalidateUserCache(
+                userId,
+                user.email,
+                user.orgId?.id,
+                user.branchId?.id,
+                user.avatar?.id,
+            );
 
             return {
                 message: 'Password updated successfully',
@@ -887,6 +1229,16 @@ export class UserService {
      */
     async verifyEmail(userId: string): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
+            // Get user first for cache invalidation
+            const user = await this.userRepository.findOne({
+                where: { id: userId },
+                relations: ['orgId', 'branchId', 'avatar'],
+            });
+
+            if (!user) {
+                throw new NotFoundException(`User with ID ${userId} not found`);
+            }
+
             const result = await this.userRepository.update(userId, {
                 emailVerified: true,
             });
@@ -894,6 +1246,15 @@ export class UserService {
             if (result.affected === 0) {
                 throw new NotFoundException(`User with ID ${userId} not found`);
             }
+
+            // Invalidate user cache after email verification
+            await this.invalidateUserCache(
+                userId,
+                user.email,
+                user.orgId?.id,
+                user.branchId?.id,
+                user.avatar?.id,
+            );
 
             return {
                 message: 'Email verified successfully',
@@ -929,6 +1290,14 @@ export class UserService {
             await this.userRepository.update(userId, {
                 status: UserStatus.DELETED,
             });
+
+            // Comprehensive cache invalidation with org/branch scope for deleted user
+            await this.invalidateAllUserCaches(
+                userId,
+                user,
+                user.orgId?.id,
+                user.branchId?.id,
+            );
 
             // Emit user deactivated event
             this.eventEmitter.emit(
@@ -983,6 +1352,14 @@ export class UserService {
             await this.userRepository.update(userId, {
                 status: UserStatus.ACTIVE,
             });
+
+            // Comprehensive cache invalidation with org/branch scope for restored user
+            await this.invalidateAllUserCaches(
+                userId,
+                user,
+                user.orgId?.id,
+                user.branchId?.id,
+            );
 
             // Emit user restored event
             this.eventEmitter.emit(

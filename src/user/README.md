@@ -35,6 +35,7 @@ Following the comprehensive compliance review, this module has been updated to m
 - **Scope-Aware Operations**: All user operations respect organization/branch boundaries
 - **Access Control**: Users can only access data within their scope
 - **Data Isolation**: Complete separation of data by organization and branch
+- **🆕 Admin Visibility**: Brandon and Admin roles can view deleted users in addition to active users
 
 ## 🏗️ Architecture
 
@@ -568,10 +569,15 @@ async findByEmailWithFullDetails(email: string): Promise<User | null>
 // Assign organization and branch with scope validation
 async assignOrgAndBranch(userId: string, orgId?: string, branchId?: string): Promise<StandardOperationResponse>
 
-// Scoped user search with organization/branch filtering
+// Scoped user search with organization/branch filtering and admin visibility
 async findAllWithFilters(
     filters: UserFilterDto,
-    scope?: { orgId?: string; branchId?: string; userId: string },
+    scope?: { 
+        orgId?: string; 
+        branchId?: string; 
+        userId: string; 
+        userRole?: string; // 🆕 Enables deleted user visibility for brandon/admin
+    },
 ): Promise<{ users: User[]; total: number; totalPages: number }>
 
 // Organization-scoped user retrieval
@@ -640,6 +646,11 @@ private generateCacheKeyForUsers(
     orgId?: string,
     branchId?: string,
 ): string
+
+// 🆕 Helper method to determine admin visibility for deleted users
+private shouldIncludeDeleted(userRole?: string): boolean {
+    return userRole === UserRole.BRANDON || userRole === UserRole.ADMIN;
+}
 ```
 
 ### 🆕 Database Retry Integration
@@ -891,7 +902,7 @@ CREATE INDEX IDX_USER_STATUS_ORG ON users(status, orgId); -- 🆕 Compound filte
 
 ```typescript
 // Create user with automatic scope assignment
-const scope = { orgId: 'org-123', branchId: 'branch-456', userId: 'admin-id' };
+const scope = { orgId: 'org-123', branchId: 'branch-456', userId: 'admin-id', userRole: 'admin' };
 const result = await userService.create(
     {
         email: 'user@example.com',
@@ -908,15 +919,36 @@ const foundUser = await userService.findByEmail('user@example.com', {
     branchId: 'branch-456',
 });
 
-// Scoped user filtering
-const filteredUsers = await userService.findAllWithFilters(
+// Scoped user filtering (regular user - only sees active users)
+const activeUsers = await userService.findAllWithFilters(
     {
         search: 'john',
         status: 'active',
         page: 1,
         limit: 20,
     },
-    scope,
+    { orgId: 'org-123', branchId: 'branch-456', userId: 'user-id', userRole: 'user' },
+);
+
+// 🆕 Admin user filtering - can see both active and deleted users
+const allUsersForAdmin = await userService.findAllWithFilters(
+    {
+        search: 'john',
+        // No status filter - admin sees both active and deleted
+        page: 1,
+        limit: 20,
+    },
+    { orgId: 'org-123', branchId: 'branch-456', userId: 'admin-id', userRole: 'admin' },
+);
+
+// 🆕 Admin can specifically query deleted users
+const deletedUsersForAdmin = await userService.findAllWithFilters(
+    {
+        status: 'deleted',
+        page: 1,
+        limit: 20,
+    },
+    { orgId: 'org-123', branchId: 'branch-456', userId: 'admin-id', userRole: 'admin' },
 );
 ```
 
@@ -1005,7 +1037,7 @@ This module now fully complies with all platform standards:
 - ✅ **Scope-Aware Caching**: Organization/branch context in all cache keys
 - ✅ **Standardized Responses**: Consistent API response formats across all endpoints
 - ✅ **Database Resilience**: Retry service integration for all database operations
-- ✅ **Access Control**: Organization/branch scope enforcement
+- ✅ **Access Control**: Organization/branch scope enforcement with role-based visibility
 - ✅ **Error Handling**: Proper HTTP status codes and error messages
 - ✅ **Performance Optimization**: Enhanced caching and query strategies
 - ✅ **Type Safety**: Comprehensive TypeScript interfaces and DTOs
