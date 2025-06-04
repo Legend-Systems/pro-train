@@ -9,6 +9,7 @@ import {
     HttpStatus,
     Logger,
     UseGuards,
+    ForbiddenException,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -1535,17 +1536,48 @@ export class OrgController {
         @Param('organizationId') organizationId: string,
         @Param('branchId') branchId: string,
         @Body() updateBranchDto: UpdateBranchDto,
-        @OrgBranchScope() scope: any,
+        @OrgBranchScope()
+        scope: {
+            orgId: string;
+            branchId: string;
+            userId: string;
+            role: string;
+        },
     ): Promise<StandardResponse<Branch>> {
         this.logger.log(
             `Updating branch ${branchId} in organization: ${organizationId}`,
         );
-        // First validate user has access to this branch
-        await this.orgService.findBranchByIdScoped(
-            organizationId,
-            branchId,
-            scope,
+
+        console.log('full scope', scope);
+
+        // Log user details for debugging
+        this.logger.log(
+            `User role: ${scope.role}, orgId: ${scope.orgId}, branchId: ${scope.branchId}`,
         );
+
+        // Validate user has access to this organization first
+        if (!scope.orgId || scope.orgId !== organizationId) {
+            throw new ForbiddenException('Access denied to this organization');
+        }
+
+        // For users with elevated permissions (brandon, admin, owner), allow editing any branch in their org
+        const hasElevatedPermissions =
+            scope.role === 'brandon' ||
+            scope.role === 'admin' ||
+            scope.role === 'owner';
+
+        if (!hasElevatedPermissions) {
+            // For regular users, validate they can only edit their assigned branch
+            await this.orgService.findBranchByIdScoped(
+                organizationId,
+                branchId,
+                scope,
+            );
+        } else {
+            // For elevated users, just validate the branch exists in the organization
+            await this.orgService.findBranchById(organizationId, branchId);
+        }
+
         return await this.orgService.updateBranch(
             organizationId,
             branchId,
@@ -1608,17 +1640,41 @@ export class OrgController {
     async deleteBranch(
         @Param('organizationId') organizationId: string,
         @Param('branchId') branchId: string,
-        @OrgBranchScope() scope: any,
+        @OrgBranchScope()
+        scope: {
+            orgId: string;
+            branchId: string;
+            userId: string;
+            role: string;
+        },
     ) {
         this.logger.log(
             `Deleting branch ${branchId} from organization: ${organizationId}`,
         );
-        // First validate user has access to this branch
-        await this.orgService.findBranchByIdScoped(
-            organizationId,
-            branchId,
-            scope,
-        );
+
+        // Validate user has access to this organization first
+        if (!scope.orgId || scope.orgId !== organizationId) {
+            throw new ForbiddenException('Access denied to this organization');
+        }
+
+        // For users with elevated permissions (brandon, admin, owner), allow deleting any branch in their org
+        const hasElevatedPermissions =
+            scope.role === 'brandon' ||
+            scope.role === 'admin' ||
+            scope.role === 'owner';
+
+        if (!hasElevatedPermissions) {
+            // For regular users, validate they can only delete their assigned branch
+            await this.orgService.findBranchByIdScoped(
+                organizationId,
+                branchId,
+                scope,
+            );
+        } else {
+            // For elevated users, just validate the branch exists in the organization
+            await this.orgService.findBranchById(organizationId, branchId);
+        }
+
         await this.orgService.deleteBranch(organizationId, branchId);
     }
 }

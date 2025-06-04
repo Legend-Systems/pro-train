@@ -16,6 +16,9 @@ interface AuthenticatedUser {
     firstName: string;
     lastName: string;
     role?: string;
+    avatar?: any;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 interface RequestWithUser extends Request {

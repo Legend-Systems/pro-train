@@ -2,6 +2,7 @@ import {
     Controller,
     Get,
     Put,
+    Post,
     Body,
     Param,
     Delete,
@@ -25,6 +26,7 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 import { StandardResponse } from '../common/types';
 import { Branch } from './entities/branch.entity';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { CreateBranchDto } from './dto/create-branch.dto';
 
 @ApiTags('🏪 Branch Management')
 @Controller('branches')
@@ -71,6 +73,177 @@ export class BranchController {
             message: 'Branches retrieved successfully',
             data: branches,
         };
+    }
+
+    @Post()
+    @ApiOperation({
+        summary: '🏪 Create New Branch',
+        description: `
+        **Create a new branch within the user's organization**
+        
+        This endpoint creates a new branch location within the authenticated user's organization.
+        The branch will be automatically associated with the user's current organization context.
+        
+        **🎯 Use Cases:**
+        - **Organizational Growth**: Adding new locations or departments
+        - **Geographic Expansion**: Creating regional offices or campuses
+        - **Department Creation**: Establishing specialized units or divisions
+        - **Resource Management**: Organizing facilities for better administration
+        
+        **🔒 Access Control:**
+        - User must be assigned to an organization
+        - Only organization admins can create branches
+        - Branch will be created within user's organization scope
+        `,
+        operationId: 'createBranch',
+    })
+    @ApiBody({
+        type: CreateBranchDto,
+        description: 'Branch creation data with operational details',
+        examples: {
+            'basic-branch': {
+                summary: '🏢 Basic Branch Setup',
+                description: 'Create a simple branch with minimal information',
+                value: {
+                    name: 'Downtown Branch',
+                    email: 'downtown@company.com',
+                },
+            },
+            'full-branch': {
+                summary: '🏫 Complete Branch Setup',
+                description: 'Create a branch with all operational details',
+                value: {
+                    name: 'Medical Center Campus',
+                    address: '450 Medical Plaza Drive, CA 90095',
+                    contactNumber: '+1-310-825-9111',
+                    email: 'medcenter@university.edu',
+                    managerName: 'Dr. Sarah Johnson',
+                    operatingHours: {
+                        opening: '07:00',
+                        closing: '19:00',
+                        days: [
+                            'Monday',
+                            'Tuesday',
+                            'Wednesday',
+                            'Thursday',
+                            'Friday',
+                            'Saturday',
+                        ],
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: '✅ Branch created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'Branch created successfully',
+                    description: 'Human-readable success message',
+                },
+                data: {
+                    type: 'object',
+                    description: 'Created branch data',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: 'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+                            description: 'Unique branch identifier',
+                        },
+                        name: {
+                            type: 'string',
+                            example: 'Downtown Branch',
+                            description: 'Branch name',
+                        },
+                        email: {
+                            type: 'string',
+                            example: 'downtown@company.com',
+                            description: 'Branch email address',
+                        },
+                        isActive: {
+                            type: 'boolean',
+                            example: true,
+                            description: 'Branch active status',
+                        },
+                        createdAt: {
+                            type: 'string',
+                            example: '2025-01-15T10:30:45.123Z',
+                            description: 'Creation timestamp',
+                        },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid input data',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 400 },
+                message: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    example: [
+                        'Branch name must be at least 2 characters long',
+                        'Email must be a valid email address',
+                    ],
+                },
+                error: { type: 'string', example: 'Bad Request' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 401 },
+                message: { type: 'string', example: 'Unauthorized' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description:
+            '🚫 Forbidden - User not assigned to organization or insufficient permissions',
+        schema: {
+            type: 'object',
+            properties: {
+                statusCode: { type: 'number', example: 403 },
+                message: {
+                    type: 'string',
+                    example:
+                        'User must be assigned to an organization to create branches',
+                },
+            },
+        },
+    })
+    async create(
+        @Body() createBranchDto: CreateBranchDto,
+        @OrgBranchScope()
+        scope: {
+            orgId: string;
+            branchId: string;
+            userId: string;
+            userRole: string;
+        },
+    ): Promise<StandardResponse<Branch>> {
+        this.logger.log(
+            `Creating branch "${createBranchDto.name}" in organization: ${scope.orgId}`,
+        );
+        return await this.branchService.create(createBranchDto, scope);
     }
 
     @Get(':id')

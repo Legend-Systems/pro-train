@@ -6,15 +6,19 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Branch } from './entities/branch.entity';
+import { CreateBranchDto } from './dto/create-branch.dto';
 import { UpdateBranchDto } from './dto/update-branch.dto';
 import { StandardResponse } from '../common/types';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { Organization } from '../org/entities/org.entity';
 
 @Injectable()
 export class BranchService {
     constructor(
         @InjectRepository(Branch)
         private readonly branchRepository: Repository<Branch>,
+        @InjectRepository(Organization)
+        private readonly organizationRepository: Repository<Organization>,
     ) {}
 
     private async retryOperation<T>(
@@ -111,8 +115,16 @@ export class BranchService {
         }
 
         // If user has a specific branch, validate they can access this branch
+        // UNLESS they have elevated permissions (BRANDON or ADMIN) within the same org
         if (scope.branchId && scope.branchId !== id) {
-            throw new ForbiddenException('Access denied to this branch');
+            const hasElevatedPermissions =
+                scope.userRole === 'brandon' ||
+                scope.userRole === 'admin' ||
+                scope.userRole === 'owner';
+
+            if (!hasElevatedPermissions) {
+                throw new ForbiddenException('Access denied to this branch');
+            }
         }
 
         return branch;
@@ -177,6 +189,51 @@ export class BranchService {
                 relations: ['organization'],
                 order: { createdAt: 'DESC' },
             });
+        });
+    }
+
+    async create(
+        createBranchDto: CreateBranchDto,
+        scope: OrgBranchScope,
+    ): Promise<StandardResponse<Branch>> {
+        return this.retryOperation(async () => {
+            // Validate user has organization access
+            if (!scope.orgId) {
+                throw new ForbiddenException(
+                    'User must be assigned to an organization to create branches',
+                );
+            }
+
+            // Find the organization
+            const organization = await this.organizationRepository.findOne({
+                where: { id: scope.orgId },
+            });
+
+            if (!organization) {
+                throw new NotFoundException(
+                    `Organization with ID ${scope.orgId} not found`,
+                );
+            }
+
+            // Create the branch
+            const branch = this.branchRepository.create({
+                ...createBranchDto,
+                organization,
+            });
+
+            const savedBranch = await this.branchRepository.save(branch);
+
+            // Load the branch with organization relation
+            const branchWithOrg = await this.branchRepository.findOne({
+                where: { id: savedBranch.id },
+                relations: ['organization'],
+            });
+
+            return {
+                success: true,
+                message: 'Branch created successfully',
+                data: branchWithOrg!,
+            };
         });
     }
 }

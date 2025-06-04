@@ -319,8 +319,16 @@ export class OrgService {
         }
 
         // If user has a specific branch, validate they can access this branch
+        // UNLESS they have elevated permissions (BRANDON, OWNER, or ADMIN) within the same org
         if (scope.branchId && scope.branchId !== branchId) {
-            throw new ForbiddenException('Access denied to this branch');
+            const hasElevatedPermissions =
+                scope.userRole === 'brandon' ||
+                scope.userRole === 'admin' ||
+                scope.userRole === 'owner';
+
+            if (!hasElevatedPermissions) {
+                throw new ForbiddenException('Access denied to this branch');
+            }
         }
 
         return branch;
