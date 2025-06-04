@@ -31,6 +31,12 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OrgRoleGuard } from '../auth/guards/org-role.guard';
+import {
+    AdminOnly,
+    OwnerOrAdmin,
+    AnyRole,
+} from '../auth/decorators/org-roles.decorator';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { MediaManagerService } from './media-manager.service';
@@ -66,6 +72,8 @@ export class MediaManagerController {
     constructor(private readonly mediaService: MediaManagerService) {}
 
     @Post('upload')
+    @UseGuards(OrgRoleGuard)
+    @AnyRole() // Any authenticated user can upload within their org/branch scope
     @UseInterceptors(FileInterceptor('file'))
     @ApiOperation({
         summary: '📤 Upload Single File',
@@ -358,6 +366,8 @@ export class MediaManagerController {
     }
 
     @Post('upload/bulk')
+    @UseGuards(OrgRoleGuard)
+    @AnyRole() // Any authenticated user can bulk upload within their org/branch scope
     @UseInterceptors(FilesInterceptor('files', 10)) // Max 10 files
     @ApiOperation({
         summary: '📤 Upload Multiple Files',
@@ -489,7 +499,136 @@ export class MediaManagerController {
         }
     }
 
+    @Get('admin/all')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Allow cross-org access for admins
+    @ApiOperation({
+        summary: '📋 Get All Media Files (Admin)',
+        description: `
+      **Retrieve all media files across organizations with admin privileges**
+      
+      This endpoint allows administrators to view and manage media files with:
+      - Cross-organizational access
+      - Comprehensive filtering capabilities
+      - Advanced administrative oversight
+      - System-wide media management
+      
+      **Admin Features:**
+      - Access files across all organizations
+      - View files from all branches
+      - Administrative file management
+      - System-wide statistics and reporting
+      
+      **Use Cases:**
+      - Administrative oversight
+      - Cross-organizational reporting
+      - System maintenance
+      - Compliance monitoring
+    `,
+        operationId: 'getAllMediaFilesAdmin',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ All media files retrieved successfully',
+        type: MediaFileListResponseDto,
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '❌ Access denied - Admin privileges required',
+    })
+    async getAllMediaFiles(
+        @Query() filters: FileFilterDto,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<MediaFileListResponseDto> {
+        try {
+            this.logger.log(
+                `Admin ${scope.userId} retrieving all media files with filters: ${JSON.stringify(filters)}`,
+            );
+
+            // For admin access, we don't restrict by organization/branch
+            const result = await this.mediaService.getFilesAdmin(filters);
+
+            this.logger.log(
+                `Admin retrieved ${result.files.length} files out of ${result.total} total`,
+            );
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                'Error getting all media files for admin:',
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('admin/stats')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Allow cross-org access for admins
+    @ApiOperation({
+        summary: '📊 Get Global Media Statistics (Admin)',
+        description: `
+      **Retrieve comprehensive system-wide media statistics**
+      
+      This endpoint provides administrators with global media analytics:
+      - System-wide file counts and storage usage
+      - Cross-organizational statistics
+      - Global file type distribution
+      - Overall system health metrics
+      
+      **Admin Analytics:**
+      - Total files across all organizations
+      - Global storage utilization
+      - File type breakdown system-wide
+      - Performance metrics
+      
+      **Use Cases:**
+      - System monitoring
+      - Capacity planning
+      - Performance analysis
+      - Administrative reporting
+    `,
+        operationId: 'getGlobalMediaStats',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Global media statistics retrieved successfully',
+        type: MediaStatsDto,
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '❌ Access denied - Admin privileges required',
+    })
+    async getGlobalMediaStats(
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<MediaStatsDto> {
+        try {
+            this.logger.log(
+                `Admin ${scope.userId} getting global media statistics`,
+            );
+
+            const stats = await this.mediaService.getGlobalStats();
+
+            this.logger.log('Global media statistics retrieved successfully');
+
+            return stats;
+        } catch (error) {
+            this.logger.error('Error getting global media statistics:', error);
+            throw error;
+        }
+    }
+
     @Get()
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can view files within their organization
     @ApiOperation({
         summary: '📋 List Media Files',
         description: `
@@ -678,6 +817,8 @@ export class MediaManagerController {
     }
 
     @Get('stats')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can view media statistics within their organization
     @ApiOperation({
         summary: '📊 Get Media Statistics',
         description: `
@@ -738,6 +879,8 @@ export class MediaManagerController {
     }
 
     @Get(':id')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can view any file within their organization
     @ApiOperation({
         summary: '🔍 Get File Details',
         description: `
@@ -820,6 +963,8 @@ export class MediaManagerController {
     }
 
     @Delete(':id')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can delete any file within their organization
     @ApiOperation({
         summary: '🗑️ Delete File',
         description: `
@@ -893,11 +1038,12 @@ export class MediaManagerController {
     async deleteFile(
         @Param('id', ParseIntPipe) id: number,
         @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(`Deleting file ${id} for user: ${req.user.id}`);
 
-            await this.mediaService.deleteFile(id, req.user.id);
+            await this.mediaService.deleteFile(id, req.user.id, scope);
 
             this.logger.log(`File ${id} deleted successfully`);
 
@@ -916,6 +1062,8 @@ export class MediaManagerController {
     }
 
     @Delete(':id/soft')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can soft delete any file within their organization
     @ApiOperation({
         summary: '🗑️ Soft Delete File',
         description: `
@@ -1004,6 +1152,8 @@ export class MediaManagerController {
     }
 
     @Post(':id/restore')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can restore any file within their organization
     @ApiOperation({
         summary: '♻️ Restore Deleted File',
         description: `
@@ -1090,6 +1240,8 @@ export class MediaManagerController {
     }
 
     @Put(':id/edit')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can edit any file within their organization
     @ApiOperation({
         summary: '✏️ Edit Media File',
         description: `
@@ -1175,6 +1327,8 @@ export class MediaManagerController {
     }
 
     @Put('bulk-edit')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners and admins can bulk edit files within their organization
     @ApiOperation({
         summary: '✏️ Bulk Edit Media Files',
         description: `
@@ -1287,6 +1441,8 @@ export class MediaManagerController {
     }
 
     @Get('deleted/list')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Only admins can view deleted files across organizations
     @ApiOperation({
         summary: '👻 List Deleted Files',
         description: `

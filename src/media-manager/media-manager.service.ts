@@ -626,9 +626,13 @@ export class MediaManagerService {
     }
 
     /**
-     * Delete a file
+     * Delete a file with enhanced access control
      */
-    async deleteFile(id: number, userId: string): Promise<void> {
+    async deleteFile(
+        id: number,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<void> {
         return this.retryOperation(async () => {
             try {
                 const file = await this.mediaRepository.findOne({
@@ -640,9 +644,11 @@ export class MediaManagerService {
                     throw new NotFoundException(`File with ID ${id} not found`);
                 }
 
-                if (file.uploadedBy !== userId) {
+                // Enhanced access control logic
+                const canDelete = this.checkFileAccess(file, userId, scope);
+                if (!canDelete) {
                     throw new BadRequestException(
-                        'You can only delete files you uploaded',
+                        'Access denied - insufficient permissions to delete this file',
                     );
                 }
 
@@ -994,6 +1000,37 @@ export class MediaManagerService {
     }
 
     /**
+     * Check if user has access to perform operations on a file
+     */
+    private checkFileAccess(
+        file: any,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): boolean {
+        // BRANDON role has access to everything
+        if (scope?.userRole === 'brandon') {
+            return true;
+        }
+
+        // OWNER has access to all files within their organization
+        if (scope?.userRole === 'owner' && scope.orgId === file.orgId?.id) {
+            return true;
+        }
+
+        // ADMIN has access to all files within their organization
+        if (scope?.userRole === 'admin' && scope.orgId === file.orgId?.id) {
+            return true;
+        }
+
+        // File owner can always access their own files
+        if (file.uploadedBy === userId) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Soft delete a media file by setting status to DELETED
      */
     async softDelete(
@@ -1084,6 +1121,192 @@ export class MediaManagerService {
     }
 
     /**
+     * Get files with admin access (no scope restrictions)
+     */
+    async getFilesAdmin(
+        filters: FileFilterDto,
+    ): Promise<MediaFileListResponseDto> {
+        return this.retryOperation(async () => {
+            try {
+                const {
+                    type,
+                    variant,
+                    uploadedBy,
+                    filename,
+                    originalName,
+                    designation,
+                    page = 1,
+                    limit = 20,
+                    sortBy = 'createdAt',
+                    sortOrder = 'DESC',
+                } = filters;
+
+                const query = this.mediaRepository.createQueryBuilder('media');
+                query.leftJoinAndSelect('media.uploader', 'uploader');
+                query.leftJoinAndSelect('media.orgId', 'org');
+                query.leftJoinAndSelect('media.branchId', 'branch');
+
+                // No org/branch scoping for admin access - admins can see everything
+
+                // Apply filters
+                query.andWhere('media.status = :status', {
+                    status: MediaFileStatus.ACTIVE,
+                });
+
+                // Exclude user avatars from general media queries
+                query.andWhere('media.designation != :userAvatar', {
+                    userAvatar: FileDesignation.USER_AVATAR,
+                });
+
+                if (type) {
+                    query.andWhere('media.type = :type', { type });
+                }
+
+                if (variant) {
+                    query.andWhere('media.variant = :variant', { variant });
+                }
+
+                if (uploadedBy) {
+                    query.andWhere('media.uploadedBy = :uploadedBy', {
+                        uploadedBy,
+                    });
+                }
+
+                if (filename) {
+                    query.andWhere('media.filename LIKE :filename', {
+                        filename: `%${filename}%`,
+                    });
+                }
+
+                if (originalName) {
+                    query.andWhere('media.originalName LIKE :originalName', {
+                        originalName: `%${originalName}%`,
+                    });
+                }
+
+                if (designation) {
+                    query.andWhere('media.designation = :designation', {
+                        designation,
+                    });
+                }
+
+                // Add sorting
+                const validSortFields = [
+                    'createdAt',
+                    'originalName',
+                    'size',
+                    'type',
+                ];
+                const orderBy = validSortFields.includes(sortBy)
+                    ? sortBy
+                    : 'createdAt';
+                const order = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+                query.orderBy(`media.${orderBy}`, order);
+
+                // Add pagination
+                const skip = (page - 1) * limit;
+                query.skip(skip).take(limit);
+
+                const [files, total] = await query.getManyAndCount();
+
+                // Load variants for original image files
+                const filesWithVariants = await Promise.all(
+                    files.map(async file => {
+                        if (
+                            file.type === MediaType.IMAGE &&
+                            file.variant === ImageVariant.ORIGINAL
+                        ) {
+                            const variants = await this.mediaRepository.find({
+                                where: {
+                                    originalFileId: file.id,
+                                    status: MediaFileStatus.ACTIVE,
+                                },
+                                order: { variant: 'ASC' },
+                            });
+                            return { ...file, variants };
+                        }
+                        return file;
+                    }),
+                );
+
+                return {
+                    files: filesWithVariants,
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                };
+            } catch (error) {
+                this.logger.error('Error getting files for admin:', error);
+                throw error;
+            }
+        });
+    }
+
+    /**
+     * Get global statistics (admin access)
+     */
+    async getGlobalStats(): Promise<MediaStatsDto> {
+        return this.retryOperation(async () => {
+            try {
+                // No scoping - get stats across all organizations
+                const query = this.mediaRepository.createQueryBuilder('media');
+
+                query.where('media.status = :status', {
+                    status: MediaFileStatus.ACTIVE,
+                });
+
+                // Exclude user avatars from stats
+                query.andWhere('media.designation != :userAvatar', {
+                    userAvatar: FileDesignation.USER_AVATAR,
+                });
+
+                const totalFiles = await query.getCount();
+                const totalSize = await query
+                    .select('SUM(media.size)', 'totalSize')
+                    .getRawOne();
+
+                // Get file type distribution
+                const typeDistribution = await query
+                    .select('media.type', 'type')
+                    .addSelect('COUNT(*)', 'count')
+                    .groupBy('media.type')
+                    .getRawMany();
+
+                // Get most recent upload
+                const mostRecentUpload = await query
+                    .orderBy('media.createdAt', 'DESC')
+                    .getOne();
+
+                const stats: MediaStatsDto = {
+                    totalFiles: totalFiles || 0,
+                    totalSize: parseInt(totalSize?.totalSize || '0', 10),
+                    averageSize:
+                        totalFiles > 0
+                            ? Math.round(
+                                  parseInt(totalSize?.totalSize || '0', 10) /
+                                      totalFiles,
+                              )
+                            : 0,
+                    byType: typeDistribution.reduce(
+                        (acc, { type, count }) => {
+                            acc[type] = parseInt(count, 10);
+                            return acc;
+                        },
+                        {} as Record<string, number>,
+                    ),
+                    lastUpload: mostRecentUpload?.createdAt,
+                };
+
+                return stats;
+            } catch (error) {
+                this.logger.error('Error getting global stats:', error);
+                throw error;
+            }
+        });
+    }
+
+    /**
      * Find all soft-deleted media files (for admin purposes)
      */
     async findDeleted(): Promise<MediaFile[]> {
@@ -1166,10 +1389,15 @@ export class MediaManagerService {
                     );
                 }
 
-                // Validate ownership - only the uploader can edit the file
-                if (existingFile.uploadedBy !== userId) {
+                // Enhanced access control - check if user can edit this file
+                const canEdit = this.checkFileAccess(
+                    existingFile,
+                    userId,
+                    scope,
+                );
+                if (!canEdit) {
                     throw new BadRequestException(
-                        'You can only edit media files you uploaded',
+                        'Access denied - insufficient permissions to edit this file',
                     );
                 }
 
@@ -1307,9 +1535,7 @@ export class MediaManagerService {
                         error,
                     );
                     const errorMessage =
-                        error instanceof Error
-                            ? error.message
-                            : 'Edit failed';
+                        error instanceof Error ? error.message : 'Edit failed';
                     errors.push({
                         fileId,
                         error: errorMessage,
