@@ -2,6 +2,7 @@ import {
     Controller,
     Get,
     Put,
+    Post,
     Body,
     UseGuards,
     Request,
@@ -12,6 +13,7 @@ import {
     Patch,
     Delete,
     Param,
+    Query,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -26,6 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserStatus } from './entities/user.entity';
 import {
     StandardApiResponse,
     StandardOperationResponse,
@@ -35,6 +38,7 @@ import {
     UserRestoredResponse,
 } from './dto/common-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { CreateUserDto } from './dto/create-user.dto';
 
 @ApiTags('👤 User & Profile Management')
 @Controller('user')
@@ -51,6 +55,505 @@ export class UserController {
     private readonly logger = new Logger(UserController.name);
 
     constructor(private readonly userService: UserService) {}
+
+    @Post()
+    @ApiOperation({
+        summary: '👥 Create New User',
+        description: `
+      **Creates a new user account with comprehensive validation**
+      
+      This endpoint allows creating new user accounts with:
+      - Email uniqueness validation
+      - Strong password requirements
+      - Optional avatar assignment
+      - Organization/branch assignment support
+      
+      **Security Features:**
+      - Email must be unique across the system
+      - Password complexity requirements enforced
+      - Input validation for all fields
+      
+      **Use Cases:**
+      - Admin user creation
+      - Bulk user onboarding
+      - Organization setup
+      - User invitation fulfillment
+    `,
+        operationId: 'createUser',
+    })
+    @ApiBody({
+        type: CreateUserDto,
+        description: 'User creation data with required fields',
+        examples: {
+            'basic-user': {
+                summary: '👤 Basic User Creation',
+                description: 'Creates a standard user account',
+                value: {
+                    email: 'newuser@example.com',
+                    password: 'SecurePass123!',
+                    firstName: 'John',
+                    lastName: 'Doe',
+                },
+            },
+            'user-with-avatar': {
+                summary: '🖼️ User with Avatar',
+                description: 'Creates user with profile picture',
+                value: {
+                    email: 'user.avatar@example.com',
+                    password: 'SecurePass123!',
+                    firstName: 'Jane',
+                    lastName: 'Smith',
+                    avatar: 5,
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: '✅ User created successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'User created successfully',
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', example: 'user-uuid' },
+                        email: {
+                            type: 'string',
+                            example: 'newuser@example.com',
+                        },
+                        firstName: { type: 'string', example: 'John' },
+                        lastName: { type: 'string', example: 'Doe' },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid input data',
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string', example: 'Validation failed' },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 400 },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.CONFLICT,
+        description: '⚠️ Email already exists',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Email address already in use',
+                },
+                status: { type: 'string', example: 'error' },
+                code: { type: 'number', example: 409 },
+            },
+        },
+    })
+    async createUser(
+        @Body() createUserDto: CreateUserDto,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Creating new user: ${createUserDto.email}`);
+
+            // Check if email already exists
+            const existingUser = await this.userService.findByEmail(
+                createUserDto.email,
+            );
+            if (existingUser) {
+                this.logger.warn(
+                    `Email already exists: ${createUserDto.email}`,
+                );
+                throw new ConflictException('Email address already in use');
+            }
+
+            await this.userService.create(createUserDto);
+
+            this.logger.log(
+                `User created successfully: ${createUserDto.email}`,
+            );
+
+            return {
+                message: 'User created successfully',
+                status: 'success',
+                code: 201,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error creating user ${createUserDto.email}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('admin/all')
+    @ApiOperation({
+        summary: '📋 Get All Users (Admin)',
+        description: `
+      **Retrieves all users with optional filtering and pagination**
+      
+      This endpoint returns all users in the system with:
+      - Pagination support
+      - Search functionality
+      - Status filtering
+      - Organization/branch filtering
+      
+      **Query Parameters:**
+      - page: Page number (default: 1)
+      - limit: Items per page (default: 20)
+      - search: Search in name/email
+      - status: Filter by user status
+      - orgId: Filter by organization
+      - branchId: Filter by branch
+      
+      **Use Cases:**
+      - User management dashboard
+      - Administrative oversight
+      - Bulk operations
+      - User reporting
+    `,
+        operationId: 'getAllUsers',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Users retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'Users retrieved successfully',
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        users: {
+                            type: 'array',
+                            items: { type: 'object' },
+                        },
+                        pagination: {
+                            type: 'object',
+                            properties: {
+                                currentPage: { type: 'number', example: 1 },
+                                totalPages: { type: 'number', example: 5 },
+                                totalUsers: { type: 'number', example: 95 },
+                                hasNext: { type: 'boolean', example: true },
+                                hasPrev: { type: 'boolean', example: false },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    })
+    async getAllUsers(
+        @Query('page') page: number = 1,
+        @Query('limit') limit: number = 20,
+        @Query('search') search?: string,
+        @Query('status') status?: string,
+        @Query('orgId') orgId?: string,
+        @Query('branchId') branchId?: string,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(
+                `Getting all users - page: ${page}, limit: ${limit}`,
+            );
+
+            const users = await this.userService.findAll();
+
+            // Filter users based on query parameters
+            let filteredUsers = users;
+
+            if (search) {
+                filteredUsers = filteredUsers.filter(
+                    user =>
+                        user.firstName
+                            .toLowerCase()
+                            .includes(search.toLowerCase()) ||
+                        user.lastName
+                            .toLowerCase()
+                            .includes(search.toLowerCase()) ||
+                        user.email.toLowerCase().includes(search.toLowerCase()),
+                );
+            }
+
+            if (status) {
+                filteredUsers = filteredUsers.filter(
+                    user => user?.status === (status as UserStatus),
+                );
+            }
+
+            if (orgId) {
+                filteredUsers = filteredUsers.filter(
+                    user => user.orgId?.id === orgId,
+                );
+            }
+
+            if (branchId) {
+                filteredUsers = filteredUsers.filter(
+                    user => user.branchId?.id === branchId,
+                );
+            }
+
+            // Pagination
+            const totalUsers = filteredUsers.length;
+            const totalPages = Math.ceil(totalUsers / limit);
+            const startIndex = (page - 1) * limit;
+            const paginatedUsers = filteredUsers.slice(
+                startIndex,
+                startIndex + limit,
+            );
+
+            // Remove sensitive data
+            const sanitizedUsers = paginatedUsers.map(user => {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { password, ...userProfile } = user;
+                return userProfile;
+            });
+
+            this.logger.log(
+                `Retrieved ${paginatedUsers.length} users of ${totalUsers} total`,
+            );
+
+            return {
+                success: true,
+                message: 'Users retrieved successfully',
+                data: {
+                    users: sanitizedUsers,
+                    pagination: {
+                        currentPage: page,
+                        totalPages,
+                        totalUsers,
+                        hasNext: page < totalPages,
+                        hasPrev: page > 1,
+                    },
+                },
+            };
+        } catch (error) {
+            this.logger.error('Error getting all users:', error);
+            throw error;
+        }
+    }
+
+    @Get('admin/:id')
+    @ApiOperation({
+        summary: '👤 Get User by ID (Admin)',
+        description: `
+      **Retrieves detailed information for a specific user**
+      
+      This endpoint returns complete user information including:
+      - Personal details
+      - Organization/branch assignments
+      - Account status and metadata
+      - Avatar information
+      
+      **Use Cases:**
+      - User detail pages
+      - Administrative user management
+      - User profile editing
+      - Account verification
+    `,
+        operationId: 'getUserById',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User retrieved successfully',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: true },
+                message: {
+                    type: 'string',
+                    example: 'User retrieved successfully',
+                },
+                data: { type: 'object' },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ User not found',
+        schema: {
+            type: 'object',
+            properties: {
+                success: { type: 'boolean', example: false },
+                message: { type: 'string', example: 'User not found' },
+                data: { type: 'null' },
+            },
+        },
+    })
+    async getUserById(@Param('id') id: string): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(`Getting user by ID: ${id}`);
+
+            const user = await this.userService.findById(id);
+
+            if (!user) {
+                this.logger.error(`User not found: ${id}`);
+                return {
+                    success: false,
+                    message: 'User not found',
+                    data: null,
+                };
+            }
+
+            // Remove sensitive data
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { password, ...userProfile } = user;
+
+            this.logger.log(`User retrieved successfully: ${id}`);
+
+            return {
+                success: true,
+                message: 'User retrieved successfully',
+                data: userProfile,
+            };
+        } catch (error) {
+            this.logger.error(`Error getting user ${id}:`, error);
+            throw error;
+        }
+    }
+
+    @Put('admin/:id')
+    @ApiOperation({
+        summary: '✏️ Update User by ID (Admin)',
+        description: `
+      **Updates user information by ID (administrative)**
+      
+      This endpoint allows administrators to update any user's information:
+      - Personal details (name, email)
+      - Profile picture (avatar)
+      - Account status
+      - Organization/branch assignments
+      
+      **Security Features:**
+      - Email uniqueness validation
+      - Password updates blocked (use dedicated endpoint)
+      - Input validation for all fields
+      
+      **Use Cases:**
+      - Administrative user updates
+      - Bulk user modifications
+      - Account corrections
+      - Profile management
+    `,
+        operationId: 'updateUserById',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User updated successfully',
+        type: StandardOperationResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ User not found',
+    })
+    @ApiResponse({
+        status: HttpStatus.CONFLICT,
+        description: '⚠️ Email already exists',
+    })
+    async updateUserById(
+        @Param('id') id: string,
+        @Body() updateUserDto: UpdateUserDto,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Updating user by ID: ${id}`);
+
+            // Check if email is being updated and if it already exists
+            if (updateUserDto.email) {
+                const existingUser = await this.userService.findByEmail(
+                    updateUserDto.email,
+                );
+                if (existingUser && existingUser.id !== id) {
+                    this.logger.warn(
+                        `Email already exists: ${updateUserDto.email}`,
+                    );
+                    throw new ConflictException('Email address already in use');
+                }
+            }
+
+            // Remove password from update data (use separate endpoint)
+            const { password, ...updateData } = updateUserDto;
+
+            if (password) {
+                this.logger.warn(
+                    `Password update attempted through admin update for user: ${id}`,
+                );
+                throw new BadRequestException(
+                    'Use /user/change-password endpoint to update password',
+                );
+            }
+
+            const result = await this.userService.update(id, updateData);
+
+            this.logger.log(`User updated successfully: ${id}`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(`Error updating user ${id}:`, error);
+            throw error;
+        }
+    }
+
+    @Delete('admin/:id')
+    @ApiOperation({
+        summary: '🗑️ Delete User by ID (Admin)',
+        description: `
+      **Soft deletes a user account by ID (administrative)**
+      
+      This endpoint performs administrative soft deletion:
+      - Sets user status to DELETED
+      - Preserves user data for audit trails
+      - User will not appear in normal queries
+      - Can be restored using admin restore endpoint
+      
+      **Use Cases:**
+      - Administrative user management
+      - Account deactivation
+      - Compliance requirements
+      - Data retention policies
+    `,
+        operationId: 'deleteUserById',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ User deleted successfully',
+        type: UserSoftDeletedResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ User not found',
+    })
+    async deleteUserById(
+        @Request() req: AuthenticatedRequest,
+        @Param('id') id: string,
+    ): Promise<StandardOperationResponse> {
+        try {
+            this.logger.log(`Admin ${req.user.id} deleting user: ${id}`);
+
+            const result = await this.userService.softDelete(id, req.user.id);
+
+            this.logger.log(`User deleted successfully by admin: ${id}`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(`Error deleting user ${id}:`, error);
+            throw error;
+        }
+    }
 
     @Get('profile')
     @ApiOperation({

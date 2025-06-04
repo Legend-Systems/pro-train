@@ -81,8 +81,13 @@ export class UserService {
         createUserDto: CreateUserDto,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const { avatar, ...userData } = createUserDto;
+            const { avatar, password, ...userData } = createUserDto;
             const userToCreate: Partial<User> = { ...userData };
+
+            // Hash password before saving
+            const saltRounds = 12;
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+            userToCreate.password = hashedPassword;
 
             // Convert avatar ID to MediaFile reference if provided
             if (avatar) {
