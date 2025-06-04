@@ -124,18 +124,53 @@ export class UserService {
             keysToDelete.push(this.CACHE_KEYS.USER_BY_EMAIL(email));
         }
 
-        await Promise.all(
+        this.logger.log(
+            `🗑️ Cache Invalidation - Individual User Cache Keys to Delete:`,
+            {
+                userId,
+                email,
+                orgId,
+                branchId,
+                avatarId,
+                keysToDelete,
+            },
+        );
+
+        const deletionResults = await Promise.all(
             keysToDelete.map(async key => {
                 try {
+                    const existsBefore = await this.cacheManager.get(key);
                     await this.cacheManager.del(key);
+                    const existsAfter = await this.cacheManager.get(key);
+
+                    this.logger.log(`🔍 Cache Key Deletion Result:`, {
+                        key,
+                        existedBefore: !!existsBefore,
+                        existsAfter: !!existsAfter,
+                        deletionSuccess: !existsAfter,
+                    });
+
+                    return {
+                        key,
+                        success: !existsAfter,
+                        existedBefore: !!existsBefore,
+                    };
                 } catch (error) {
                     this.logger.warn(
                         `Failed to delete cache key ${key}:`,
                         error,
                     );
+                    return { key, success: false, error: error.message };
                 }
             }),
         );
+
+        this.logger.log(`✅ Cache Invalidation Summary - Individual User:`, {
+            userId,
+            totalKeys: keysToDelete.length,
+            successfulDeletions: deletionResults.filter(r => r.success).length,
+            deletionResults,
+        });
     }
 
     private async invalidateUserListCaches(
@@ -163,19 +198,52 @@ export class UserService {
         // Also invalidate global scoped list caches
         keysToInvalidate.push(this.CACHE_KEYS.ALL_USERS());
 
+        this.logger.log(
+            `🗑️ Cache Invalidation - User List Cache Keys to Delete:`,
+            {
+                orgId,
+                branchId,
+                keysToInvalidate,
+            },
+        );
+
         // Delete known specific cache keys
-        await Promise.all(
+        const deletionResults = await Promise.all(
             keysToInvalidate.map(async key => {
                 try {
+                    const existsBefore = await this.cacheManager.get(key);
                     await this.cacheManager.del(key);
+                    const existsAfter = await this.cacheManager.get(key);
+
+                    this.logger.log(`🔍 Cache Key Deletion Result:`, {
+                        key,
+                        existedBefore: !!existsBefore,
+                        existsAfter: !!existsAfter,
+                        deletionSuccess: !existsAfter,
+                    });
+
+                    return {
+                        key,
+                        success: !existsAfter,
+                        existedBefore: !!existsBefore,
+                    };
                 } catch (error) {
                     this.logger.warn(
                         `Failed to delete cache key ${key}:`,
                         error,
                     );
+                    return { key, success: false, error: error.message };
                 }
             }),
         );
+
+        this.logger.log(`✅ Cache Invalidation Summary - User Lists:`, {
+            orgId: orgId || 'global',
+            branchId: branchId || 'global',
+            totalKeys: keysToInvalidate.length,
+            successfulDeletions: deletionResults.filter(r => r.success).length,
+            deletionResults,
+        });
 
         // Note: For filtered list caches with various combinations, we invalidate
         // the main list caches and rely on cache TTL for other specific filters.
@@ -196,6 +264,16 @@ export class UserService {
         orgId?: string,
         branchId?: string,
     ): Promise<void> {
+        this.logger.log(`🚀 Starting Comprehensive Cache Invalidation:`, {
+            userId,
+            userEmail: user?.email,
+            userOrgId: user?.orgId?.id,
+            userBranchId: user?.branchId?.id,
+            scopeOrgId: orgId,
+            scopeBranchId: branchId,
+            avatarId: user?.avatar?.id,
+        });
+
         // Invalidate individual user caches
         await this.invalidateUserCache(
             userId,
@@ -210,9 +288,23 @@ export class UserService {
 
         // If user has different org/branch in their data, invalidate those too
         if (user?.orgId?.id && user.orgId.id !== orgId) {
+            this.logger.log(
+                `🔄 Additional Invalidation - User's Org differs from scope:`,
+                {
+                    userOrgId: user.orgId.id,
+                    scopeOrgId: orgId,
+                },
+            );
             await this.invalidateUserListCaches(user.orgId.id, branchId);
         }
         if (user?.branchId?.id && user.branchId.id !== branchId) {
+            this.logger.log(
+                `🔄 Additional Invalidation - User's Branch differs from scope:`,
+                {
+                    userBranchId: user.branchId.id,
+                    scopeBranchId: branchId,
+                },
+            );
             await this.invalidateUserListCaches(orgId, user.branchId.id);
         }
         if (
@@ -220,11 +312,24 @@ export class UserService {
             user?.branchId?.id &&
             (user.orgId.id !== orgId || user.branchId.id !== branchId)
         ) {
+            this.logger.log(
+                `🔄 Additional Invalidation - User's Org/Branch combo differs from scope:`,
+                {
+                    userOrgId: user.orgId.id,
+                    userBranchId: user.branchId.id,
+                    scopeOrgId: orgId,
+                    scopeBranchId: branchId,
+                },
+            );
             await this.invalidateUserListCaches(
                 user.orgId.id,
                 user.branchId.id,
             );
         }
+
+        this.logger.log(
+            `🏁 Completed Comprehensive Cache Invalidation for User: ${userId}`,
+        );
     }
 
     private generateCacheKeyForUsers(
@@ -248,6 +353,69 @@ export class UserService {
             orgId,
             branchId,
         );
+    }
+
+    /**
+     * Helper method to check what cache keys exist for a user (for debugging)
+     */
+    private async checkUserCacheState(
+        userId: string,
+        email?: string,
+        orgId?: string,
+        branchId?: string,
+        avatarId?: number,
+    ): Promise<void> {
+        const keysToCheck: string[] = [];
+
+        // Individual user caches with org/branch scoping
+        keysToCheck.push(
+            this.CACHE_KEYS.USER_BY_ID(userId, orgId, branchId),
+            this.CACHE_KEYS.USER_DETAIL(userId, orgId, branchId),
+        );
+
+        if (email) {
+            keysToCheck.push(
+                this.CACHE_KEYS.USER_BY_EMAIL(email, orgId, branchId),
+            );
+        }
+
+        if (avatarId) {
+            keysToCheck.push(
+                this.CACHE_KEYS.USER_AVATAR_VARIANTS(avatarId, orgId, branchId),
+            );
+        }
+
+        // Also check global scoped caches for this user
+        keysToCheck.push(
+            this.CACHE_KEYS.USER_BY_ID(userId),
+            this.CACHE_KEYS.USER_DETAIL(userId),
+        );
+
+        if (email) {
+            keysToCheck.push(this.CACHE_KEYS.USER_BY_EMAIL(email));
+        }
+
+        const cacheState = await Promise.all(
+            keysToCheck.map(async key => {
+                try {
+                    const exists = await this.cacheManager.get(key);
+                    return { key, exists: !!exists, hasData: !!exists };
+                } catch (error) {
+                    return { key, exists: false, error: error.message };
+                }
+            }),
+        );
+
+        this.logger.log(`🔍 Cache State Check for User ${userId}:`, {
+            userId,
+            email,
+            orgId,
+            branchId,
+            avatarId,
+            totalKeysChecked: keysToCheck.length,
+            existingKeys: cacheState.filter(c => c.exists).length,
+            cacheState,
+        });
     }
 
     async create(
@@ -914,12 +1082,47 @@ export class UserService {
             relations: ['orgId', 'branchId', 'avatar'],
         });
 
+        this.logger.log(`🔄 User Update - Starting cache invalidation:`, {
+            userId: id,
+            scopeOrgId: scope?.orgId,
+            scopeBranchId: scope?.branchId,
+            existingUserOrgId: existingUser.orgId?.id,
+            existingUserBranchId: existingUser.branchId?.id,
+            updatedUserOrgId: updatedUser?.orgId?.id,
+            updatedUserBranchId: updatedUser?.branchId?.id,
+            updateFields: Object.keys(updateData),
+        });
+
+        // Check cache state before invalidation
+        this.logger.log(`📋 BEFORE Cache Invalidation:`);
+        await this.checkUserCacheState(
+            id,
+            existingUser.email,
+            scope?.orgId || existingUser.orgId?.id,
+            scope?.branchId || existingUser.branchId?.id,
+            existingUser.avatar?.id,
+        );
+
         // Comprehensive cache invalidation with org/branch scope
         await this.invalidateAllUserCaches(
             id,
             updatedUser || existingUser,
             scope?.orgId || existingUser.orgId?.id,
             scope?.branchId || existingUser.branchId?.id,
+        );
+
+        // Check cache state after invalidation
+        this.logger.log(`📋 AFTER Cache Invalidation:`);
+        await this.checkUserCacheState(
+            id,
+            (updatedUser || existingUser).email,
+            scope?.orgId || existingUser.orgId?.id,
+            scope?.branchId || existingUser.branchId?.id,
+            (updatedUser || existingUser).avatar?.id,
+        );
+
+        this.logger.log(
+            `✅ User Update - Cache invalidation completed for user: ${id}`,
         );
 
         return {
