@@ -155,6 +155,52 @@ When uploading images, the system automatically generates variants:
 
 Each variant is stored separately in GCS with optimized JPEG compression.
 
+## File Designation System 🏷️
+
+The media manager includes a comprehensive file designation system to categorize and organize uploaded files:
+
+### Available Designations
+
+- **`USER_AVATAR`**: Profile pictures and user avatars
+- **`COURSE_THUMBNAIL`**: Course cover images and thumbnails
+- **`COURSE_MATERIAL`**: Learning materials, documents, and resources
+- **`QUESTION_IMAGE`**: Images used in quiz questions and assessments
+- **`ANSWER_ATTACHMENT`**: Files attached to quiz answers
+- **`ORGANIZATION_LOGO`**: Organization branding and logos
+- **`TEST_ATTACHMENT`**: Files attached to tests and assessments
+- **`GENERAL_UPLOAD`**: General purpose uploads (default)
+- **`OTHER`**: Miscellaneous files that don't fit other categories
+
+### File Status Management
+
+Files are managed with a robust status system:
+
+- **`ACTIVE`**: File is available and accessible (default)
+- **`INACTIVE`**: File is temporarily disabled
+- **`DELETED`**: File is soft-deleted but preserved for audit
+- **`PROCESSING`**: File is currently being processed (thumbnails, etc.)
+
+### Designation Usage
+
+When uploading files, specify the appropriate designation:
+
+```typescript
+// User avatar upload
+const uploadResponse = await mediaService.uploadFile(file, {
+  designation: FileDesignation.USER_AVATAR,
+  generateThumbnails: true,
+  variants: [ImageVariant.THUMBNAIL, ImageVariant.MEDIUM],
+  altText: "User profile picture"
+});
+
+// Course material upload
+const uploadResponse = await mediaService.uploadFile(file, {
+  designation: FileDesignation.COURSE_MATERIAL,
+  description: "Course lecture notes PDF",
+  generateThumbnails: false
+});
+```
+
 ## Database Schema 🗄️
 
 The `MediaFile` entity includes:
@@ -172,7 +218,9 @@ The `MediaFile` entity includes:
   originalFileId?: number;       // Reference to original (for variants)
   width?: number;                // Image width (pixels)
   height?: number;               // Image height (pixels)
-  isActive: boolean;             // Soft delete flag
+  isActive: boolean;             // Soft delete flag (legacy)
+  status: MediaFileStatus;       // active, inactive, deleted, processing
+  designation: FileDesignation;  // File purpose/category
   altText?: string;              // Accessibility text
   description?: string;          // File description
   metadata?: object;             // Additional metadata
@@ -196,6 +244,7 @@ const FileUpload = () => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('altText', 'Course material');
+    formData.append('designation', 'course_material'); // Specify file purpose
     formData.append('generateThumbnails', 'true');
     
     const response = await fetch('/api/media/upload', {
@@ -223,6 +272,47 @@ const FileUpload = () => {
 };
 ```
 
+### Avatar Upload Component
+
+```tsx
+const AvatarUpload = ({ userId, onAvatarUploaded }) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  
+  const handleAvatarUpload = async () => {
+    if (!selectedFile) return;
+    
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('designation', 'user_avatar'); // User avatar designation
+    formData.append('generateThumbnails', 'true');
+    formData.append('variants', JSON.stringify(['thumbnail', 'medium']));
+    formData.append('altText', `${userName} profile picture`);
+    
+    const response = await fetch('/api/media/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+    
+    const result = await response.json();
+    onAvatarUploaded(result.file);
+  };
+  
+  return (
+    <div>
+      <input 
+        type="file" 
+        accept="image/*"
+        onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+      />
+      <button onClick={handleAvatarUpload}>Upload Avatar</button>
+    </div>
+  );
+};
+```
+
 ### Bulk Upload
 
 ```typescript
@@ -234,6 +324,7 @@ const uploadMultipleFiles = async (files: FileList) => {
   });
   
   formData.append('commonDescription', 'Course materials batch upload');
+  formData.append('commonDesignation', 'course_material'); // Common designation
   formData.append('generateThumbnails', 'true');
   
   const response = await fetch('/api/media/upload/bulk', {
@@ -246,6 +337,25 @@ const uploadMultipleFiles = async (files: FileList) => {
   
   return response.json();
 };
+```
+
+### Filtering by Designation
+
+```typescript
+// Get all user avatars
+const avatars = await fetch('/api/media?designation=user_avatar', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+
+// Get course materials
+const courseMaterials = await fetch('/api/media?designation=course_material&type=document', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+
+// Get organization logos
+const logos = await fetch('/api/media?designation=organization_logo&type=image', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
 ```
 
 ## Performance Considerations ⚡
