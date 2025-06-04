@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { User } from '../../user/entities/user.entity';
-import { MediaType, ImageVariant } from '../entities/media-manager.entity';
+import {
+    MediaType,
+    ImageVariant,
+    FileDesignation,
+} from '../entities/media-manager.entity';
 
 /**
  * Response DTO representing a complete media file with all associated metadata and processing information
@@ -161,6 +165,17 @@ export class MediaFileResponseDto {
         maxLength: 1000,
     })
     description?: string;
+
+    @ApiProperty({
+        description:
+            'File designation indicating what this file is used for - helps with organization and file management',
+        enum: FileDesignation,
+        example: FileDesignation.GENERAL_UPLOAD,
+        type: String,
+        title: 'File Designation',
+        enumName: 'FileDesignation',
+    })
+    designation: FileDesignation;
 
     @ApiProperty({
         description:

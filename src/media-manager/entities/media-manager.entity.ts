@@ -42,6 +42,18 @@ export enum MediaFileStatus {
     PROCESSING = 'processing',
 }
 
+export enum FileDesignation {
+    USER_AVATAR = 'user_avatar',
+    COURSE_THUMBNAIL = 'course_thumbnail',
+    COURSE_MATERIAL = 'course_material',
+    QUESTION_IMAGE = 'question_image',
+    ANSWER_ATTACHMENT = 'answer_attachment',
+    ORGANIZATION_LOGO = 'organization_logo',
+    TEST_ATTACHMENT = 'test_attachment',
+    GENERAL_UPLOAD = 'general_upload',
+    OTHER = 'other',
+}
+
 @Entity('media_files')
 export class MediaFile {
     @PrimaryGeneratedColumn()
@@ -172,6 +184,20 @@ export class MediaFile {
     })
     @IsEnum(MediaFileStatus)
     status: MediaFileStatus;
+
+    @Column({
+        type: 'enum',
+        enum: FileDesignation,
+        default: FileDesignation.GENERAL_UPLOAD,
+    })
+    @ApiProperty({
+        description: 'File designation - what this file is used for',
+        enum: FileDesignation,
+        example: FileDesignation.GENERAL_UPLOAD,
+        default: FileDesignation.GENERAL_UPLOAD,
+    })
+    @IsEnum(FileDesignation)
+    designation: FileDesignation;
 
     @Column({ nullable: true })
     @ApiProperty({

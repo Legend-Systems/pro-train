@@ -9,7 +9,11 @@ import {
     MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { MediaType, ImageVariant } from '../entities/media-manager.entity';
+import {
+    MediaType,
+    ImageVariant,
+    FileDesignation,
+} from '../entities/media-manager.entity';
 
 /**
  * Data Transfer Object for single file upload with comprehensive metadata and processing options
@@ -102,8 +106,26 @@ export class UploadFileDto {
         message:
             'Invalid image variant. Must be one of: original, thumbnail, medium, large',
     })
-    @ValidateIf(obj => obj.type === MediaType.IMAGE)
+    @ValidateIf((obj: UploadFileDto) => obj.type === MediaType.IMAGE)
     variants?: ImageVariant[];
+
+    @ApiProperty({
+        description:
+            'File designation - what this file will be used for. This helps organize files and makes them easier to find and manage.',
+        enum: FileDesignation,
+        example: FileDesignation.GENERAL_UPLOAD,
+        required: false,
+        default: FileDesignation.GENERAL_UPLOAD,
+        type: String,
+        title: 'File Designation',
+        enumName: 'FileDesignation',
+    })
+    @IsOptional()
+    @IsEnum(FileDesignation, {
+        message:
+            'Invalid file designation. Must be one of: user_avatar, course_thumbnail, course_material, question_image, answer_attachment, organization_logo, test_attachment, general_upload, other',
+    })
+    designation?: FileDesignation = FileDesignation.GENERAL_UPLOAD;
 }
 
 /**
@@ -165,6 +187,24 @@ export class BulkUploadDto {
         return Boolean(value);
     })
     generateThumbnails?: boolean = true;
+
+    @ApiProperty({
+        description:
+            'Common file designation applied to all uploaded files in the batch. This helps organize and categorize related file uploads.',
+        enum: FileDesignation,
+        example: FileDesignation.COURSE_MATERIAL,
+        required: false,
+        default: FileDesignation.GENERAL_UPLOAD,
+        type: String,
+        title: 'Common File Designation',
+        enumName: 'FileDesignation',
+    })
+    @IsOptional()
+    @IsEnum(FileDesignation, {
+        message:
+            'Invalid file designation. Must be one of: user_avatar, course_thumbnail, course_material, question_image, answer_attachment, organization_logo, test_attachment, general_upload, other',
+    })
+    commonDesignation?: FileDesignation = FileDesignation.GENERAL_UPLOAD;
 }
 
 /**
@@ -306,4 +346,21 @@ export class FileFilterDto {
     @IsOptional()
     @IsString({ message: 'Sort order must be a valid string' })
     sortOrder?: 'ASC' | 'DESC' = 'DESC';
+
+    @ApiProperty({
+        description:
+            'Filter files by their designation (what they are used for). Useful for finding specific types of files like avatars, course materials, etc.',
+        enum: FileDesignation,
+        example: FileDesignation.COURSE_MATERIAL,
+        required: false,
+        type: String,
+        title: 'File Designation Filter',
+        enumName: 'FileDesignation',
+    })
+    @IsOptional()
+    @IsEnum(FileDesignation, {
+        message:
+            'Invalid file designation filter. Must be one of: user_avatar, course_thumbnail, course_material, question_image, answer_attachment, organization_logo, test_attachment, general_upload, other',
+    })
+    designation?: FileDesignation;
 }

@@ -20,6 +20,7 @@ import {
     MediaType,
     ImageVariant,
     MediaFileStatus,
+    FileDesignation,
 } from './entities/media-manager.entity';
 import {
     UploadFileDto,
@@ -155,7 +156,7 @@ export class MediaManagerService {
         this.baseUrl = `https://storage.googleapis.com/${this.bucketName}`;
 
         // Test and log connection success
-        this.testGCSConnection();
+        void this.testGCSConnection();
     }
 
     /**
@@ -292,20 +293,27 @@ export class MediaManagerService {
                 // Extract variants from uploadDto to avoid type conflicts
                 const { variants, ...uploadDataForDb } = uploadDto;
 
-                // Save to database
-                const savedFile = await this.saveToDatabase({
+                // Prepare data for database
+                const dataForDb: Partial<MediaFile> = {
                     ...originalFile,
                     ...uploadDataForDb,
                     type: mediaType,
                     variant: ImageVariant.ORIGINAL,
                     uploadedBy: scope.userId,
-                    orgId: scope.orgId
-                        ? ({ id: scope.orgId } as any)
-                        : undefined,
-                    branchId: scope.branchId
-                        ? ({ id: scope.branchId } as any)
-                        : undefined,
-                });
+                    designation:
+                        uploadDto.designation || FileDesignation.GENERAL_UPLOAD,
+                };
+
+                // Add org/branch references if provided
+                if (scope.orgId) {
+                    Object.assign(dataForDb, { orgId: scope.orgId });
+                }
+                if (scope.branchId) {
+                    Object.assign(dataForDb, { branchId: scope.branchId });
+                }
+
+                // Save to database
+                const savedFile = await this.saveToDatabase(dataForDb);
 
                 const response: UploadResponseDto = {
                     file: savedFile,
@@ -357,6 +365,7 @@ export class MediaManagerService {
                     altText: uploadDto.commonAltText,
                     description: uploadDto.commonDescription,
                     generateThumbnails: uploadDto.generateThumbnails,
+                    designation: uploadDto.commonDesignation,
                 };
 
                 const result = await this.uploadFile(
@@ -370,9 +379,11 @@ export class MediaManagerService {
                     `Error uploading ${file.originalname}:`,
                     error,
                 );
+                const errorMessage =
+                    error instanceof Error ? error.message : 'Upload failed';
                 errors.push({
                     filename: file.originalname,
-                    error: error.message || 'Upload failed',
+                    error: errorMessage,
                 });
             }
         }
@@ -412,6 +423,7 @@ export class MediaManagerService {
                     uploadedBy,
                     filename,
                     originalName,
+                    designation,
                     page = 1,
                     limit = 20,
                     sortBy = 'createdAt',
@@ -440,6 +452,11 @@ export class MediaManagerService {
                     status: MediaFileStatus.ACTIVE,
                 });
 
+                // Exclude user avatars from general media queries
+                query.andWhere('media.designation != :userAvatar', {
+                    userAvatar: FileDesignation.USER_AVATAR,
+                });
+
                 if (type) {
                     query.andWhere('media.type = :type', { type });
                 }
@@ -463,6 +480,12 @@ export class MediaManagerService {
                 if (originalName) {
                     query.andWhere('media.originalName LIKE :originalName', {
                         originalName: `%${originalName}%`,
+                    });
+                }
+
+                if (designation) {
+                    query.andWhere('media.designation = :designation', {
+                        designation,
                     });
                 }
 
@@ -545,7 +568,7 @@ export class MediaManagerService {
                     return cachedFile;
                 }
 
-                const whereCondition: any = {
+                const whereCondition: Record<string, any> = {
                     id,
                     status: MediaFileStatus.ACTIVE,
                 };
@@ -669,6 +692,11 @@ export class MediaManagerService {
                 const query = this.mediaRepository.createQueryBuilder('media');
                 query.where('media.status = :status', {
                     status: MediaFileStatus.ACTIVE,
+                });
+
+                // Exclude user avatars from stats
+                query.andWhere('media.designation != :userAvatar', {
+                    userAvatar: FileDesignation.USER_AVATAR,
                 });
 
                 // Apply org/branch scoping
@@ -822,7 +850,7 @@ export class MediaManagerService {
             const url = `${this.baseUrl}/${filename}`;
 
             // Get image dimensions if it's an image
-            let width, height;
+            let width: number | undefined, height: number | undefined;
             if (this.detectMediaType(file.mimetype) === MediaType.IMAGE) {
                 try {
                     const metadata = await sharp(file.buffer).metadata();
@@ -922,20 +950,25 @@ export class MediaManagerService {
                     variantFilename,
                 );
 
-                // Save variant to database
-                const savedVariant = await this.saveToDatabase({
+                // Prepare variant data for database
+                const variantData: Partial<MediaFile> = {
                     ...variantFile,
                     type: MediaType.IMAGE,
                     variant,
                     originalFileId: savedOriginal.id,
                     uploadedBy: scope.userId,
-                    orgId: scope.orgId
-                        ? ({ id: scope.orgId } as any)
-                        : undefined,
-                    branchId: scope.branchId
-                        ? ({ id: scope.branchId } as any)
-                        : undefined,
-                });
+                };
+
+                // Add org/branch references if provided
+                if (scope.orgId) {
+                    Object.assign(variantData, { orgId: scope.orgId });
+                }
+                if (scope.branchId) {
+                    Object.assign(variantData, { branchId: scope.branchId });
+                }
+
+                // Save variant to database
+                const savedVariant = await this.saveToDatabase(variantData);
 
                 generatedVariants.push(savedVariant);
             } catch (error) {
@@ -964,8 +997,6 @@ export class MediaManagerService {
      */
     async softDelete(
         fileId: number,
-        userId: string,
-        scope?: OrgBranchScope,
     ): Promise<{ message: string; status: string; code: number }> {
         return this.retryOperation(async () => {
             // First check if file exists and is not already deleted
@@ -1010,8 +1041,6 @@ export class MediaManagerService {
      */
     async restoreFile(
         fileId: number,
-        userId: string,
-        scope?: OrgBranchScope,
     ): Promise<{ message: string; status: string; code: number }> {
         return this.retryOperation(async () => {
             // First check if file exists and is deleted
@@ -1068,7 +1097,7 @@ export class MediaManagerService {
     }
 
     /**
-     * Find all media files with any status (for admin purposes)
+     * Find all media files with any status (for admin purposes, includes user avatars)
      */
     async findAllWithDeleted(): Promise<MediaFile[]> {
         return this.retryOperation(async () => {

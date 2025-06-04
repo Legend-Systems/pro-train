@@ -349,6 +349,7 @@ export class MediaManagerController {
             this.logger.log(`File uploaded successfully: ${result.file.id}`);
             return result;
         } catch (error: any) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             this.logger.error(`Error uploading file: ${error.message}`, error);
             throw error;
         }
@@ -480,6 +481,7 @@ export class MediaManagerController {
             );
             return result;
         } catch (error) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
             this.logger.error(`Error in bulk upload: ${error.message}`, error);
             throw error;
         }
@@ -979,18 +981,13 @@ export class MediaManagerController {
     async softDeleteFile(
         @Param('id', ParseIntPipe) id: number,
         @Request() req: AuthenticatedRequest,
-        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<{ message: string; status: string; code: number }> {
         try {
             this.logger.log(
                 `Soft deleting file ${id} for user: ${req.user.id}`,
             );
 
-            const result = await this.mediaService.softDelete(
-                id,
-                req.user.id,
-                scope,
-            );
+            const result = await this.mediaService.softDelete(id);
 
             this.logger.log(`File ${id} soft deleted successfully`);
 
@@ -1072,16 +1069,11 @@ export class MediaManagerController {
     async restoreFile(
         @Param('id', ParseIntPipe) id: number,
         @Request() req: AuthenticatedRequest,
-        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<{ message: string; status: string; code: number }> {
         try {
             this.logger.log(`Restoring file ${id} for user: ${req.user.id}`);
 
-            const result = await this.mediaService.restoreFile(
-                id,
-                req.user.id,
-                scope,
-            );
+            const result = await this.mediaService.restoreFile(id);
 
             this.logger.log(`File ${id} restored successfully`);
 
