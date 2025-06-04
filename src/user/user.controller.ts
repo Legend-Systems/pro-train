@@ -165,7 +165,12 @@ export class UserController {
     async createUser(
         @Body() createUserDto: CreateUserDto,
         @OrgBranchScope()
-        scope: { orgId?: string; branchId?: string; userId: string },
+        scope: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(`Creating new user: ${createUserDto.email}`);

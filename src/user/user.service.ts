@@ -14,7 +14,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
 import { StandardOperationResponse } from './dto/common-response.dto';
-import { User, UserStatus } from './entities/user.entity';
+import { User, UserStatus, UserRole } from './entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
 import { Organization } from '../org/entities/org.entity';
 import { Branch } from '../branch/entities/branch.entity';
@@ -76,6 +76,13 @@ export class UserService {
         private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
     ) {}
+
+    /**
+     * Helper method to determine if deleted users should be included
+     */
+    private shouldIncludeDeleted(userRole?: string): boolean {
+        return userRole === UserRole.BRANDON || userRole === UserRole.ADMIN;
+    }
 
     /**
      * Cache helper methods
@@ -162,7 +169,12 @@ export class UserService {
 
     async create(
         createUserDto: CreateUserDto,
-        scope?: { orgId?: string; branchId?: string; userId: string },
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             const { avatar, password, ...userData } = createUserDto;
@@ -264,6 +276,7 @@ export class UserService {
         orgId?: string;
         branchId?: string;
         userId: string;
+        userRole?: string;
     }): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
             // Build query with proper scoping
@@ -271,8 +284,18 @@ export class UserService {
                 .createQueryBuilder('user')
                 .leftJoinAndSelect('user.orgId', 'org')
                 .leftJoinAndSelect('user.branchId', 'branch')
-                .leftJoinAndSelect('user.avatar', 'avatar')
-                .where('user.status = :status', { status: UserStatus.ACTIVE });
+                .leftJoinAndSelect('user.avatar', 'avatar');
+
+            // Include deleted users only for brandon/admin roles
+            if (this.shouldIncludeDeleted(scope?.userRole)) {
+                queryBuilder.where('user.status IN (:...statuses)', {
+                    statuses: [UserStatus.ACTIVE, UserStatus.DELETED],
+                });
+            } else {
+                queryBuilder.where('user.status = :status', {
+                    status: UserStatus.ACTIVE,
+                });
+            }
 
             // Apply org/branch scoping if provided
             if (scope?.orgId) {
@@ -300,7 +323,12 @@ export class UserService {
      */
     async findAllWithFilters(
         filters: UserFilterDto,
-        scope?: { orgId?: string; branchId?: string; userId: string },
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<{ users: User[]; total: number; totalPages: number }> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
@@ -336,10 +364,24 @@ export class UserService {
                 .leftJoinAndSelect('user.branchId', 'branch')
                 .leftJoinAndSelect('user.avatar', 'avatar');
 
-            // Apply where conditions properly
-            queryBuilder.where('user.status = :status', {
-                status: filters.status || UserStatus.ACTIVE,
-            });
+            // Apply where conditions properly - include deleted users for brandon/admin
+            if (this.shouldIncludeDeleted(scope?.userRole)) {
+                // For brandon/admin, use the provided status or show all statuses including deleted
+                if (filters.status) {
+                    queryBuilder.where('user.status = :status', {
+                        status: filters.status,
+                    });
+                } else {
+                    queryBuilder.where('user.status IN (:...statuses)', {
+                        statuses: [UserStatus.ACTIVE, UserStatus.DELETED],
+                    });
+                }
+            } else {
+                // For regular users, only show active users
+                queryBuilder.where('user.status = :status', {
+                    status: filters.status || UserStatus.ACTIVE,
+                });
+            }
 
             // Apply org/branch scoping - scope takes precedence over filter
             if (scope?.orgId || filters.orgId) {
@@ -588,7 +630,12 @@ export class UserService {
     async update(
         id: string,
         updateUserDto: UpdateUserDto,
-        scope?: { orgId?: string; branchId?: string; userId: string },
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
     ): Promise<StandardOperationResponse> {
         const { avatar, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };

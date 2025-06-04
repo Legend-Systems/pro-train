@@ -5,6 +5,7 @@ export interface OrgBranchScope {
     orgId?: string;
     branchId?: string;
     userId: string;
+    userRole?: string;
 }
 
 interface AuthenticatedUser {
@@ -14,6 +15,7 @@ interface AuthenticatedUser {
     email: string;
     firstName: string;
     lastName: string;
+    role?: string;
 }
 
 interface RequestWithUser extends Request {
@@ -33,6 +35,7 @@ export const OrgBranchScope = createParamDecorator(
             orgId: user.orgId,
             branchId: user.branchId,
             userId: user.id,
+            userRole: user.role,
         };
     },
 );
