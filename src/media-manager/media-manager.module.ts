@@ -8,6 +8,7 @@ import { MediaManagerController } from './media-manager.controller';
 import { MediaFile } from './entities/media-manager.entity';
 import { UserModule } from '../user/user.module';
 import { AuthModule } from '../auth/auth.module';
+import { RetryService } from '../common/services/retry.service';
 
 @Module({
     imports: [
@@ -26,7 +27,7 @@ import { AuthModule } from '../auth/auth.module';
         }),
     ],
     controllers: [MediaManagerController],
-    providers: [MediaManagerService],
+    providers: [MediaManagerService, RetryService],
     exports: [MediaManagerService],
 })
 export class MediaManagerModule {}

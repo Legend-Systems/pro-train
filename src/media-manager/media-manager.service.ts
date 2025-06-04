@@ -7,7 +7,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Storage } from '@google-cloud/storage';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -36,6 +36,7 @@ import {
     MediaStatsDto,
 } from './dto/media-response.dto';
 import { UserService } from '../user/user.service';
+import { RetryService } from '../common/services/retry.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 
 interface UploadedFile {
@@ -58,16 +59,24 @@ export class MediaManagerService {
     private readonly bucketName: string;
     private readonly baseUrl: string;
 
-    // Cache keys
+    // Cache keys with org/branch isolation - COMPLIANT PATTERN
     private readonly CACHE_KEYS = {
-        FILE_BY_ID: (id: number) => `media:file:${id}`,
-        FILES_LIST: (filters: string, scope: string) =>
-            `media:list:${scope}:${filters}`,
-        STATS: (scope: string) => `media:stats:${scope}`,
-        FILE_VARIANTS: (fileId: number) => `media:variants:${fileId}`,
-        ORG_FILES: (orgId: string) => `media:org:${orgId}`,
-        BRANCH_FILES: (branchId: string) => `media:branch:${branchId}`,
-        USER_FILES: (userId: string) => `media:user:${userId}`,
+        FILE_BY_ID: (id: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:file:${id}`,
+        FILES_LIST: (filters: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:list:${filters}`,
+        STATS: (orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:stats`,
+        FILE_VARIANTS: (fileId: number, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:variants:${fileId}`,
+        ORG_FILES: (orgId: number, branchId?: number) =>
+            `org:${orgId}:branch:${branchId || 'global'}:media:org:files`,
+        BRANCH_FILES: (branchId: number, orgId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId}:media:branch:files`,
+        USER_FILES: (userId: string, orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:user:${userId}:files`,
+        ALL_MEDIA: (orgId?: number, branchId?: number) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:media:all`,
     };
 
     // Cache TTL in seconds
@@ -124,9 +133,11 @@ export class MediaManagerService {
     constructor(
         @InjectRepository(MediaFile)
         private readonly mediaRepository: Repository<MediaFile>,
+        private readonly dataSource: DataSource,
+        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+        private readonly retryService: RetryService,
         private readonly configService: ConfigService,
         private readonly userService: UserService,
-        @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {
         // Initialize Google Cloud Storage
         const projectId = this.configService.get<string>(
@@ -161,50 +172,89 @@ export class MediaManagerService {
     }
 
     /**
-     * Cache helper methods
+     * Cache helper methods - COMPLIANT with org/branch parameters
      */
     private async invalidateFileCache(
         fileId: number,
         uploaderId?: string,
-        orgId?: string,
-        branchId?: string,
+        orgId?: number,
+        branchId?: number,
     ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.FILE_BY_ID(fileId)];
+        const keysToDelete = [
+            this.CACHE_KEYS.FILE_BY_ID(fileId, orgId, branchId),
+            this.CACHE_KEYS.FILE_VARIANTS(fileId, orgId, branchId),
+        ];
 
         if (uploaderId) {
-            keysToDelete.push(this.CACHE_KEYS.USER_FILES(uploaderId));
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_FILES(uploaderId, orgId, branchId),
+            );
         }
         if (orgId) {
-            keysToDelete.push(this.CACHE_KEYS.ORG_FILES(orgId));
+            keysToDelete.push(this.CACHE_KEYS.ORG_FILES(orgId, branchId));
         }
         if (branchId) {
-            keysToDelete.push(this.CACHE_KEYS.BRANCH_FILES(branchId));
+            keysToDelete.push(this.CACHE_KEYS.BRANCH_FILES(branchId, orgId));
         }
 
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+        keysToDelete.push(this.CACHE_KEYS.ALL_MEDIA(orgId, branchId));
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
 
-    private async invalidateListCaches(scope?: OrgBranchScope): Promise<void> {
+    private async invalidateListCaches(
+        orgId?: number,
+        branchId?: number,
+        userId?: string,
+    ): Promise<void> {
         const keysToDelete: string[] = [];
 
-        if (scope?.orgId) {
-            keysToDelete.push(this.CACHE_KEYS.ORG_FILES(scope.orgId));
-            keysToDelete.push(this.CACHE_KEYS.STATS(scope.orgId));
+        keysToDelete.push(
+            this.CACHE_KEYS.STATS(orgId, branchId),
+            this.CACHE_KEYS.ALL_MEDIA(orgId, branchId),
+        );
+
+        if (orgId) {
+            keysToDelete.push(this.CACHE_KEYS.ORG_FILES(orgId, branchId));
         }
-        if (scope?.branchId) {
-            keysToDelete.push(this.CACHE_KEYS.BRANCH_FILES(scope.branchId));
-            keysToDelete.push(this.CACHE_KEYS.STATS(scope.branchId));
+        if (branchId) {
+            keysToDelete.push(this.CACHE_KEYS.BRANCH_FILES(branchId, orgId));
         }
-        if (scope?.userId) {
-            keysToDelete.push(this.CACHE_KEYS.USER_FILES(scope.userId));
+        if (userId) {
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_FILES(userId, orgId, branchId),
+            );
         }
 
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
 
     private generateCacheKey(
         filters: FileFilterDto,
-        scope?: OrgBranchScope,
+        orgId?: number,
+        branchId?: number,
     ): string {
         const filterKey = JSON.stringify({
             type: filters.type,
@@ -212,64 +262,29 @@ export class MediaManagerService {
             uploadedBy: filters.uploadedBy,
             filename: filters.filename,
             originalName: filters.originalName,
+            designation: filters.designation,
             page: filters.page,
             limit: filters.limit,
             sortBy: filters.sortBy,
             sortOrder: filters.sortOrder,
         });
 
-        const scopeKey = JSON.stringify({
-            orgId: scope?.orgId,
-            branchId: scope?.branchId,
-            userId: scope?.userId,
-        });
-
-        return this.CACHE_KEYS.FILES_LIST(filterKey, scopeKey);
+        return this.CACHE_KEYS.FILES_LIST(filterKey, orgId, branchId);
     }
 
-    private generateStatsKey(scope?: OrgBranchScope): string {
-        const scopeKey = JSON.stringify({
-            orgId: scope?.orgId,
-            branchId: scope?.branchId,
-        });
-        return this.CACHE_KEYS.STATS(scopeKey);
-    }
-
-    private async retryOperation<T>(
-        operation: () => Promise<T>,
-        maxRetries = 3,
-        delay = 1000,
-    ): Promise<T> {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await operation();
-            } catch (error) {
-                const isConnectionError =
-                    error instanceof Error &&
-                    (error.message.includes('ECONNRESET') ||
-                        error.message.includes('Connection lost') ||
-                        error.message.includes('connect ETIMEDOUT'));
-
-                if (isConnectionError && attempt < maxRetries) {
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 2; // Exponential backoff
-                    continue;
-                }
-                throw error;
-            }
-        }
-        throw new Error('Max retries exceeded');
+    private generateStatsKey(orgId?: number, branchId?: number): string {
+        return this.CACHE_KEYS.STATS(orgId, branchId);
     }
 
     /**
-     * Upload a single file
+     * Upload a single file - COMPLIANT with RetryService
      */
     async uploadFile(
         file: UploadedFile,
         uploadDto: UploadFileDto,
         scope: OrgBranchScope,
     ): Promise<UploadResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 this.logger.log(
                     `Uploading file: ${file.originalname} for user: ${scope.userId}`,
@@ -335,7 +350,11 @@ export class MediaManagerService {
                 }
 
                 // Invalidate caches after successful upload
-                await this.invalidateListCaches(scope);
+                await this.invalidateListCaches(
+                    scope.orgId ? parseInt(scope.orgId, 10) : undefined,
+                    scope.branchId ? parseInt(scope.branchId, 10) : undefined,
+                    scope.userId,
+                );
 
                 this.logger.log(`File uploaded successfully: ${savedFile.id}`);
                 return response;
@@ -405,10 +424,14 @@ export class MediaManagerService {
         filters: FileFilterDto,
         scope?: OrgBranchScope,
     ): Promise<MediaFileListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 // Check cache first
-                const cacheKey = this.generateCacheKey(filters, scope);
+                const cacheKey = this.generateCacheKey(
+                    filters,
+                    scope?.orgId ? parseInt(scope.orgId, 10) : undefined,
+                    scope?.branchId ? parseInt(scope.branchId, 10) : undefined,
+                );
                 const cachedResult =
                     await this.cacheManager.get<MediaFileListResponseDto>(
                         cacheKey,
@@ -558,10 +581,14 @@ export class MediaManagerService {
         id: number,
         scope?: OrgBranchScope,
     ): Promise<MediaFileResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 // Check cache first
-                const cacheKey = this.CACHE_KEYS.FILE_BY_ID(id);
+                const cacheKey = this.CACHE_KEYS.FILE_BY_ID(
+                    id,
+                    scope?.orgId ? parseInt(scope.orgId, 10) : undefined,
+                    scope?.branchId ? parseInt(scope.branchId, 10) : undefined,
+                );
                 const cachedFile =
                     await this.cacheManager.get<MediaFileResponseDto>(cacheKey);
 
@@ -633,7 +660,7 @@ export class MediaManagerService {
         userId: string,
         scope?: OrgBranchScope,
     ): Promise<void> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 const file = await this.mediaRepository.findOne({
                     where: { id, status: MediaFileStatus.ACTIVE },
@@ -667,8 +694,10 @@ export class MediaManagerService {
                 await this.invalidateFileCache(
                     id,
                     userId,
-                    file.orgId?.id,
-                    file.branchId?.id,
+                    file.orgId?.id ? parseInt(file.orgId.id, 10) : undefined,
+                    file.branchId?.id
+                        ? parseInt(file.branchId.id, 10)
+                        : undefined,
                 );
 
                 this.logger.log(
@@ -685,10 +714,13 @@ export class MediaManagerService {
      * Get media statistics
      */
     async getStats(scope?: OrgBranchScope): Promise<MediaStatsDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 // Check cache first
-                const cacheKey = this.generateStatsKey(scope);
+                const cacheKey = this.generateStatsKey(
+                    scope?.orgId ? parseInt(scope.orgId, 10) : undefined,
+                    scope?.branchId ? parseInt(scope.branchId, 10) : undefined,
+                );
                 const cachedStats =
                     await this.cacheManager.get<MediaStatsDto>(cacheKey);
 
@@ -1003,7 +1035,7 @@ export class MediaManagerService {
      * Check if user has access to perform operations on a file
      */
     private checkFileAccess(
-        file: any,
+        file: MediaFile,
         userId: string,
         scope?: OrgBranchScope,
     ): boolean {
@@ -1036,7 +1068,7 @@ export class MediaManagerService {
     async softDelete(
         fileId: number,
     ): Promise<{ message: string; status: string; code: number }> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if file exists and is not already deleted
             const file = await this.mediaRepository.findOne({
                 where: { id: fileId },
@@ -1062,8 +1094,8 @@ export class MediaManagerService {
             await this.invalidateFileCache(
                 fileId,
                 file.uploadedBy,
-                file.orgId?.id,
-                file.branchId?.id,
+                file.orgId?.id ? parseInt(file.orgId.id, 10) : undefined,
+                file.branchId?.id ? parseInt(file.branchId.id, 10) : undefined,
             );
 
             return {
@@ -1080,7 +1112,7 @@ export class MediaManagerService {
     async restoreFile(
         fileId: number,
     ): Promise<{ message: string; status: string; code: number }> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             // First check if file exists and is deleted
             const file = await this.mediaRepository.findOne({
                 where: { id: fileId },
@@ -1108,8 +1140,8 @@ export class MediaManagerService {
             await this.invalidateFileCache(
                 fileId,
                 file.uploadedBy,
-                file.orgId?.id,
-                file.branchId?.id,
+                file.orgId?.id ? parseInt(file.orgId.id, 10) : undefined,
+                file.branchId?.id ? parseInt(file.branchId.id, 10) : undefined,
             );
 
             return {
@@ -1126,7 +1158,7 @@ export class MediaManagerService {
     async getFilesAdmin(
         filters: FileFilterDto,
     ): Promise<MediaFileListResponseDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 const {
                     type,
@@ -1247,7 +1279,7 @@ export class MediaManagerService {
      * Get global statistics (admin access)
      */
     async getGlobalStats(): Promise<MediaStatsDto> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 // No scoping - get stats across all organizations
                 const query = this.mediaRepository.createQueryBuilder('media');
@@ -1262,38 +1294,42 @@ export class MediaManagerService {
                 });
 
                 const totalFiles = await query.getCount();
-                const totalSize = await query
-                    .select('SUM(media.size)', 'totalSize')
-                    .getRawOne();
 
-                // Get file type distribution
-                const typeDistribution = await query
+                // Get total size with proper type handling
+                const totalSizeResult = (await query
+                    .select('SUM(media.size)', 'totalSize')
+                    .getRawOne()) as { totalSize: string } | undefined;
+
+                // Get file type distribution with proper typing
+                const typeDistribution = (await query
                     .select('media.type', 'type')
                     .addSelect('COUNT(*)', 'count')
                     .groupBy('media.type')
-                    .getRawMany();
+                    .getRawMany()) as Array<{ type: MediaType; count: string }>;
 
                 // Get most recent upload
                 const mostRecentUpload = await query
                     .orderBy('media.createdAt', 'DESC')
                     .getOne();
 
+                const totalSizeValue = parseInt(
+                    totalSizeResult?.totalSize || '0',
+                    10,
+                );
+
                 const stats: MediaStatsDto = {
                     totalFiles: totalFiles || 0,
-                    totalSize: parseInt(totalSize?.totalSize || '0', 10),
+                    totalSize: totalSizeValue,
                     averageSize:
                         totalFiles > 0
-                            ? Math.round(
-                                  parseInt(totalSize?.totalSize || '0', 10) /
-                                      totalFiles,
-                              )
+                            ? Math.round(totalSizeValue / totalFiles)
                             : 0,
                     byType: typeDistribution.reduce(
                         (acc, { type, count }) => {
                             acc[type] = parseInt(count, 10);
                             return acc;
                         },
-                        {} as Record<string, number>,
+                        {} as Record<MediaType, number>,
                     ),
                     lastUpload: mostRecentUpload?.createdAt,
                 };
@@ -1310,7 +1346,7 @@ export class MediaManagerService {
      * Find all soft-deleted media files (for admin purposes)
      */
     async findDeleted(): Promise<MediaFile[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const files = await this.mediaRepository.find({
                 where: { status: MediaFileStatus.DELETED },
                 relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
@@ -1324,7 +1360,7 @@ export class MediaManagerService {
      * Find all media files with any status (for admin purposes, includes user avatars)
      */
     async findAllWithDeleted(): Promise<MediaFile[]> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const files = await this.mediaRepository.find({
                 relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
             });
@@ -1337,7 +1373,7 @@ export class MediaManagerService {
      * Find media file by ID including deleted files (for admin purposes)
      */
     async findByIdWithDeleted(id: number): Promise<MediaFile | null> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const file = await this.mediaRepository.findOne({
                 where: { id },
                 relations: ['uploader', 'orgId', 'branchId', 'originalFile'],
@@ -1362,7 +1398,7 @@ export class MediaManagerService {
         code: number;
         data: MediaFileResponseDto;
     }> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             try {
                 // First, find the file and validate ownership and scope
                 const whereCondition: Record<string, any> = {
@@ -1471,8 +1507,12 @@ export class MediaManagerService {
                 await this.invalidateFileCache(
                     fileId,
                     userId,
-                    existingFile.orgId?.id,
-                    existingFile.branchId?.id,
+                    existingFile.orgId?.id
+                        ? parseInt(existingFile.orgId.id, 10)
+                        : undefined,
+                    existingFile.branchId?.id
+                        ? parseInt(existingFile.branchId.id, 10)
+                        : undefined,
                 );
 
                 this.logger.log(
@@ -1516,7 +1556,7 @@ export class MediaManagerService {
             failed: number;
         };
     }> {
-        return this.retryOperation(async () => {
+        return this.retryService.executeDatabase(async () => {
             const updated: MediaFileResponseDto[] = [];
             const errors: Array<{ fileId: number; error: string }> = [];
 
