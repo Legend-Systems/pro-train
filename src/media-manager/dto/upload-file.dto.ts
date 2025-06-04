@@ -15,6 +15,9 @@ import {
     FileDesignation,
 } from '../entities/media-manager.entity';
 
+// Re-export edit DTOs for convenience
+export { EditMediaDto, EditMediaResponseDto } from './edit-media.dto';
+
 /**
  * Data Transfer Object for single file upload with comprehensive metadata and processing options
  * Used for uploading files to Google Cloud Storage with automatic processing and variant generation

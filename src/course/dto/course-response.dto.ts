@@ -29,7 +29,7 @@ export class CourseCreatorDto {
     @ApiProperty({
         description: 'Creator role',
         example: 'admin',
-        required: false,
+        nullable: true,
     })
     role?: string;
 }
@@ -51,9 +51,82 @@ export class CourseResponseDto {
         description: 'Course description',
         example:
             'A comprehensive introduction to computer science fundamentals',
-        required: false,
+        nullable: true,
     })
     description?: string;
+
+    @ApiProperty({
+        description: 'Course learning objectives',
+        example:
+            'Understand basic programming concepts, data structures, and algorithms',
+        nullable: true,
+    })
+    learningObjectives?: string;
+
+    @ApiProperty({
+        description: 'Course prerequisites',
+        example: 'Basic mathematics knowledge',
+        nullable: true,
+    })
+    prerequisites?: string;
+
+    @ApiProperty({
+        description: 'Course duration in minutes',
+        example: 1200,
+        nullable: true,
+    })
+    duration?: number;
+
+    @ApiProperty({
+        description: 'Course difficulty level',
+        example: 'intermediate',
+        enum: ['beginner', 'intermediate', 'advanced', 'expert'],
+        nullable: true,
+    })
+    difficulty?: string;
+
+    @ApiProperty({
+        description: 'Course category',
+        example: 'Programming',
+        nullable: true,
+    })
+    category?: string;
+
+    @ApiProperty({
+        description: 'Course status',
+        example: 'active',
+        enum: ['active', 'inactive', 'deleted', 'draft'],
+    })
+    status: string;
+
+    @ApiProperty({
+        description: 'Whether the course is active',
+        example: true,
+    })
+    isActive: boolean;
+
+    @ApiProperty({
+        description: 'Whether the course is published',
+        example: true,
+    })
+    isPublished?: boolean;
+
+    @ApiProperty({
+        description: 'Course published timestamp',
+        example: '2025-01-01T00:00:00.000Z',
+    })
+    publishedAt?: Date;
+
+    @ApiProperty({
+        description: 'Course thumbnail information',
+    })
+    thumbnail?: any;
+
+    @ApiProperty({
+        description: 'Course rating',
+        example: 4.5,
+    })
+    rating?: number;
 
     @ApiProperty({
         description: 'ID of the user who created this course',
@@ -81,6 +154,16 @@ export class CourseResponseDto {
     creator?: CourseCreatorDto;
 
     @ApiProperty({
+        description: 'Organization this course belongs to',
+    })
+    organization?: any;
+
+    @ApiProperty({
+        description: 'Branch this course belongs to',
+    })
+    branch?: any;
+
+    @ApiProperty({
         description: 'Number of tests in this course',
         example: 5,
         required: false,
@@ -93,6 +176,18 @@ export class CourseResponseDto {
         required: false,
     })
     studentCount?: number;
+
+    @ApiProperty({
+        description: 'Number of enrollments in this course',
+        example: 23,
+        required: false,
+    })
+    enrollmentCount?: number;
+
+    @ApiProperty({
+        description: 'User progress in this course (if enrolled)',
+    })
+    progress?: number;
 }
 
 export class CourseListResponseDto {

@@ -164,8 +164,10 @@ export class CourseMaterial {
     updatedAt: Date;
 
     // Relations
-    @ManyToOne(() => Course, course => course.courseId, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'courseId' })
+    @ManyToOne(() => Course, course => course.courseMaterials, {
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'courseId', referencedColumnName: 'courseId' })
     @ApiProperty({
         description: 'Course this material belongs to',
         type: () => Course,

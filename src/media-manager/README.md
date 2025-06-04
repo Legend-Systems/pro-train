@@ -139,6 +139,38 @@ GET /media/my-files
 GET /media/stats
 ```
 
+### Edit File Metadata
+```http
+PUT /media/:id/edit
+Content-Type: application/json
+
+{
+  "altText": "Updated image description",
+  "description": "Updated file description",
+  "designation": "course_material",
+  "metadata": {
+    "tags": ["updated", "programming"],
+    "version": "2.0"
+  }
+}
+```
+
+### Bulk Edit Files
+```http
+PUT /media/bulk-edit
+Content-Type: application/json
+
+{
+  "fileIds": [1, 2, 3],
+  "editData": {
+    "designation": "course_material",
+    "metadata": {
+      "category": "lectures"
+    }
+  }
+}
+```
+
 ### Delete File
 ```http
 DELETE /media/:id
@@ -267,6 +299,58 @@ const FileUpload = () => {
         accept="image/*,.pdf,.doc,.docx"
       />
       <button onClick={handleUpload}>Upload</button>
+    </div>
+  );
+};
+```
+
+### Media Edit Component (React)
+
+```tsx
+const MediaEdit = ({ mediaFile, onUpdated }) => {
+  const [editData, setEditData] = useState({
+    altText: mediaFile.altText || '',
+    description: mediaFile.description || '',
+    designation: mediaFile.designation || 'general_upload',
+    metadata: mediaFile.metadata || {}
+  });
+  
+  const handleEdit = async () => {
+    const response = await fetch(`/api/media/${mediaFile.id}/edit`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(editData),
+    });
+    
+    const result = await response.json();
+    onUpdated(result.data);
+  };
+  
+  return (
+    <div>
+      <input 
+        value={editData.altText}
+        onChange={(e) => setEditData({...editData, altText: e.target.value})}
+        placeholder="Alt text"
+      />
+      <textarea 
+        value={editData.description}
+        onChange={(e) => setEditData({...editData, description: e.target.value})}
+        placeholder="Description"
+      />
+      <select 
+        value={editData.designation}
+        onChange={(e) => setEditData({...editData, designation: e.target.value})}
+      >
+        <option value="general_upload">General Upload</option>
+        <option value="course_material">Course Material</option>
+        <option value="user_avatar">User Avatar</option>
+        <option value="course_thumbnail">Course Thumbnail</option>
+      </select>
+      <button onClick={handleEdit}>Update Media</button>
     </div>
   );
 };
@@ -433,6 +517,17 @@ Enable debug logging by setting:
 LOG_LEVEL=debug
 ```
 
+### Media Management Features ✨
+
+The media manager now includes comprehensive editing capabilities:
+
+- **Single File Editing**: Update metadata for individual files
+- **Bulk Editing**: Apply changes to multiple files simultaneously
+- **Ownership Validation**: Only file uploaders can edit their files
+- **Reference Preservation**: All existing links and references remain intact
+- **Cache Management**: Automatic cache invalidation for updated files
+- **Audit Logging**: Complete tracking of edit operations
+
 ## Future Enhancements 🚀
 
 Planned features:
@@ -443,6 +538,8 @@ Planned features:
 - CDN integration
 - Automated backups
 - Analytics dashboard
+- File versioning system
+- Advanced search with metadata filters
 
 ---
 

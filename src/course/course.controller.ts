@@ -509,6 +509,100 @@ export class CourseController {
         }
     }
 
+    @Get(':id/edit')
+    @ApiOperation({
+        summary: '✏️ Get Course for Editing',
+        description: `
+      **Retrieves course details specifically for editing purposes**
+      
+      This endpoint provides the same course details as the regular findOne endpoint
+      but is specifically designed for edit forms and course management interfaces.
+      
+      **Security Features:**
+      - Validates user has permission to edit the course
+      - Returns comprehensive course data for form population
+      - Includes all necessary fields for course editing
+      
+      **Use Cases:**
+      - Course edit forms
+      - Course management interfaces
+      - Pre-populating edit data
+    `,
+        operationId: 'getCourseForEdit',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Course ID to edit',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Course edit data retrieved successfully',
+        type: CourseDetailApiResponse,
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Course not found',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '⛔ Not authorized to edit this course',
+    })
+    async getCourseForEdit(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(
+                `Getting course ${id} for editing by user: ${scope.userId}`,
+            );
+
+            const course = await this.courseService.findOne(id, scope);
+
+            if (!course) {
+                this.logger.warn(
+                    `Course ${id} not found for edit by user: ${scope.userId}`,
+                );
+                return {
+                    success: false,
+                    message: `Course with ID ${id} not found`,
+                    data: null,
+                };
+            }
+
+            // Validate edit permissions
+            await this.courseService.validateOwnership(id, scope.userId, scope);
+
+            this.logger.log(
+                `Course ${id} edit data retrieved successfully for user: ${scope.userId}`,
+            );
+
+            return {
+                success: true,
+                message: 'Course edit data retrieved successfully',
+                data: course,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting course ${id} for edit by user ${scope.userId}:`,
+                error.message || error,
+            );
+
+            if (error instanceof ForbiddenException) {
+                return {
+                    success: false,
+                    message: 'You are not authorized to edit this course',
+                    data: null,
+                };
+            }
+
+            throw error;
+        }
+    }
+
     @Get(':id/stats')
     @ApiOperation({
         summary: '📊 Get Course Statistics',
@@ -1037,6 +1131,43 @@ export class CourseController {
                 `Error restoring course ${id} by user ${req.user.id}:`,
                 error,
             );
+            throw error;
+        }
+    }
+
+    @Get('debug/all')
+    @ApiOperation({
+        summary: '🔍 Debug: Get All Courses (Any Status)',
+        description: 'Debug endpoint to see all courses regardless of status',
+        operationId: 'debugGetAllCourses',
+    })
+    async debugGetAllCourses(
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse> {
+        try {
+            this.logger.log(
+                `Debug: Getting all courses for user: ${scope.userId}`,
+            );
+
+            const allCourses = await this.courseService.findAllWithDeleted();
+
+            this.logger.log(`Debug: Found ${allCourses.length} total courses`);
+
+            return {
+                success: true,
+                message: `Found ${allCourses.length} courses (all statuses)`,
+                data: allCourses.map(course => ({
+                    courseId: course.courseId,
+                    title: course.title,
+                    status: course.status,
+                    createdBy: course.createdBy,
+                    orgId: course.orgId?.id,
+                    branchId: course.branchId?.id,
+                    createdAt: course.createdAt,
+                })),
+            };
+        } catch (error) {
+            this.logger.error(`Debug error getting all courses:`, error);
             throw error;
         }
     }

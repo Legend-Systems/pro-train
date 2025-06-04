@@ -27,6 +27,7 @@ import {
     BulkUploadDto,
     FileFilterDto,
 } from './dto/upload-file.dto';
+import { EditMediaDto } from './dto/edit-media.dto';
 import {
     MediaFileResponseDto,
     MediaFileListResponseDto,
@@ -1120,6 +1121,214 @@ export class MediaManagerService {
             });
 
             return file;
+        });
+    }
+
+    /**
+     * Edit/update media file metadata without changing the actual file
+     * Only allows updating metadata fields like altText, description, designation, and custom metadata
+     */
+    async editMedia(
+        fileId: number,
+        editDto: EditMediaDto,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<{
+        message: string;
+        status: string;
+        code: number;
+        data: MediaFileResponseDto;
+    }> {
+        return this.retryOperation(async () => {
+            try {
+                // First, find the file and validate ownership and scope
+                const whereCondition: Record<string, any> = {
+                    id: fileId,
+                    status: MediaFileStatus.ACTIVE,
+                };
+
+                // Apply org/branch scoping if provided
+                if (scope?.orgId) {
+                    whereCondition.orgId = { id: scope.orgId };
+                }
+                if (scope?.branchId) {
+                    whereCondition.branchId = { id: scope.branchId };
+                }
+
+                const existingFile = await this.mediaRepository.findOne({
+                    where: whereCondition,
+                    relations: ['uploader', 'orgId', 'branchId'],
+                });
+
+                if (!existingFile) {
+                    throw new NotFoundException(
+                        `Media file with ID ${fileId} not found`,
+                    );
+                }
+
+                // Validate ownership - only the uploader can edit the file
+                if (existingFile.uploadedBy !== userId) {
+                    throw new BadRequestException(
+                        'You can only edit media files you uploaded',
+                    );
+                }
+
+                // Prepare update data - only include fields that are provided
+                const updateData: Partial<MediaFile> = {};
+
+                if (editDto.altText !== undefined) {
+                    updateData.altText = editDto.altText;
+                }
+
+                if (editDto.description !== undefined) {
+                    updateData.description = editDto.description;
+                }
+
+                if (editDto.designation !== undefined) {
+                    updateData.designation = editDto.designation;
+                }
+
+                if (editDto.metadata !== undefined) {
+                    // Merge with existing metadata to preserve existing custom data
+                    updateData.metadata = {
+                        ...existingFile.metadata,
+                        ...editDto.metadata,
+                    };
+                }
+
+                // If no fields to update, return early
+                if (Object.keys(updateData).length === 0) {
+                    return {
+                        message: 'No changes to apply',
+                        status: 'info',
+                        code: 200,
+                        data: existingFile,
+                    };
+                }
+
+                // Update the file metadata
+                await this.mediaRepository.update(fileId, updateData);
+
+                // Fetch the updated file with all relations
+                const updatedFile = await this.mediaRepository.findOne({
+                    where: { id: fileId },
+                    relations: ['uploader', 'orgId', 'branchId'],
+                });
+
+                if (!updatedFile) {
+                    throw new InternalServerErrorException(
+                        'Failed to retrieve updated file',
+                    );
+                }
+
+                // Load variants if it's an original image
+                let result: MediaFileResponseDto;
+                if (
+                    updatedFile.type === MediaType.IMAGE &&
+                    updatedFile.variant === ImageVariant.ORIGINAL
+                ) {
+                    const variants = await this.mediaRepository.find({
+                        where: {
+                            originalFileId: updatedFile.id,
+                            status: MediaFileStatus.ACTIVE,
+                        },
+                        order: { variant: 'ASC' },
+                    });
+                    result = { ...updatedFile, variants };
+                } else {
+                    result = updatedFile;
+                }
+
+                // Invalidate relevant caches
+                await this.invalidateFileCache(
+                    fileId,
+                    userId,
+                    existingFile.orgId?.id,
+                    existingFile.branchId?.id,
+                );
+
+                this.logger.log(
+                    `Media file ${fileId} updated successfully by user ${userId}`,
+                );
+
+                return {
+                    message: 'Media file updated successfully',
+                    status: 'success',
+                    code: 200,
+                    data: result,
+                };
+            } catch (error) {
+                this.logger.error(
+                    `Error editing media file ${fileId}:`,
+                    error instanceof Error ? error.message : 'Unknown error',
+                );
+                throw error;
+            }
+        });
+    }
+
+    /**
+     * Bulk edit media files - update multiple files with same metadata changes
+     * Useful for batch operations like changing designation or adding tags to multiple files
+     */
+    async bulkEditMedia(
+        fileIds: number[],
+        editDto: EditMediaDto,
+        userId: string,
+        scope?: OrgBranchScope,
+    ): Promise<{
+        message: string;
+        status: string;
+        code: number;
+        data: {
+            updated: MediaFileResponseDto[];
+            errors: Array<{ fileId: number; error: string }>;
+            total: number;
+            successful: number;
+            failed: number;
+        };
+    }> {
+        return this.retryOperation(async () => {
+            const updated: MediaFileResponseDto[] = [];
+            const errors: Array<{ fileId: number; error: string }> = [];
+
+            for (const fileId of fileIds) {
+                try {
+                    const result = await this.editMedia(
+                        fileId,
+                        editDto,
+                        userId,
+                        scope,
+                    );
+                    updated.push(result.data);
+                } catch (error) {
+                    this.logger.error(
+                        `Error editing file ${fileId} in bulk operation:`,
+                        error,
+                    );
+                    const errorMessage =
+                        error instanceof Error
+                            ? error.message
+                            : 'Edit failed';
+                    errors.push({
+                        fileId,
+                        error: errorMessage,
+                    });
+                }
+            }
+
+            return {
+                message: `Bulk edit completed: ${updated.length}/${fileIds.length} files updated`,
+                status: updated.length > 0 ? 'success' : 'error',
+                code: 200,
+                data: {
+                    updated,
+                    errors,
+                    total: fileIds.length,
+                    successful: updated.length,
+                    failed: errors.length,
+                },
+            };
         });
     }
 }

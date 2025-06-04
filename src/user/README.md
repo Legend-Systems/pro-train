@@ -30,6 +30,13 @@ Following the comprehensive compliance review, this module has been updated to m
 - **Error Recovery**: Automatic retry on transient database failures
 - **Consistent Logging**: Structured logging throughout all operations
 
+#### **Role-Based Access Control**
+
+- **OrgRoleGuard Integration**: Organization-scoped role-based access control
+- **Convenient Decorators**: `@AdminOnly()`, `@OwnerOrAdmin()`, `@BrandonOnly()`, `@AnyRole()`
+- **Cross-Organization Access**: Configurable admin permissions across organizations
+- **Business Logic Compliance**: Owners have full access within their organization
+
 #### **Organization & Branch Scoping**
 
 - **Scope-Aware Operations**: All user operations respect organization/branch boundaries
@@ -179,31 +186,39 @@ export enum UserStatus {
 
 ### 🆕 Standardized Response Format
 
-All endpoints now return consistent response formats:
+All endpoints now return consistent `StandardResponse<T>` format:
 
 ```typescript
-// Standard API Response for data retrieval
+// Standard Response Format (used across all endpoints)
 {
   "success": boolean,
   "message": string,
-  "data": T,
-  "meta": {
-    "timestamp": string,
-    "requestId": string,
-    "pagination": {
-      "page": number,
-      "limit": number,
-      "total": number,
-      "totalPages": number
-    }
+  "data": T
+}
+
+// Examples:
+// User Creation Response
+{
+  "success": true,
+  "message": "User created successfully",
+  "data": { "email": "user@example.com" }
+}
+
+// User List Response
+{
+  "success": true,
+  "message": "Users retrieved successfully", 
+  "data": {
+    "users": [...],
+    "pagination": { "currentPage": 1, "totalPages": 5, "totalUsers": 95, "hasNext": true, "hasPrev": false }
   }
 }
 
-// Standard Operation Response for actions
+// User Profile Response
 {
-  "message": string,
-  "status": "success" | "error" | "warning" | "info" | "debug",
-  "code": number
+  "success": true,
+  "message": "Profile retrieved successfully",
+  "data": { /* UserProfile object */ }
 }
 ```
 
@@ -318,22 +333,55 @@ All endpoints now return consistent response formats:
 }
 ```
 
-### User Management (Admin Operations)
+### 🔐 Role-Protected User Management
 
-#### `GET /users` 🔒 Admin Only
+#### `POST /user` 🔒 @AdminOnly() - Same Organization, Cross-Branch Access
 
-**List All Users with Filtering**
+**Create New User with Organization Scope**
+
+Creates users in the same organization with automatic scope assignment. Supports cross-branch user creation for admins and owners.
 
 ```typescript
-// Query Parameters
-?page=1&limit=20&search=john&role=user&status=active&orgId=org-123
+// Request (organization/branch automatically assigned from admin's scope)
+{
+  "email": "newuser@example.com",
+  "password": "SecurePass123!",
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "role": "user"
+}
 
-// Response
+// StandardResponse
 {
   "success": true,
+  "message": "User created successfully",
+  "data": { "email": "newuser@example.com" }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can create users in any organization/branch
+- **Admin**: Can create users within their organization (any branch)
+- **Owner**: Can create users within their organization (any branch)
+- **User**: Cannot create users
+
+#### `GET /user/admin/all` 🔒 @AdminOnly(true) - Cross-Organization Access
+
+**List All Users with Advanced Filtering**
+
+Provides comprehensive user listing with role-based visibility. Deleted users are visible to Brandon and Admin roles only.
+
+```typescript
+// Query Parameters  
+?page=1&limit=20&search=john&role=user&status=active
+
+// StandardResponse with Pagination
+{
+  "success": true,
+  "message": "Users retrieved successfully",
   "data": {
     "users": [
-      { /* User objects */ }
+      { /* User objects with organization/branch context */ }
     ],
     "pagination": {
       "currentPage": 1,
@@ -345,6 +393,135 @@ All endpoints now return consistent response formats:
   }
 }
 ```
+
+**Visibility Rules:**
+- **Brandon**: Can see all users across all organizations (including deleted)
+- **Admin**: Can see all users across all organizations (including deleted)
+- **Owner**: Can see users within their organization only
+- **User**: Can see active users within their organization only
+
+#### `GET /user/admin/:id` 🔒 @OwnerOrAdmin(true) - Cross-Organization Access
+
+**Get Specific User Details**
+
+Retrieves detailed user information with organization/branch context.
+
+```typescript
+// StandardResponse
+{
+  "success": true,
+  "message": "User retrieved successfully",
+  "data": {
+    "id": "user-uuid",
+    "email": "user@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "role": "user",
+    "status": "active",
+    "organization": { /* Organization details */ },
+    "branch": { /* Branch details */ },
+    "createdAt": "2025-01-01T00:00:00Z"
+  }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can view any user globally
+- **Admin**: Can view any user globally
+- **Owner**: Can view users within their organization
+- **User**: Cannot access this endpoint
+
+#### `PUT /user/admin/:id` 🔒 @OwnerOrAdmin() - Same Organization Only
+
+**Update User Details**
+
+Updates user information within organizational boundaries with cross-branch support.
+
+```typescript
+// Request
+{
+  "firstName": "Jane", 
+  "lastName": "Smith",
+  "role": "admin"
+}
+
+// StandardResponse
+{
+  "success": true,
+  "message": "User updated successfully",
+  "data": { "id": "user-uuid", "email": "user@example.com" }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can edit any user globally
+- **Admin**: Can edit users within their organization (cross-branch)
+- **Owner**: Can edit users within their organization (cross-branch)
+
+#### `DELETE /user/admin/:id` 🔒 @AdminOnly() - Same Organization Only
+
+**Soft Delete User**
+
+Performs soft deletion maintaining audit trail with scope enforcement.
+
+```typescript
+// StandardResponse
+{
+  "success": true,
+  "message": "User deleted successfully", 
+  "data": { "id": "user-uuid", "deletedBy": "admin-uuid" }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can delete any user globally
+- **Admin**: Can delete users within their organization (cross-branch)
+- **Owner**: Cannot delete users (unless also admin)
+
+#### `GET /user/admin/deleted` 🔒 @AdminOnly(true) - Cross-Organization Access
+
+**Get Deleted Users**
+
+Retrieves soft-deleted users for audit and restoration purposes.
+
+```typescript
+// StandardResponse
+{
+  "success": true,
+  "message": "Deleted users retrieved successfully",
+  "data": {
+    "users": [
+      { /* Deleted user objects with deletion metadata */ }
+    ],
+    "count": 5
+  }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can view deleted users globally
+- **Admin**: Can view deleted users globally
+- **Owner/User**: Cannot access deleted users
+
+#### `PATCH /user/admin/restore/:userId` 🔒 @AdminOnly(true) - Cross-Organization Access
+
+**Restore Deleted User**
+
+Restores soft-deleted user accounts with audit logging.
+
+```typescript
+// StandardResponse
+{
+  "success": true,
+  "message": "User account restored successfully",
+  "data": { "id": "user-uuid", "restoredBy": "admin-uuid" }
+}
+```
+
+**Access Control:**
+- **Brandon**: Can restore any deleted user globally
+- **Admin**: Can restore any deleted user globally
+- **Owner/User**: Cannot restore users
 
 #### `GET /users/:id` 🔒 Admin Only
 
@@ -560,7 +737,7 @@ async changePassword(id: string, currentPassword: string, newPassword: string): 
 async softDelete(userId: string, deactivatedBy?: string): Promise<StandardOperationResponse>
 ```
 
-#### 🆕 Enhanced Organization & Scope Operations
+#### 🆕 Enhanced Organization & Cross-Branch Operations
 
 ```typescript
 // Find with full org/branch details and scoped caching
@@ -569,23 +746,29 @@ async findByEmailWithFullDetails(email: string): Promise<User | null>
 // Assign organization and branch with scope validation
 async assignOrgAndBranch(userId: string, orgId?: string, branchId?: string): Promise<StandardOperationResponse>
 
-// Scoped user search with organization/branch filtering and admin visibility
+// 🆕 Cross-branch user search with organization filtering and role-based visibility
 async findAllWithFilters(
     filters: UserFilterDto,
     scope?: { 
         orgId?: string; 
-        branchId?: string; 
+        branchId?: string; // Optional - when omitted enables cross-branch access
         userId: string; 
-        userRole?: string; // 🆕 Enables deleted user visibility for brandon/admin
+        userRole?: string; // Enables deleted user visibility for brandon/admin
     },
 ): Promise<{ users: User[]; total: number; totalPages: number }>
 
-// Organization-scoped user retrieval
+// Organization-scoped user retrieval (all branches within org)
 async findByOrganization(orgId: string): Promise<User[]>
 
-// Branch-scoped user retrieval
+// Branch-specific user retrieval (single branch only)
 async findByBranch(branchId: string): Promise<User[]>
 ```
+
+**Scope-Based Access Control:**
+- **Same Organization, Cross-Branch**: Admins and Owners can access users across all branches within their organization
+- **Branch-Specific**: When branchId is provided in scope, access is restricted to that specific branch
+- **Global Access**: Brandon role bypasses all scope restrictions
+- **Deleted User Visibility**: Only Brandon and Admin roles can see soft-deleted users
 
 ### 🆕 Enhanced Caching Strategy
 

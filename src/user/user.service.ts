@@ -508,7 +508,8 @@ export class UserService {
         },
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const { avatar, password, ...userData } = createUserDto;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { avatar, password, branchId, ...userData } = createUserDto;
             const userToCreate: Partial<User> = { ...userData };
 
             // Hash password before saving
@@ -763,11 +764,17 @@ export class UserService {
                     orgId: scope?.orgId || filters.orgId,
                 });
             }
-            if (scope?.branchId || filters.branchId) {
+
+            // 🆕 Enhanced branch scoping logic for cross-branch access
+            // Only apply branch filter if explicitly provided in filters
+            // This allows admins/owners to see users across all branches in their org
+            if (filters.branchId) {
                 queryBuilder.andWhere('user.branchId = :branchId', {
-                    branchId: scope?.branchId || filters.branchId,
+                    branchId: filters.branchId,
                 });
             }
+            // Note: scope.branchId is intentionally not used here to enable cross-branch access
+            // Only filter-based branchId is respected for explicit branch filtering
 
             // Apply role filter
             if (filters.role) {
@@ -1138,7 +1145,8 @@ export class UserService {
             userRole?: string;
         },
     ): Promise<StandardOperationResponse> {
-        const { avatar, ...updateData } = updateUserDto;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { avatar, branchId, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
         // Get user first to know email for cache invalidation
@@ -1252,7 +1260,8 @@ export class UserService {
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             try {
-                const { avatar, ...profileData } = updateData;
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                const { avatar, branchId, ...profileData } = updateData;
                 const dataToUpdate: Partial<User> = { ...profileData };
 
                 // Get user first for cache invalidation and event data

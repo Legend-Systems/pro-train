@@ -411,6 +411,9 @@ export class CourseService {
                         creator: creatorDto,
                         testCount,
                         studentCount,
+                        isActive: course.status === CourseStatus.ACTIVE,
+                        isPublished: course.status === CourseStatus.ACTIVE, // For now, treating active as published
+                        enrollmentCount: studentCount,
                     };
                 }),
             );
@@ -479,6 +482,11 @@ export class CourseService {
                 'course.courseMaterials',
                 'courseMaterials',
             );
+            query.leftJoinAndSelect('courseMaterials.mediaFile', 'mediaFile');
+            query.leftJoinAndSelect(
+                'courseMaterials.creator',
+                'materialCreator',
+            );
             query.where('course.courseId = :id', { id });
 
             // Filter by status - only show active courses by default
@@ -496,11 +504,30 @@ export class CourseService {
                 });
             }
 
+            this.logger.debug(`Executing query for course ${id} with scope:`, {
+                orgId: scope?.orgId,
+                branchId: scope?.branchId,
+                userId: scope?.userId
+            });
+
             const course = await query.getOne();
 
             if (!course) {
+                this.logger.warn(`Course ${id} not found in database`, {
+                    scope: scope,
+                    queryConditions: 'status=ACTIVE with org/branch filters'
+                });
                 return null;
             }
+
+            this.logger.debug(`Course ${id} found in database:`, {
+                courseId: course.courseId,
+                title: course.title,
+                status: course.status,
+                createdBy: course.createdBy,
+                orgId: course.orgId?.id,
+                branchId: course.branchId?.id
+            });
 
             // Get statistics with caching
             const stats = await this.getStats(id);
@@ -521,6 +548,9 @@ export class CourseService {
                 creator: creatorDto,
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
+                isActive: course.status === CourseStatus.ACTIVE,
+                isPublished: course.status === CourseStatus.ACTIVE,
+                enrollmentCount: stats.uniqueStudents,
                 statistics: {
                     totalTests: stats.totalTests,
                     activeTests: stats.activeTests,
@@ -543,6 +573,16 @@ export class CourseService {
                     error,
                 );
             }
+
+            this.logger.log(`Course ${id} details retrieved successfully:`, {
+                courseId: result.courseId,
+                title: result.title,
+                status: result.status,
+                isActive: result.isActive,
+                createdBy: result.createdBy,
+                testCount: result.testCount,
+                studentCount: result.studentCount
+            });
 
             return result;
         });
@@ -840,7 +880,14 @@ export class CourseService {
 
             const course = await this.courseRepository.findOne({
                 where: { courseId: id, status: CourseStatus.ACTIVE },
-                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
+                relations: [
+                    'creator',
+                    'orgId',
+                    'branchId',
+                    'courseMaterials',
+                    'courseMaterials.mediaFile',
+                    'courseMaterials.creator',
+                ],
             });
 
             if (course) {
@@ -1085,7 +1132,14 @@ export class CourseService {
         return this.retryService.executeDatabase(async () => {
             const course = await this.courseRepository.findOne({
                 where: { courseId: id },
-                relations: ['creator', 'orgId', 'branchId', 'courseMaterials'],
+                relations: [
+                    'creator',
+                    'orgId',
+                    'branchId',
+                    'courseMaterials',
+                    'courseMaterials.mediaFile',
+                    'courseMaterials.creator',
+                ],
             });
 
             return course;

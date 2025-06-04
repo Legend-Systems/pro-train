@@ -3,6 +3,7 @@ import {
     Post,
     Get,
     Delete,
+    Put,
     Param,
     Query,
     UseGuards,
@@ -38,6 +39,7 @@ import {
     BulkUploadDto,
     FileFilterDto,
 } from './dto/upload-file.dto';
+import { EditMediaDto, EditMediaResponseDto } from './dto/edit-media.dto';
 import {
     MediaFileResponseDto,
     MediaFileListResponseDto,
@@ -1081,6 +1083,203 @@ export class MediaManagerController {
         } catch (error) {
             this.logger.error(
                 `Error restoring file ${id} for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Put(':id/edit')
+    @ApiOperation({
+        summary: '✏️ Edit Media File',
+        description: `
+      **Update metadata and properties of an existing media file**
+      
+      This endpoint allows file owners to edit metadata without changing the actual file:
+      - Update alt text for better accessibility
+      - Modify description and categorization
+      - Change file designation and purpose
+      - Add or update custom metadata
+      
+      **Editable Properties:**
+      - Alternative text for images
+      - File description and caption
+      - File designation (purpose/category)
+      - Custom metadata and tags
+      
+      **Important Notes:**
+      - Only file uploader can edit their files
+      - Original file and variants remain unchanged
+      - All references and links stay intact
+      - Changes are immediately visible
+      
+      **Use Cases:**
+      - Improve accessibility with better alt text
+      - Update file categorization
+      - Add tags and custom metadata
+      - Correct file descriptions
+    `,
+        operationId: 'editMediaFile',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Media file unique identifier',
+        example: 1,
+        type: 'number',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Media file updated successfully',
+        type: EditMediaResponseDto,
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ File not found',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '❌ Access denied - Not file owner',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    async editMedia(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() editDto: EditMediaDto,
+        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<EditMediaResponseDto> {
+        try {
+            this.logger.log(
+                `Editing media file ${id} for user: ${req.user.id}`,
+            );
+
+            const result = await this.mediaService.editMedia(
+                id,
+                editDto,
+                req.user.id,
+                scope,
+            );
+
+            this.logger.log(`Media file ${id} edited successfully`);
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error editing media file ${id} for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Put('bulk-edit')
+    @ApiOperation({
+        summary: '✏️ Bulk Edit Media Files',
+        description: `
+      **Update metadata for multiple media files simultaneously**
+      
+      This endpoint allows batch editing of multiple files with the same changes:
+      - Apply same metadata updates to multiple files
+      - Efficient batch operations
+      - Individual file validation
+      - Detailed success/failure reporting
+      
+      **Batch Features:**
+      - Process multiple files at once
+      - Individual ownership validation
+      - Partial success handling
+      - Comprehensive error reporting
+      
+      **Common Use Cases:**
+      - Bulk tagging of related files
+      - Mass categorization updates
+      - Batch designation changes
+      - Group metadata assignments
+    `,
+        operationId: 'bulkEditMediaFiles',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Bulk edit completed (check individual file status)',
+        schema: {
+            type: 'object',
+            properties: {
+                message: {
+                    type: 'string',
+                    example: 'Bulk edit completed: 3/5 files updated',
+                },
+                status: { type: 'string', example: 'success' },
+                code: { type: 'number', example: 200 },
+                data: {
+                    type: 'object',
+                    properties: {
+                        updated: {
+                            type: 'array',
+                            items: {
+                                $ref: '#/components/schemas/MediaFileResponseDto',
+                            },
+                        },
+                        errors: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    fileId: { type: 'number' },
+                                    error: { type: 'string' },
+                                },
+                            },
+                        },
+                        total: { type: 'number' },
+                        successful: { type: 'number' },
+                        failed: { type: 'number' },
+                    },
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid request or no file IDs provided',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    async bulkEditMedia(
+        @Body()
+        bulkEditDto: {
+            fileIds: number[];
+            editData: EditMediaDto;
+        },
+        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ) {
+        try {
+            if (!bulkEditDto.fileIds || bulkEditDto.fileIds.length === 0) {
+                throw new BadRequestException('No file IDs provided');
+            }
+
+            this.logger.log(
+                `Bulk editing ${bulkEditDto.fileIds.length} files for user: ${req.user.id}`,
+            );
+
+            const result = await this.mediaService.bulkEditMedia(
+                bulkEditDto.fileIds,
+                bulkEditDto.editData,
+                req.user.id,
+                scope,
+            );
+
+            this.logger.log(
+                `Bulk edit completed: ${result.data.successful}/${result.data.total} files updated`,
+            );
+
+            return result;
+        } catch (error) {
+            this.logger.error(
+                `Error in bulk edit for user ${req.user.id}:`,
                 error,
             );
             throw error;

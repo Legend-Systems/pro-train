@@ -123,7 +123,9 @@ export class Course {
     @OneToMany(() => TrainingProgress, progress => progress.course)
     trainingProgress: TrainingProgress[];
 
-    @OneToMany(() => CourseMaterial, material => material.course)
+    @OneToMany(() => CourseMaterial, material => material.course, {
+        cascade: true,
+    })
     courseMaterials: CourseMaterial[];
 
     constructor(partial: Partial<Course>) {

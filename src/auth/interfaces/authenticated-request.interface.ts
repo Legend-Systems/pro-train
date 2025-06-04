@@ -1,10 +1,14 @@
 import { Request } from 'express';
+import { UserRole } from '../../user/entities/user.entity';
 
 export interface AuthenticatedUser {
     id: string;
     email: string;
     firstName: string;
     lastName: string;
+    role?: UserRole;
+    orgId?: string;
+    branchId?: string;
     avatar?: {
         id: number;
         originalName?: string;

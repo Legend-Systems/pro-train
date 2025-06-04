@@ -116,4 +116,16 @@ export class CreateUserDto {
     @IsOptional()
     @IsString({ message: 'Invitation token must be a string' })
     invitationToken?: string;
+
+    @ApiProperty({
+        description:
+            'Optional branch ID to assign the user to a specific branch within the organization',
+        example: 'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
+        required: false,
+        type: String,
+        title: 'Branch ID',
+    })
+    @IsOptional()
+    @IsString({ message: 'Branch ID must be a string' })
+    branchId?: string;
 }

@@ -6,6 +6,8 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { TokenManagerService } from './token-manager.service';
+import { RolesGuard } from './guards/roles.guard';
+import { OrgRoleGuard } from './guards/org-role.guard';
 import { UserModule } from '../user/user.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
@@ -29,7 +31,13 @@ import { CommunicationsModule } from '../communications/communications.module';
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, JwtStrategy, TokenManagerService],
-    exports: [AuthService, TokenManagerService],
+    providers: [
+        AuthService,
+        JwtStrategy,
+        TokenManagerService,
+        RolesGuard,
+        OrgRoleGuard,
+    ],
+    exports: [AuthService, TokenManagerService, RolesGuard, OrgRoleGuard],
 })
 export class AuthModule {}

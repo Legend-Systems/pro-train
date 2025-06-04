@@ -25,12 +25,17 @@ import {
     ApiSecurity,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OrgRoleGuard } from '../auth/guards/org-role.guard';
+import {
+    AdminOnly,
+    OwnerOrAdmin,
+} from '../auth/decorators/org-roles.decorator';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { StandardResponse } from '../common/types/standard-response.type';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserFilterDto } from './dto/user-filter.dto';
 import {
-    StandardApiResponse,
     StandardOperationResponse,
     ProfileUpdatedResponse,
     PasswordChangedResponse,
@@ -58,6 +63,8 @@ export class UserController {
     constructor(private readonly userService: UserService) {}
 
     @Post()
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly() // Only admins can create users
     @ApiOperation({
         summary: '👥 Create New User',
         description: `
@@ -123,13 +130,10 @@ export class UserController {
                 data: {
                     type: 'object',
                     properties: {
-                        id: { type: 'string', example: 'user-uuid' },
                         email: {
                             type: 'string',
                             example: 'newuser@example.com',
                         },
-                        firstName: { type: 'string', example: 'John' },
-                        lastName: { type: 'string', example: 'Doe' },
                     },
                 },
             },
@@ -171,7 +175,7 @@ export class UserController {
             userId: string;
             userRole?: string;
         },
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ email: string }>> {
         try {
             this.logger.log(`Creating new user: ${createUserDto.email}`);
 
@@ -186,16 +190,25 @@ export class UserController {
                 throw new ConflictException('Email address already in use');
             }
 
-            await this.userService.create(createUserDto, scope);
+            // Create custom scope with branch override if provided
+            const customScope = {
+                ...scope,
+                // Override branchId if provided in DTO, otherwise use scope branchId
+                branchId: createUserDto.branchId || scope.branchId,
+            };
+
+            await this.userService.create(createUserDto, customScope);
 
             this.logger.log(
                 `User created successfully: ${createUserDto.email}`,
             );
 
             return {
+                success: true,
                 message: 'User created successfully',
-                status: 'success',
-                code: 201,
+                data: {
+                    email: createUserDto.email,
+                },
             };
         } catch (error) {
             this.logger.error(
@@ -207,6 +220,8 @@ export class UserController {
     }
 
     @Get('admin/all')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Allow cross-org access for admins
     @ApiOperation({
         summary: '📋 Get All Users (Admin)',
         description: `
@@ -250,7 +265,35 @@ export class UserController {
                     properties: {
                         users: {
                             type: 'array',
-                            items: { type: 'object' },
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    id: {
+                                        type: 'string',
+                                        example: 'user-uuid',
+                                    },
+                                    email: {
+                                        type: 'string',
+                                        example: 'user@example.com',
+                                    },
+                                    firstName: {
+                                        type: 'string',
+                                        example: 'John',
+                                    },
+                                    lastName: {
+                                        type: 'string',
+                                        example: 'Doe',
+                                    },
+                                    role: {
+                                        type: 'string',
+                                        example: 'user',
+                                    },
+                                    createdAt: {
+                                        type: 'string',
+                                        example: '2024-01-01T00:00:00Z',
+                                    },
+                                },
+                            },
                         },
                         pagination: {
                             type: 'object',
@@ -276,7 +319,18 @@ export class UserController {
             userId: string;
             userRole?: string;
         },
-    ): Promise<StandardApiResponse> {
+    ): Promise<
+        StandardResponse<{
+            users: any[];
+            pagination: {
+                currentPage: number;
+                totalPages: number;
+                totalUsers: number;
+                hasNext: boolean;
+                hasPrev: boolean;
+            };
+        }>
+    > {
         try {
             this.logger.log(
                 `Getting all users - page: ${filters.page || 1}, limit: ${filters.limit || 20}`,
@@ -320,6 +374,8 @@ export class UserController {
     }
 
     @Get('admin/:id')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin(true) // Allow cross-org access for owners/admins
     @ApiOperation({
         summary: '👤 Get User by ID (Admin)',
         description: `
@@ -350,7 +406,26 @@ export class UserController {
                     type: 'string',
                     example: 'User retrieved successfully',
                 },
-                data: { type: 'object' },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', example: 'user-uuid' },
+                        email: { type: 'string', example: 'user@example.com' },
+                        firstName: { type: 'string', example: 'John' },
+                        lastName: { type: 'string', example: 'Doe' },
+                        role: { type: 'string', example: 'user' },
+                        orgId: { type: 'string', example: 'org-uuid' },
+                        branchId: { type: 'string', example: 'branch-uuid' },
+                        createdAt: {
+                            type: 'string',
+                            example: '2024-01-01T00:00:00Z',
+                        },
+                        updatedAt: {
+                            type: 'string',
+                            example: '2024-01-01T00:00:00Z',
+                        },
+                    },
+                },
             },
         },
     })
@@ -362,11 +437,11 @@ export class UserController {
             properties: {
                 success: { type: 'boolean', example: false },
                 message: { type: 'string', example: 'User not found' },
-                data: { type: 'null' },
+                data: { type: 'null', example: null },
             },
         },
     })
-    async getUserById(@Param('id') id: string): Promise<StandardApiResponse> {
+    async getUserById(@Param('id') id: string): Promise<StandardResponse<any>> {
         try {
             this.logger.log(`Getting user by ID: ${id}`);
 
@@ -399,6 +474,8 @@ export class UserController {
     }
 
     @Put('admin/:id')
+    @UseGuards(OrgRoleGuard)
+    @OwnerOrAdmin() // Owners/admins can update users within their org
     @ApiOperation({
         summary: '✏️ Update User by ID (Admin)',
         description: `
@@ -446,7 +523,7 @@ export class UserController {
             userId: string;
             userRole?: string;
         },
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string; email: string }>> {
         try {
             this.logger.log(`Updating user by ID: ${id}`);
 
@@ -475,11 +552,18 @@ export class UserController {
                 );
             }
 
-            const result = await this.userService.update(id, updateData, scope);
+            await this.userService.update(id, updateData, scope);
 
             this.logger.log(`User updated successfully: ${id}`);
 
-            return result;
+            return {
+                success: true,
+                message: 'User updated successfully',
+                data: {
+                    id,
+                    email: updateUserDto.email || 'Email not updated',
+                },
+            };
         } catch (error) {
             this.logger.error(`Error updating user ${id}:`, error);
             throw error;
@@ -487,6 +571,8 @@ export class UserController {
     }
 
     @Delete('admin/:id')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly() // Only admins can delete users
     @ApiOperation({
         summary: '🗑️ Delete User by ID (Admin)',
         description: `
@@ -518,15 +604,22 @@ export class UserController {
     async deleteUserById(
         @Request() req: AuthenticatedRequest,
         @Param('id') id: string,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string; deletedBy: string }>> {
         try {
             this.logger.log(`Admin ${req.user.id} deleting user: ${id}`);
 
-            const result = await this.userService.softDelete(id, req.user.id);
+            await this.userService.softDelete(id, req.user.id);
 
             this.logger.log(`User deleted successfully by admin: ${id}`);
 
-            return result;
+            return {
+                success: true,
+                message: 'User deleted successfully',
+                data: {
+                    id,
+                    deletedBy: req.user.id,
+                },
+            };
         } catch (error) {
             this.logger.error(`Error deleting user ${id}:`, error);
             throw error;
@@ -657,7 +750,7 @@ export class UserController {
     })
     async getProfile(
         @Request() req: AuthenticatedRequest,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardResponse<any>> {
         try {
             this.logger.log(`Getting profile for user: ${req.user.id}`);
 
@@ -828,7 +921,7 @@ export class UserController {
     async updateProfile(
         @Request() req: AuthenticatedRequest,
         @Body() updateUserDto: UpdateUserDto,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string }>> {
         try {
             this.logger.log(`Updating profile for user: ${req.user.id}`);
 
@@ -857,16 +950,19 @@ export class UserController {
                 );
             }
 
-            const result = await this.userService.updateProfile(
-                req.user.id,
-                updateData,
-            );
+            await this.userService.updateProfile(req.user.id, updateData);
 
             this.logger.log(
                 `Profile updated successfully for user: ${req.user.id}`,
             );
 
-            return result;
+            return {
+                success: true,
+                message: 'Profile updated successfully',
+                data: {
+                    id: req.user.id,
+                },
+            };
         } catch (error) {
             this.logger.error(
                 `Error updating profile for user ${req.user.id}:`,
@@ -977,7 +1073,7 @@ export class UserController {
     async changePassword(
         @Request() req: AuthenticatedRequest,
         @Body() changePasswordDto: ChangePasswordDto,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string }>> {
         try {
             this.logger.log(`Changing password for user: ${req.user.id}`);
 
@@ -1000,7 +1096,13 @@ export class UserController {
                 `Password changed successfully for user: ${req.user.id}`,
             );
 
-            return result;
+            return {
+                success: true,
+                message: 'Password changed successfully',
+                data: {
+                    id: req.user.id,
+                },
+            };
         } catch (error) {
             this.logger.error(
                 `Error changing password for user ${req.user.id}:`,
@@ -1074,18 +1176,22 @@ export class UserController {
     })
     async softDeleteUser(
         @Request() req: AuthenticatedRequest,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string; status: string }>> {
         try {
             this.logger.log(`Soft deleting user: ${req.user.id}`);
 
-            const result = await this.userService.softDelete(
-                req.user.id,
-                req.user.id,
-            );
+            await this.userService.softDelete(req.user.id, req.user.id);
 
             this.logger.log(`User soft deleted successfully: ${req.user.id}`);
 
-            return result;
+            return {
+                success: true,
+                message: 'User account soft deleted successfully',
+                data: {
+                    id: req.user.id,
+                    status: 'DELETED',
+                },
+            };
         } catch (error) {
             this.logger.error(
                 `Error soft deleting user ${req.user.id}:`,
@@ -1159,18 +1265,22 @@ export class UserController {
     })
     async restoreUser(
         @Request() req: AuthenticatedRequest,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string; status: string }>> {
         try {
             this.logger.log(`Restoring user: ${req.user.id}`);
 
-            const result = await this.userService.restoreUser(
-                req.user.id,
-                req.user.id,
-            );
+            await this.userService.restoreUser(req.user.id, req.user.id);
 
             this.logger.log(`User restored successfully: ${req.user.id}`);
 
-            return result;
+            return {
+                success: true,
+                message: 'User account restored successfully',
+                data: {
+                    id: req.user.id,
+                    status: 'ACTIVE',
+                },
+            };
         } catch (error) {
             this.logger.error(`Error restoring user ${req.user.id}:`, error);
             throw error;
@@ -1178,6 +1288,8 @@ export class UserController {
     }
 
     @Get('admin/deleted')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Allow cross-org access for admins
     @ApiOperation({
         summary: '📋 Get Deleted Users (Admin)',
         description: `
@@ -1218,11 +1330,21 @@ export class UserController {
                     description: 'Success confirmation message',
                 },
                 data: {
-                    type: 'array',
-                    description: 'List of soft-deleted users',
-                    items: {
-                        type: 'object',
-                        description: 'Deleted user profile data',
+                    type: 'object',
+                    properties: {
+                        users: {
+                            type: 'array',
+                            description: 'List of soft-deleted users',
+                            items: {
+                                type: 'object',
+                                description: 'Deleted user profile data',
+                            },
+                        },
+                        count: {
+                            type: 'number',
+                            example: 5,
+                            description: 'Total number of deleted users',
+                        },
                     },
                 },
             },
@@ -1241,7 +1363,7 @@ export class UserController {
     })
     async adminGetDeletedUsers(
         @Request() req: AuthenticatedRequest,
-    ): Promise<StandardApiResponse> {
+    ): Promise<StandardResponse<{ users: any[]; count: number }>> {
         try {
             this.logger.log(`Getting deleted users for admin: ${req.user.id}`);
 
@@ -1261,7 +1383,10 @@ export class UserController {
             return {
                 success: true,
                 message: 'Deleted users retrieved successfully',
-                data: sanitizedUsers,
+                data: {
+                    users: sanitizedUsers,
+                    count: sanitizedUsers.length,
+                },
             };
         } catch (error) {
             this.logger.error(
@@ -1273,6 +1398,8 @@ export class UserController {
     }
 
     @Patch('admin/restore/:userId')
+    @UseGuards(OrgRoleGuard)
+    @AdminOnly(true) // Allow cross-org access for admins
     @ApiOperation({
         summary: '♻️ Restore User by ID (Admin)',
         description: `
@@ -1300,7 +1427,37 @@ export class UserController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ User account restored successfully by admin',
-        type: UserRestoredResponse,
+        schema: {
+            type: 'object',
+            properties: {
+                success: {
+                    type: 'boolean',
+                    example: true,
+                    description: 'Operation success status',
+                },
+                message: {
+                    type: 'string',
+                    example: 'User account restored successfully',
+                    description: 'Success confirmation message',
+                },
+                data: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            example: 'uuid-user-id',
+                            description: 'ID of the restored user',
+                        },
+                        restoredBy: {
+                            type: 'string',
+                            example: 'uuid-admin-id',
+                            description:
+                                'ID of the admin who restored the user',
+                        },
+                    },
+                },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
@@ -1358,20 +1515,24 @@ export class UserController {
     async adminRestoreUser(
         @Request() req: AuthenticatedRequest,
         @Param('userId') userId: string,
-    ): Promise<StandardOperationResponse> {
+    ): Promise<StandardResponse<{ id: string; restoredBy: string }>> {
         try {
             this.logger.log(`Admin ${req.user.id} restoring user: ${userId}`);
 
-            const result = await this.userService.restoreUser(
-                userId,
-                req.user.id,
-            );
+            await this.userService.restoreUser(userId, req.user.id);
 
             this.logger.log(
                 `User ${userId} restored successfully by admin: ${req.user.id}`,
             );
 
-            return result;
+            return {
+                success: true,
+                message: 'User account restored successfully',
+                data: {
+                    id: userId,
+                    restoredBy: req.user.id,
+                },
+            };
         } catch (error) {
             this.logger.error(
                 `Error restoring user ${userId} by admin ${req.user.id}:`,
