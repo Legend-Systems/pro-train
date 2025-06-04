@@ -270,8 +270,8 @@ export class CommunicationsService {
                 emailType: EmailType.WELCOME_USER,
                 templateUsed: 'welcome-user',
                 status: EmailStatus.PENDING,
-                orgId: organizationId ? { id: organizationId } as any : null,
-                branchId: branchId ? { id: branchId } as any : null,
+                orgId: organizationId ? ({ id: organizationId } as any) : null,
+                branchId: branchId ? ({ id: branchId } as any) : null,
                 metadata: {
                     userId,
                     firstName,

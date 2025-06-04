@@ -3,6 +3,7 @@ import {
     NotFoundException,
     BadRequestException,
     Inject,
+    Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +12,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserFilterDto } from './dto/user-filter.dto';
 import { StandardOperationResponse } from './dto/common-response.dto';
 import { User, UserStatus } from './entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
@@ -29,20 +31,39 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
-    // Cache keys
+    private readonly logger = new Logger(UserService.name);
+
+    // Cache keys with comprehensive coverage and org/branch scope
     private readonly CACHE_KEYS = {
-        USER_BY_ID: (id: string) => `user:id:${id}`,
-        USER_BY_EMAIL: (email: string) => `user:email:${email}`,
-        USER_ORG: (orgId: string) => `user:org:${orgId}`,
-        USER_BRANCH: (branchId: string) => `user:branch:${branchId}`,
-        USER_AVATAR_VARIANTS: (avatarId: number) => `user:avatar:${avatarId}`,
+        USER_BY_ID: (id: string, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:id:${id}`,
+        USER_BY_EMAIL: (email: string, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:email:${email}`,
+        USERS_LIST: (filters: string, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:users:list:${filters}`,
+        USERS_BY_ORG: (orgId: string, filters: string, branchId?: string) =>
+            `org:${orgId}:branch:${branchId || 'global'}:users:org:${filters}`,
+        USERS_BY_BRANCH: (branchId: string, filters: string, orgId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId}:users:branch:${filters}`,
+        USER_AVATAR_VARIANTS: (
+            avatarId: number,
+            orgId?: string,
+            branchId?: string,
+        ) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:avatar:${avatarId}`,
+        ALL_USERS: (orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:users:all`,
+        USER_DETAIL: (id: string, orgId?: string, branchId?: string) =>
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:detail:${id}`,
     };
 
-    // Cache TTL in seconds
+    // Cache TTL in seconds with different durations for different data types
     private readonly CACHE_TTL = {
         USER: 300, // 5 minutes
         USER_LIST: 180, // 3 minutes
+        USER_DETAIL: 300, // 5 minutes
         AVATAR_VARIANTS: 600, // 10 minutes
+        USERS_ALL: 900, // 15 minutes
     };
 
     constructor(
@@ -62,21 +83,81 @@ export class UserService {
     private async invalidateUserCache(
         userId: string,
         email?: string,
+        orgId?: string,
+        branchId?: string,
     ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.USER_BY_ID(userId)];
+        const keysToDelete = [
+            this.CACHE_KEYS.USER_BY_ID(userId, orgId, branchId),
+        ];
 
         if (email) {
-            keysToDelete.push(this.CACHE_KEYS.USER_BY_EMAIL(email));
+            keysToDelete.push(
+                this.CACHE_KEYS.USER_BY_EMAIL(email, orgId, branchId),
+            );
         }
 
-        await Promise.all(keysToDelete.map(key => this.cacheManager.del(key)));
+        // Also invalidate list cache
+        keysToDelete.push(this.CACHE_KEYS.USERS_LIST('', orgId, branchId));
+
+        await Promise.all(
+            keysToDelete.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
     }
 
-    private async invalidateUserListCaches(): Promise<void> {
-        // Note: This is a simplified approach. In production, you might want to
-        // maintain a list of active org/branch cache keys or use cache tags
-        // For now, we'll just clear specific pattern-based keys
-        // await this.cacheManager.reset(); // This method might not exist in all cache implementations
+    private async invalidateUserListCaches(
+        orgId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        // Clear general user list caches
+        const keysToInvalidate = [this.CACHE_KEYS.ALL_USERS(orgId, branchId)];
+
+        await Promise.all(
+            keysToInvalidate.map(async key => {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete cache key ${key}:`,
+                        error,
+                    );
+                }
+            }),
+        );
+
+        // Note: In production, consider implementing cache tags or maintaining
+        // a registry of active cache keys for more granular invalidation
+    }
+
+    private generateCacheKeyForUsers(
+        filters?: UserFilterDto,
+        prefix: string = 'list',
+        orgId?: string,
+        branchId?: string,
+    ): string {
+        const filterKey = JSON.stringify({
+            search: filters?.search,
+            status: filters?.status,
+            role: filters?.role,
+            page: filters?.page,
+            limit: filters?.limit,
+            orgId: filters?.orgId,
+            branchId: filters?.branchId,
+        });
+
+        return this.CACHE_KEYS.USERS_LIST(
+            `${prefix}:${filterKey}`,
+            orgId,
+            branchId,
+        );
     }
 
     async create(
@@ -109,7 +190,7 @@ export class UserService {
             const savedUser = await this.userRepository.save(user);
 
             // Invalidate list caches since a new user was created
-            await this.invalidateUserListCaches();
+            await this.invalidateUserListCaches(scope?.orgId, scope?.branchId);
 
             // Emit user created event with organization and branch information
             this.eventEmitter.emit(
@@ -141,9 +222,11 @@ export class UserService {
     private async loadAvatarVariants(user: User): Promise<User> {
         if (user.avatar?.id) {
             try {
-                // Check cache first for avatar variants
+                // Check cache first for avatar variants - using org/branch scoped key
                 const cacheKey = this.CACHE_KEYS.USER_AVATAR_VARIANTS(
                     user.avatar.id,
+                    user.orgId?.id,
+                    user.branchId?.id,
                 );
                 const cachedVariants =
                     await this.cacheManager.get<any[]>(cacheKey);
@@ -171,7 +254,7 @@ export class UserService {
                     }
                 }
             } catch (error) {
-                console.warn('Failed to load avatar variants:', error);
+                this.logger.warn('Failed to load avatar variants:', error);
             }
         }
         return user;
@@ -183,25 +266,145 @@ export class UserService {
         userId: string;
     }): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
-            const whereCondition: any = { status: UserStatus.ACTIVE };
+            // Build query with proper scoping
+            const queryBuilder = this.userRepository
+                .createQueryBuilder('user')
+                .leftJoinAndSelect('user.orgId', 'org')
+                .leftJoinAndSelect('user.branchId', 'branch')
+                .leftJoinAndSelect('user.avatar', 'avatar')
+                .where('user.status = :status', { status: UserStatus.ACTIVE });
 
             // Apply org/branch scoping if provided
             if (scope?.orgId) {
-                whereCondition.orgId = { id: scope.orgId };
+                queryBuilder.andWhere('user.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
             }
             if (scope?.branchId) {
-                whereCondition.branchId = { id: scope.branchId };
+                queryBuilder.andWhere('user.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
             }
 
-            const users = await this.userRepository.find({
-                where: whereCondition,
-                relations: ['orgId', 'branchId', 'avatar'],
-            });
+            const users = await queryBuilder.getMany();
 
             // Load avatar variants for all users
             return Promise.all(
                 users.map(user => this.loadAvatarVariants(user)),
             );
+        });
+    }
+
+    /**
+     * Find users with filters and pagination - compliant with module standards
+     */
+    async findAllWithFilters(
+        filters: UserFilterDto,
+        scope?: { orgId?: string; branchId?: string; userId: string },
+    ): Promise<{ users: User[]; total: number; totalPages: number }> {
+        return this.retryService.executeDatabase(async () => {
+            // Check cache first
+            const cacheKey = this.generateCacheKeyForUsers(
+                filters,
+                'all',
+                scope?.orgId,
+                scope?.branchId,
+            );
+
+            try {
+                const cachedResult = await this.cacheManager.get<{
+                    users: User[];
+                    total: number;
+                    totalPages: number;
+                }>(cacheKey);
+
+                if (cachedResult) {
+                    this.logger.debug(`Cache hit for user list: ${cacheKey}`);
+                    return cachedResult;
+                }
+            } catch (error) {
+                this.logger.warn(
+                    `Cache get failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            // Build query using TypeORM QueryBuilder for proper type safety
+            const queryBuilder = this.userRepository
+                .createQueryBuilder('user')
+                .leftJoinAndSelect('user.orgId', 'org')
+                .leftJoinAndSelect('user.branchId', 'branch')
+                .leftJoinAndSelect('user.avatar', 'avatar');
+
+            // Apply where conditions properly
+            queryBuilder.where('user.status = :status', {
+                status: filters.status || UserStatus.ACTIVE,
+            });
+
+            // Apply org/branch scoping - scope takes precedence over filter
+            if (scope?.orgId || filters.orgId) {
+                queryBuilder.andWhere('user.orgId = :orgId', {
+                    orgId: scope?.orgId || filters.orgId,
+                });
+            }
+            if (scope?.branchId || filters.branchId) {
+                queryBuilder.andWhere('user.branchId = :branchId', {
+                    branchId: scope?.branchId || filters.branchId,
+                });
+            }
+
+            // Apply role filter
+            if (filters.role) {
+                queryBuilder.andWhere('user.role = :role', {
+                    role: filters.role,
+                });
+            }
+
+            // Apply search filter
+            if (filters.search) {
+                queryBuilder.andWhere(
+                    '(user.firstName ILIKE :search OR user.lastName ILIKE :search OR user.email ILIKE :search)',
+                    { search: `%${filters.search}%` },
+                );
+            }
+
+            // Get total count
+            const total = await queryBuilder.getCount();
+
+            // Apply pagination
+            const page = filters.page || 1;
+            const limit = filters.limit || 20;
+            const skip = (page - 1) * limit;
+
+            queryBuilder.skip(skip).take(limit);
+
+            // Execute query
+            const users = await queryBuilder.getMany();
+
+            // Load avatar variants for all users
+            const usersWithVariants = await Promise.all(
+                users.map(user => this.loadAvatarVariants(user)),
+            );
+
+            const totalPages = Math.ceil(total / limit);
+            const result = { users: usersWithVariants, total, totalPages };
+
+            // Cache the result with error handling
+            try {
+                await this.cacheManager.set(
+                    cacheKey,
+                    result,
+                    this.CACHE_TTL.USER_LIST * 1000,
+                );
+                this.logger.debug(`Cache set for user list: ${cacheKey}`);
+            } catch (error) {
+                this.logger.warn(
+                    `Cache set failed for key ${cacheKey}:`,
+                    error,
+                );
+            }
+
+            return result;
         });
     }
 
@@ -219,19 +422,38 @@ export class UserService {
         });
     }
 
-    async findByEmail(email: string): Promise<User | null> {
+    async findByEmail(
+        email: string,
+        scope?: { orgId?: string; branchId?: string },
+    ): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
-            // Check cache first
-            const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(email);
+            // Check cache first - using org/branch scoped key
+            const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(
+                email,
+                scope?.orgId,
+                scope?.branchId,
+            );
             const cachedUser = await this.cacheManager.get<User>(cacheKey);
 
             if (cachedUser) {
                 return cachedUser;
             }
 
+            // Build where condition with org/branch scoping
+            const whereCondition: Record<string, any> = {
+                email,
+                status: UserStatus.ACTIVE,
+            };
+            if (scope?.orgId) {
+                whereCondition.orgId = { id: scope.orgId };
+            }
+            if (scope?.branchId) {
+                whereCondition.branchId = { id: scope.branchId };
+            }
+
             // If not in cache, fetch from database
             const user = await this.userRepository.findOne({
-                where: { email, status: UserStatus.ACTIVE },
+                where: whereCondition,
                 relations: ['orgId', 'branchId', 'avatar'],
             });
 
@@ -296,7 +518,7 @@ export class UserService {
     async findByOrganization(orgId: string): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.USER_ORG(orgId);
+            const cacheKey = this.CACHE_KEYS.USERS_BY_ORG(orgId, '');
             const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
 
             if (cachedUsers) {
@@ -331,7 +553,7 @@ export class UserService {
     async findByBranch(branchId: string): Promise<User[]> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
-            const cacheKey = this.CACHE_KEYS.USER_BRANCH(branchId);
+            const cacheKey = this.CACHE_KEYS.USERS_BY_BRANCH(branchId, '');
             const cachedUsers = await this.cacheManager.get<User[]>(cacheKey);
 
             if (cachedUsers) {
@@ -386,9 +608,17 @@ export class UserService {
 
         await this.userRepository.update(id, dataToUpdate);
 
-        // Invalidate user cache
-        await this.invalidateUserCache(id, existingUser.email);
-        await this.invalidateUserListCaches();
+        // Invalidate user cache with org/branch scope
+        await this.invalidateUserCache(
+            id,
+            existingUser.email,
+            scope?.orgId || existingUser.orgId?.id,
+            scope?.branchId || existingUser.branchId?.id,
+        );
+        await this.invalidateUserListCaches(
+            scope?.orgId || existingUser.orgId?.id,
+            scope?.branchId || existingUser.branchId?.id,
+        );
 
         return {
             message: 'User updated successfully',

@@ -28,7 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { UserService } from './user.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UserStatus } from './entities/user.entity';
+import { UserFilterDto } from './dto/user-filter.dto';
 import {
     StandardApiResponse,
     StandardOperationResponse,
@@ -263,74 +263,30 @@ export class UserController {
         },
     })
     async getAllUsers(
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 20,
-        @Query('search') search?: string,
-        @Query('status') status?: string,
-        @Query('orgId') orgId?: string,
-        @Query('branchId') branchId?: string,
+        @Query() filters: UserFilterDto,
         @OrgBranchScope()
         scope?: { orgId?: string; branchId?: string; userId: string },
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
-                `Getting all users - page: ${page}, limit: ${limit}`,
+                `Getting all users - page: ${filters.page || 1}, limit: ${filters.limit || 20}`,
             );
 
-            const users = await this.userService.findAll(scope);
-
-            // Filter users based on query parameters
-            let filteredUsers = users;
-
-            if (search) {
-                filteredUsers = filteredUsers.filter(
-                    user =>
-                        user.firstName
-                            .toLowerCase()
-                            .includes(search.toLowerCase()) ||
-                        user.lastName
-                            .toLowerCase()
-                            .includes(search.toLowerCase()) ||
-                        user.email.toLowerCase().includes(search.toLowerCase()),
-                );
-            }
-
-            if (status) {
-                filteredUsers = filteredUsers.filter(
-                    user => user?.status === (status as UserStatus),
-                );
-            }
-
-            if (orgId) {
-                filteredUsers = filteredUsers.filter(
-                    user => user.orgId?.id === orgId,
-                );
-            }
-
-            if (branchId) {
-                filteredUsers = filteredUsers.filter(
-                    user => user.branchId?.id === branchId,
-                );
-            }
-
-            // Pagination
-            const totalUsers = filteredUsers.length;
-            const totalPages = Math.ceil(totalUsers / limit);
-            const startIndex = (page - 1) * limit;
-            const paginatedUsers = filteredUsers.slice(
-                startIndex,
-                startIndex + limit,
+            // Use the new compliant service method
+            const result = await this.userService.findAllWithFilters(
+                filters,
+                scope,
             );
 
             // Remove sensitive data
-            const sanitizedUsers = paginatedUsers.map(user => {
+            const sanitizedUsers = result.users.map(user => {
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { password, ...userProfile } = user;
                 return userProfile;
             });
 
             this.logger.log(
-                `Retrieved ${paginatedUsers.length} users of ${totalUsers} total`,
+                `Retrieved ${result.users.length} users of ${result.total} total`,
             );
 
             return {
@@ -339,11 +295,11 @@ export class UserController {
                 data: {
                     users: sanitizedUsers,
                     pagination: {
-                        currentPage: page,
-                        totalPages,
-                        totalUsers,
-                        hasNext: page < totalPages,
-                        hasPrev: page > 1,
+                        currentPage: filters.page || 1,
+                        totalPages: result.totalPages,
+                        totalUsers: result.total,
+                        hasNext: (filters.page || 1) < result.totalPages,
+                        hasPrev: (filters.page || 1) > 1,
                     },
                 },
             };
