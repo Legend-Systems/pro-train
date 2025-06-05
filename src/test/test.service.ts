@@ -268,6 +268,8 @@ export class TestService {
                 limit = 10,
                 sortBy = 'createdAt',
                 sortOrder = 'DESC',
+                includeUserData = false,
+                includeStatistics = false,
             } = filters;
 
             const query = this.testRepository.createQueryBuilder('test');
@@ -362,6 +364,20 @@ export class TestService {
                         },
                     );
 
+                    let userAttemptData: any = undefined;
+                    
+                    // Include user-specific attempt data if requested and user is provided
+                    if (includeUserData && scope.userId) {
+                        userAttemptData = await this.getUserAttemptData(test.testId, scope.userId);
+                    }
+
+                    let statistics: any = undefined;
+                    
+                    // Include detailed statistics if requested
+                    if (includeStatistics) {
+                        statistics = await this.calculateTestStatistics(test.testId);
+                    }
+
                     return {
                         ...test,
                         course: test.course
@@ -373,6 +389,8 @@ export class TestService {
                             : undefined,
                         questionCount,
                         attemptCount,
+                        userAttemptData,
+                        statistics,
                     };
                 }),
             );
@@ -587,6 +605,17 @@ export class TestService {
                     questionType: q.questionType,
                     points: q.points,
                     orderIndex: q.orderIndex,
+                    explanation: q.explanation,
+                    hint: q.hint,
+                    difficulty: q.difficulty,
+                    tags: q.tags,
+                    options:
+                        q.options?.map(option => ({
+                            optionId: option.optionId,
+                            optionText: option.optionText,
+                            isCorrect: option.isCorrect,
+                            orderIndex: option.orderIndex,
+                        })) || [],
                 })),
             };
         });
@@ -1025,6 +1054,162 @@ export class TestService {
             );
 
             return testsWithStats;
+        });
+    }
+
+    /**
+     * Get user-specific attempt data for a test
+     */
+    private async getUserAttemptData(testId: number, userId: string) {
+        try {
+            // Get all user attempts for this test
+            const allAttempts = await this.testAttemptRepository.find({
+                where: { testId, userId },
+                order: { createdAt: 'DESC' },
+            });
+
+            if (allAttempts.length === 0) {
+                return {
+                    attemptsCount: 0,
+                    attemptsRemaining: await this.getMaxAttemptsForTest(testId),
+                    canStartNewAttempt: true,
+                    nextAttemptNumber: 1,
+                    attemptLimitReached: false,
+                    allAttempts: [],
+                };
+            }
+
+            const maxAttempts = await this.getMaxAttemptsForTest(testId);
+            const inProgressAttempt = allAttempts.find(a => a.status === AttemptStatus.IN_PROGRESS);
+            const completedAttempts = allAttempts.filter(a => a.status === AttemptStatus.SUBMITTED);
+            
+            // For now, we'll get score/percentage from Results entity since TestAttempt doesn't have these fields
+            let bestAttempt: any = undefined;
+            if (completedAttempts.length > 0) {
+                const results = await this.resultRepository.find({
+                    where: { testId: testId, userId: userId },
+                    order: { percentage: 'DESC' },
+                });
+
+                if (results.length > 0) {
+                    const bestResult = results[0];
+                    bestAttempt = {
+                        attemptId: bestResult.attemptId,
+                        score: bestResult.score || 0,
+                        percentage: bestResult.percentage || 0,
+                        submittedAt: bestResult.calculatedAt?.toISOString() || '',
+                        timeSpent: 0, // Not available in Result entity
+                    };
+                }
+            }
+
+            // Get last attempt (most recent)
+            const lastAttempt = allAttempts[0];
+            const attemptsCount = allAttempts.length;
+            const attemptsRemaining = Math.max(0, maxAttempts - attemptsCount);
+            const canStartNewAttempt = !inProgressAttempt && attemptsRemaining > 0;
+            const attemptLimitReached = attemptsRemaining === 0 && !inProgressAttempt;
+
+            return {
+                attemptsCount,
+                attemptsRemaining,
+                lastAttempt: lastAttempt ? {
+                    attemptId: lastAttempt.attemptId,
+                    status: lastAttempt.status,
+                    score: 0, // Will be populated from results
+                    percentage: 0, // Will be populated from results
+                    submittedAt: lastAttempt.submitTime?.toISOString(),
+                    timeSpent: 0, // Will be calculated from start/end time
+                    currentQuestionIndex: 0, // Will be tracked separately
+                    progressPercentage: lastAttempt.progressPercentage || 0,
+                    questionsAnswered: 0, // Will be calculated from answers
+                    flaggedQuestions: [], // Will be tracked separately
+                    lastActivity: lastAttempt.updatedAt.toISOString(),
+                } : undefined,
+                inProgressAttempt: inProgressAttempt ? {
+                    attemptId: inProgressAttempt.attemptId,
+                    testId: inProgressAttempt.testId,
+                    userId: inProgressAttempt.userId,
+                    attemptNumber: inProgressAttempt.attemptNumber,
+                    status: inProgressAttempt.status,
+                    startTime: inProgressAttempt.startTime.toISOString(),
+                    submitTime: inProgressAttempt.submitTime?.toISOString(),
+                    expiresAt: inProgressAttempt.expiresAt?.toISOString(),
+                    progressPercentage: inProgressAttempt.progressPercentage || 0,
+                    createdAt: inProgressAttempt.createdAt.toISOString(),
+                    updatedAt: inProgressAttempt.updatedAt.toISOString(),
+                    resumeUrl: `/dashboard/tests/${testId}/take`,
+                    timeElapsed: 0, // Calculate from start time
+                    currentProgress: inProgressAttempt.progressPercentage || 0,
+                    canResume: true,
+                } : undefined,
+                bestAttempt,
+                allAttempts: allAttempts.map(attempt => ({
+                    attemptId: attempt.attemptId,
+                    attemptNumber: attempt.attemptNumber,
+                    status: attempt.status,
+                    score: 0, // Will be populated from results
+                    percentage: 0, // Will be populated from results
+                    timeSpent: 0, // Will be calculated
+                    submittedAt: attempt.submitTime?.toISOString(),
+                    isExpired: attempt.expiresAt ? new Date() > attempt.expiresAt : false,
+                })),
+                canStartNewAttempt,
+                nextAttemptNumber: attemptsCount + 1,
+                attemptLimitReached,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting user attempt data for test ${testId} and user ${userId}:`,
+                error,
+            );
+            return {
+                attemptsCount: 0,
+                attemptsRemaining: 1,
+                canStartNewAttempt: true,
+                nextAttemptNumber: 1,
+                attemptLimitReached: false,
+                allAttempts: [],
+            };
+        }
+    }
+
+    /**
+     * Get max attempts allowed for a test
+     */
+    private async getMaxAttemptsForTest(testId: number): Promise<number> {
+        const test = await this.testRepository.findOne({
+            where: { testId },
+            select: ['maxAttempts'],
+        });
+        return test?.maxAttempts || 1;
+    }
+
+    /**
+     * Get question count for a test
+     */
+    async getQuestionCount(
+        testId: number,
+        scope?: OrgBranchScope,
+    ): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const query = this.questionRepository
+                .createQueryBuilder('question')
+                .where('question.testId = :testId', { testId });
+
+            // Apply org/branch scoping if scope is provided
+            if (scope?.orgId) {
+                query.andWhere('question.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope?.branchId) {
+                query.andWhere('question.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            return await query.getCount();
         });
     }
 }

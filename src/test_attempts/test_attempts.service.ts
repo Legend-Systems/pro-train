@@ -3,7 +3,6 @@ import {
     NotFoundException,
     BadRequestException,
     ForbiddenException,
-    ConflictException,
     Logger,
     Inject,
 } from '@nestjs/common';
@@ -153,7 +152,7 @@ export class TestAttemptsService {
     }
 
     /**
-     * Start a new test attempt
+     * Start a new test attempt or return existing active attempt
      */
     async startAttempt(
         createAttemptDto: CreateTestAttemptDto,
@@ -175,6 +174,39 @@ export class TestAttemptsService {
 
             if (!test.isActive) {
                 throw new BadRequestException('Test is not active');
+            }
+
+            // Check if user has an active attempt first
+            const activeAttemptQuery = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', {
+                    testId: createAttemptDto.testId,
+                })
+                .andWhere('attempt.userId = :userId', { userId })
+                .andWhere('attempt.status = :status', {
+                    status: AttemptStatus.IN_PROGRESS,
+                });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                activeAttemptQuery.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                activeAttemptQuery.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const activeAttempt = await activeAttemptQuery.getOne();
+
+            // If active attempt exists, return it instead of throwing error
+            if (activeAttempt) {
+                this.logger.log(
+                    `Returning existing active attempt ${activeAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
+                );
+                return this.mapToResponseDto(activeAttempt);
             }
 
             // Check if user has exceeded max attempts
@@ -202,37 +234,6 @@ export class TestAttemptsService {
             if (userAttempts >= test.maxAttempts) {
                 throw new BadRequestException(
                     `Maximum attempts (${test.maxAttempts}) exceeded for this test`,
-                );
-            }
-
-            // Check if user has an active attempt
-            const activeAttemptQuery = this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .where('attempt.testId = :testId', {
-                    testId: createAttemptDto.testId,
-                })
-                .andWhere('attempt.userId = :userId', { userId })
-                .andWhere('attempt.status = :status', {
-                    status: AttemptStatus.IN_PROGRESS,
-                });
-
-            // Apply org/branch scoping
-            if (scope.orgId) {
-                activeAttemptQuery.andWhere('attempt.orgId = :orgId', {
-                    orgId: scope.orgId,
-                });
-            }
-            if (scope.branchId) {
-                activeAttemptQuery.andWhere('attempt.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
-
-            const activeAttempt = await activeAttemptQuery.getOne();
-
-            if (activeAttempt) {
-                throw new ConflictException(
-                    'You already have an active attempt for this test',
                 );
             }
 
@@ -265,6 +266,10 @@ export class TestAttemptsService {
                 createAttemptDto.testId,
                 scope.orgId,
                 scope.branchId,
+            );
+
+            this.logger.log(
+                `Created new attempt ${savedAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
             );
 
             return this.mapToResponseDto(savedAttempt);
@@ -1040,5 +1045,115 @@ export class TestAttemptsService {
             this.CACHE_TTL.ATTEMPT_STATS,
         );
         return result;
+    }
+
+    /**
+     * Get active attempt for a test and user
+     */
+    async getActiveAttempt(
+        testId: number,
+        scope: OrgBranchScope,
+        userId: string,
+    ): Promise<TestAttemptResponseDto | null> {
+        return this.retryService.executeDatabase(async () => {
+            const query = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .leftJoinAndSelect('attempt.test', 'test')
+                .where('attempt.testId = :testId', { testId })
+                .andWhere('attempt.userId = :userId', { userId })
+                .andWhere('attempt.status = :status', {
+                    status: AttemptStatus.IN_PROGRESS,
+                });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const activeAttempt = await query.getOne();
+
+            if (!activeAttempt) {
+                return null;
+            }
+
+            // Check if attempt has expired
+            if (activeAttempt.expiresAt && new Date() > activeAttempt.expiresAt) {
+                activeAttempt.status = AttemptStatus.EXPIRED;
+                await this.testAttemptRepository.save(activeAttempt);
+                
+                // Invalidate related caches
+                await this.invalidateAttemptCache(
+                    activeAttempt.attemptId,
+                    userId,
+                    testId,
+                    scope.orgId,
+                    scope.branchId,
+                );
+
+                return null;
+            }
+
+            return this.mapToResponseDto(activeAttempt);
+        });
+    }
+
+    /**
+     * Get attempt with timing and progress data
+     */
+    async getAttemptWithProgress(
+        attemptId: number,
+        scope: OrgBranchScope,
+        userId: string,
+    ): Promise<TestAttemptResponseDto & { 
+        timeRemaining?: number; 
+        timeElapsed: number; 
+        questionsAnswered: number;
+        totalQuestions: number;
+    }> {
+        return this.retryService.executeDatabase(async () => {
+            const attempt = await this.findAttemptByIdAndUserWithScope(
+                attemptId,
+                userId,
+                scope,
+            );
+
+            const baseDto = this.mapToResponseDto(attempt);
+            
+            // Calculate timing data
+            const now = new Date();
+            const timeElapsed = Math.floor((now.getTime() - attempt.startTime.getTime()) / 1000);
+            
+            let timeRemaining: number | undefined;
+            if (attempt.expiresAt) {
+                timeRemaining = Math.max(0, Math.floor((attempt.expiresAt.getTime() - now.getTime()) / 1000));
+                
+                // If time has expired, update status
+                if (timeRemaining === 0 && attempt.status === AttemptStatus.IN_PROGRESS) {
+                    attempt.status = AttemptStatus.EXPIRED;
+                    await this.testAttemptRepository.save(attempt);
+                }
+            }
+
+            // Get answer count for this attempt
+            const questionsAnswered = await this.answersService.countByAttempt(attemptId, scope);
+            
+            // Get total questions for the test
+            const totalQuestions = await this.testService.getQuestionCount(attempt.testId, scope);
+
+            return {
+                ...baseDto,
+                timeRemaining,
+                timeElapsed,
+                questionsAnswered,
+                totalQuestions,
+            };
+        });
     }
 }

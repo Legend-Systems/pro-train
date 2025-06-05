@@ -602,6 +602,59 @@ export class AnswersService {
     }
 
     /**
+     * Count answers by attempt ID
+     */
+    async countByAttempt(
+        attemptId: number,
+        scope: OrgBranchScope,
+    ): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const cacheKey =
+                this.CACHE_KEYS.ANSWERS_BY_ATTEMPT(
+                    attemptId,
+                    scope.orgId,
+                    scope.branchId,
+                ) + ':count';
+
+            // Try to get from cache first
+            const cached = await this.cacheManager.get<number>(cacheKey);
+            if (cached !== undefined && cached !== null) {
+                this.logger.debug(
+                    `Cache hit for answer count by attempt ${attemptId}`,
+                );
+                return cached;
+            }
+
+            const countQuery = this.answerRepository
+                .createQueryBuilder('answer')
+                .where('answer.attemptId = :attemptId', { attemptId });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                countQuery.andWhere('answer.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                countQuery.andWhere('answer.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const count = await countQuery.getCount();
+
+            // Cache the result
+            await this.cacheManager.set(
+                cacheKey,
+                count,
+                this.CACHE_TTL.COUNT * 1000,
+            );
+
+            return count || 0;
+        });
+    }
+
+    /**
      * Cache invalidation helper
      */
     private async invalidateAnswerCache(

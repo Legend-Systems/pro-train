@@ -112,7 +112,7 @@ export class TestDetailDto extends TestResponseDto {
     };
 
     @ApiProperty({
-        description: 'Questions in this test (summary)',
+        description: 'Questions in this test with full details',
         required: false,
     })
     questions?: Array<{
@@ -121,6 +121,16 @@ export class TestDetailDto extends TestResponseDto {
         questionType: string;
         points: number;
         orderIndex: number;
+        explanation?: string;
+        hint?: string;
+        difficulty?: string;
+        tags?: string[];
+        options: Array<{
+            optionId: number;
+            optionText: string;
+            isCorrect: boolean;
+            orderIndex: number;
+        }>;
     }>;
 }
 

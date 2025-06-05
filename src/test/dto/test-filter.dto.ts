@@ -219,4 +219,29 @@ export class TestFilterDto {
         message: 'Sort order must be either ASC or DESC',
     })
     sortOrder?: 'ASC' | 'DESC' = 'DESC';
+
+    // Enhanced response parameters
+    @ApiProperty({
+        description: 'Include user-specific attempt data in response',
+        example: true,
+        default: false,
+        required: false,
+        type: Boolean,
+    })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean({ message: 'Include user data must be a boolean' })
+    includeUserData?: boolean = false;
+
+    @ApiProperty({
+        description: 'Include detailed test statistics',
+        example: true,
+        default: false,
+        required: false,
+        type: Boolean,
+    })
+    @IsOptional()
+    @Type(() => Boolean)
+    @IsBoolean({ message: 'Include statistics must be a boolean' })
+    includeStatistics?: boolean = false;
 }

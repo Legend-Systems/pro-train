@@ -552,4 +552,202 @@ export class TestAttemptsController {
     ): Promise<TestAttemptResponseDto> {
         return this.testAttemptsService.cancelAttempt(id, scope, req.user.id);
     }
+
+    @Get('test/:testId/active')
+    @ApiOperation({
+        summary: '🎯 Get Active Attempt for Test',
+        description: `
+        **Get the active attempt for a specific test and user**
+        
+        This endpoint returns the active (in-progress) attempt for a test if one exists.
+        If no active attempt exists, returns null. This is useful for:
+        - Checking if a user can start a new attempt
+        - Resuming an existing attempt
+        - Getting current progress and timing information
+        
+        **Features:**
+        - Returns active attempt with timing data
+        - Automatic expiration checking
+        - Progress and question count information
+        - Resume capability validation
+        
+        **Use Cases:**
+        - Pre-flight check before starting test
+        - Resume interrupted test sessions
+        - Progress monitoring and analytics
+        `,
+        operationId: 'getActiveAttempt',
+    })
+    @ApiParam({
+        name: 'testId',
+        description: 'Test ID to check for active attempts',
+        example: 1,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Active attempt retrieved (or null if none exists)',
+        type: TestAttemptResponseDto,
+        examples: {
+            'active-attempt': {
+                summary: '🟢 Active Attempt Found',
+                value: {
+                    success: true,
+                    message: 'Active attempt retrieved successfully',
+                    data: {
+                        attemptId: 123,
+                        testId: 1,
+                        userId: '123e4567-e89b-12d3-a456-426614174000',
+                        attemptNumber: 1,
+                        status: 'in_progress',
+                        startTime: '2025-01-15T10:30:00.000Z',
+                        expiresAt: '2025-01-15T12:30:00.000Z',
+                        progressPercentage: 45.5,
+                        timeRemaining: 3600,
+                        timeElapsed: 3600,
+                        questionsAnswered: 12,
+                        totalQuestions: 25,
+                        createdAt: '2025-01-15T10:30:00.000Z',
+                        updatedAt: '2025-01-15T11:15:00.000Z',
+                    },
+                },
+            },
+            'no-active-attempt': {
+                summary: '⚪ No Active Attempt',
+                value: {
+                    success: true,
+                    message: 'No active attempt found',
+                    data: null,
+                },
+            },
+        },
+    })
+    async getActiveAttempt(
+        @Param('testId', ParseIntPipe) testId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse<TestAttemptResponseDto | null>> {
+        try {
+            this.logger.log(
+                `Getting active attempt for test ${testId} by user: ${req.user.id}`,
+            );
+
+            const activeAttempt =
+                await this.testAttemptsService.getActiveAttempt(
+                    testId,
+                    scope,
+                    req.user.id,
+                );
+
+            return {
+                success: true,
+                message: activeAttempt
+                    ? 'Active attempt retrieved successfully'
+                    : 'No active attempt found',
+                data: activeAttempt,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting active attempt for test ${testId} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get(':id/progress')
+    @ApiOperation({
+        summary: '📊 Get Attempt Progress',
+        description: `
+        **Get detailed progress information for a test attempt**
+        
+        This endpoint provides comprehensive progress and timing data for an active attempt:
+        - Real-time timing calculations (elapsed and remaining)
+        - Question progress (answered vs total)
+        - Expiration checking and status updates
+        - Session state information
+        
+        **Features:**
+        - Automatic time calculations
+        - Expiration handling
+        - Progress percentages
+        - Question completion tracking
+        
+        **Use Cases:**
+        - Real-time progress updates during test
+        - Timer displays and warnings
+        - Progress bars and completion indicators
+        - Session management and recovery
+        `,
+        operationId: 'getAttemptProgress',
+    })
+    @ApiParam({
+        name: 'id',
+        description: 'Attempt ID to get progress for',
+        example: 123,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Attempt progress retrieved successfully',
+        schema: {
+            example: {
+                success: true,
+                message: 'Attempt progress retrieved successfully',
+                data: {
+                    attemptId: 123,
+                    testId: 1,
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                    status: 'in_progress',
+                    startTime: '2025-01-15T10:30:00.000Z',
+                    expiresAt: '2025-01-15T12:30:00.000Z',
+                    progressPercentage: 48.0,
+                    timeRemaining: 3420,
+                    timeElapsed: 3780,
+                    questionsAnswered: 12,
+                    totalQuestions: 25,
+                    test: {
+                        testId: 1,
+                        title: 'JavaScript Fundamentals Quiz',
+                        testType: 'quiz',
+                        durationMinutes: 120,
+                    },
+                },
+            },
+        },
+    })
+    async getAttemptProgress(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse<any>> {
+        try {
+            this.logger.log(
+                `Getting progress for attempt ${id} by user: ${req.user.id}`,
+            );
+
+            const progressData =
+                await this.testAttemptsService.getAttemptWithProgress(
+                    id,
+                    scope,
+                    req.user.id,
+                );
+
+            return {
+                success: true,
+                message: 'Attempt progress retrieved successfully',
+                data: progressData,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting progress for attempt ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
+    }
 }

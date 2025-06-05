@@ -344,6 +344,20 @@ export class TestController {
         description: 'Number of tests per page (max 100)',
         example: 10,
     })
+    @ApiQuery({
+        name: 'includeUserData',
+        required: false,
+        type: Boolean,
+        description: 'Include user-specific attempt data in response',
+        example: true,
+    })
+    @ApiQuery({
+        name: 'includeStatistics',
+        required: false,
+        type: Boolean,
+        description: 'Include detailed test statistics',
+        example: true,
+    })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Tests retrieved successfully',
