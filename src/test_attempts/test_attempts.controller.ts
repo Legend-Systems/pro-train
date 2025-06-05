@@ -11,6 +11,7 @@ import {
     Query,
     HttpStatus,
     ParseIntPipe,
+    Logger,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -20,6 +21,8 @@ import {
     ApiParam,
     ApiQuery,
     ApiBody,
+    ApiHeader,
+    ApiSecurity,
 } from '@nestjs/swagger';
 import { TestAttemptsService } from './test_attempts.service';
 import { CreateTestAttemptDto } from './dto/create-test_attempt.dto';
@@ -27,15 +30,26 @@ import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
+
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { StandardApiResponse } from '../user/dto/common-response.dto';
 
 @ApiTags('📊 Test Attempts')
 @Controller('test-attempts')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
+@ApiSecurity('JWT-auth')
+@ApiHeader({
+    name: 'Authorization',
+    description: 'Bearer JWT token for authentication',
+    example: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+    required: true,
+})
 export class TestAttemptsController {
+    private readonly logger = new Logger(TestAttemptsController.name);
+
     constructor(private readonly testAttemptsService: TestAttemptsService) {}
 
     @Post('start')
@@ -62,16 +76,31 @@ export class TestAttemptsController {
         - Users can only start attempts for themselves
         - Access control validation performed
         `,
+        operationId: 'startTestAttempt',
     })
     @ApiBody({
         type: CreateTestAttemptDto,
-        description: 'Test attempt details',
+        description: 'Test attempt creation details',
         examples: {
-            basicAttempt: {
-                summary: 'Basic test attempt',
-                description: 'Start an attempt for a quiz',
+            'basic-attempt': {
+                summary: '📝 Basic Test Attempt',
+                description: 'Start a standard test attempt',
                 value: {
                     testId: 1,
+                },
+            },
+            'quiz-attempt': {
+                summary: '🧩 Quiz Attempt',
+                description: 'Start a quiz attempt',
+                value: {
+                    testId: 5,
+                },
+            },
+            'exam-attempt': {
+                summary: '🎓 Exam Attempt',
+                description: 'Start a formal exam attempt',
+                value: {
+                    testId: 10,
                 },
             },
         },
@@ -79,58 +108,193 @@ export class TestAttemptsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Test attempt started successfully',
-        type: TestAttemptResponseDto,
+        schema: {
+            example: {
+                success: true,
+                message: 'Test attempt started successfully',
+                data: {
+                    attemptId: 1,
+                    testId: 1,
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                    attemptNumber: 1,
+                    status: 'in_progress',
+                    startTime: '2025-01-15T10:30:00.000Z',
+                    expiresAt: '2025-01-15T12:30:00.000Z',
+                    progressPercentage: 0,
+                    test: {
+                        testId: 1,
+                        title: 'JavaScript Fundamentals Quiz',
+                        testType: 'quiz',
+                        durationMinutes: 120,
+                    },
+                    totalQuestions: 25,
+                },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
         description: '❌ Invalid request or business rule violation',
+        schema: {
+            example: {
+                success: false,
+                message: 'Maximum attempts exceeded for this test',
+                error: 'BAD_REQUEST',
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.CONFLICT,
         description: '❌ Active attempt already exists',
+        schema: {
+            example: {
+                success: false,
+                message: 'An active attempt already exists for this test',
+                error: 'CONFLICT',
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.NOT_FOUND,
         description: '❌ Test not found',
+        schema: {
+            example: {
+                success: false,
+                message: 'Test not found or access denied',
+                error: 'NOT_FOUND',
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '⛔ Forbidden - Insufficient permissions',
     })
     async startAttempt(
         @Body() createTestAttemptDto: CreateTestAttemptDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
-    ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.startAttempt(
-            createTestAttemptDto,
-            scope,
-            req.user.id,
-        );
+    ): Promise<StandardApiResponse<TestAttemptResponseDto>> {
+        try {
+            this.logger.log(
+                `Starting test attempt for test ${createTestAttemptDto.testId} by user: ${req.user.id}`,
+            );
+
+            const result = await this.testAttemptsService.startAttempt(
+                createTestAttemptDto,
+                scope,
+                req.user.id,
+            );
+
+            this.logger.log(
+                `Test attempt started successfully with ID: ${result.attemptId}`,
+            );
+
+            return {
+                success: true,
+                message: 'Test attempt started successfully',
+                data: result,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error starting test attempt for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Get('my-attempts')
     @ApiOperation({
         summary: '📚 Get My Test Attempts',
-        description: 'Retrieve all test attempts for the authenticated user',
+        description: `
+        **Retrieve all test attempts for the authenticated user**
+        
+        This endpoint provides a comprehensive view of all test attempts made by the current user:
+        - Paginated results with configurable page size
+        - Optional filtering by specific test ID
+        - Includes attempt status, scores, and timing information
+        - Shows relationship to tests and courses
+        
+        **Use Cases:**
+        - Student dashboard showing attempt history
+        - Progress tracking across multiple tests
+        - Performance analysis over time
+        - Retake eligibility checking
+        `,
+        operationId: 'getMyTestAttempts',
     })
     @ApiQuery({
         name: 'testId',
         description: 'Filter attempts by specific test ID',
         required: false,
+        type: Number,
         example: 1,
     })
     @ApiQuery({
         name: 'page',
         description: 'Page number for pagination (1-based)',
         required: false,
+        type: Number,
         example: 1,
     })
     @ApiQuery({
         name: 'pageSize',
-        description: 'Number of attempts per page',
+        description: 'Number of attempts per page (max 50)',
         required: false,
+        type: Number,
         example: 10,
     })
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ User attempts retrieved successfully',
+        schema: {
+            example: {
+                success: true,
+                message: 'Test attempts retrieved successfully',
+                data: {
+                    attempts: [
+                        {
+                            attemptId: 1,
+                            testId: 1,
+                            attemptNumber: 1,
+                            status: 'submitted',
+                            startTime: '2025-01-15T10:30:00.000Z',
+                            submitTime: '2025-01-15T12:15:00.000Z',
+                            progressPercentage: 100,
+                            test: {
+                                testId: 1,
+                                title: 'JavaScript Fundamentals Quiz',
+                                testType: 'quiz',
+                                durationMinutes: 120,
+                            },
+                            answersCount: 25,
+                            totalQuestions: 25,
+                        },
+                    ],
+                    pagination: {
+                        page: 1,
+                        pageSize: 10,
+                        total: 15,
+                        totalPages: 2,
+                    },
+                },
+                meta: {
+                    timestamp: '2025-01-15T10:30:00.000Z',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: '❌ Invalid query parameters',
     })
     async getMyAttempts(
         @OrgBranchScope() scope: OrgBranchScope,
@@ -138,14 +302,35 @@ export class TestAttemptsController {
         @Query('testId') testId?: number,
         @Query('page') page: number = 1,
         @Query('pageSize') pageSize: number = 10,
-    ) {
-        return this.testAttemptsService.getUserAttempts(
-            req.user.id,
-            scope,
-            testId,
-            page,
-            pageSize,
-        );
+    ): Promise<StandardApiResponse<any>> {
+        try {
+            this.logger.log(
+                `Retrieving test attempts for user: ${req.user.id}, page: ${page}, pageSize: ${pageSize}`,
+            );
+
+            const result = await this.testAttemptsService.getUserAttempts(
+                req.user.id,
+                scope,
+                testId,
+                page,
+                pageSize,
+            );
+
+            return {
+                success: true,
+                message: 'Test attempts retrieved successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error retrieving test attempts for user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Get('stats')
