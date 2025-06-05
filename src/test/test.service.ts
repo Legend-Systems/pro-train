@@ -7,7 +7,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
@@ -23,6 +23,7 @@ import {
 } from './dto/test-response.dto';
 import { Test } from './entities/test.entity';
 import { Question } from '../questions/entities/question.entity';
+import { QuestionOption } from '../questions_options/entities/questions_option.entity';
 import {
     TestAttempt,
     AttemptStatus,
@@ -73,6 +74,8 @@ export class TestService {
         private readonly courseRepository: Repository<Course>,
         @InjectRepository(Question)
         private readonly questionRepository: Repository<Question>,
+        @InjectRepository(QuestionOption)
+        private readonly questionOptionRepository: Repository<QuestionOption>,
         @InjectRepository(TestAttempt)
         private readonly testAttemptRepository: Repository<TestAttempt>,
         @InjectRepository(Result)
@@ -80,6 +83,7 @@ export class TestService {
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
         private readonly courseService: CourseService,
+        private readonly dataSource: DataSource,
     ) {}
 
     /**
@@ -122,9 +126,8 @@ export class TestService {
     }
 
     /**
-     * Create a new test with caching and scoping
+     * Create a new test with questions and options in a single transaction
      */
-
     async create(
         createTestDto: CreateTestDto,
         scope: OrgBranchScope,
@@ -148,27 +151,100 @@ export class TestService {
                 );
             }
 
-            const test = this.testRepository.create({
-                ...createTestDto,
-                maxAttempts: createTestDto.maxAttempts || 1,
-                orgId: course.orgId,
-                branchId: course.branchId,
-            });
+            // Use transaction to ensure atomic creation
+            const queryRunner = this.dataSource.createQueryRunner();
+            await queryRunner.connect();
+            await queryRunner.startTransaction();
 
-            const savedTest = await this.testRepository.save(test);
+            try {
+                // Create test entity (excluding questions from the test data)
+                const { questions, ...testData } = createTestDto;
+                const test = queryRunner.manager.create(Test, {
+                    ...testData,
+                    maxAttempts: createTestDto.maxAttempts || 1,
+                    orgId: course.orgId,
+                    branchId: course.branchId,
+                });
 
-            return {
-                ...savedTest,
-                course: course
-                    ? {
-                          courseId: course.courseId,
-                          title: course.title,
-                          description: course.description,
-                      }
-                    : undefined,
-                questionCount: 0,
-                attemptCount: 0,
-            };
+                const savedTest = await queryRunner.manager.save(test);
+
+                let questionCount = 0;
+
+                // Create questions if provided
+                if (questions && questions.length > 0) {
+                    for (const questionDto of questions) {
+                        // Create question
+                        const question = queryRunner.manager.create(Question, {
+                            testId: savedTest.testId,
+                            questionText: questionDto.questionText,
+                            questionType: questionDto.questionType,
+                            points: questionDto.points,
+                            orderIndex: questionDto.orderIndex,
+                            explanation: questionDto.explanation,
+                            hint: questionDto.hint,
+                            difficulty: questionDto.difficulty || 'medium',
+                            tags: questionDto.tags,
+                            orgId: course.orgId,
+                            branchId: course.branchId,
+                        });
+
+                        const savedQuestion =
+                            await queryRunner.manager.save(question);
+                        questionCount++;
+
+                        // Create options if provided
+                        if (
+                            questionDto.options &&
+                            questionDto.options.length > 0
+                        ) {
+                            for (const optionDto of questionDto.options) {
+                                const option = queryRunner.manager.create(
+                                    QuestionOption,
+                                    {
+                                        questionId: savedQuestion.questionId,
+                                        optionText: optionDto.optionText,
+                                        isCorrect: optionDto.isCorrect || false,
+                                        orderIndex: optionDto.orderIndex,
+                                        orgId: course.orgId,
+                                        branchId: course.branchId,
+                                    },
+                                );
+
+                                await queryRunner.manager.save(option);
+                            }
+                        }
+                    }
+                }
+
+                await queryRunner.commitTransaction();
+
+                // Invalidate cache
+                await this.invalidateTestCache(
+                    savedTest.testId,
+                    savedTest.courseId,
+                    scope.orgId,
+                    scope.branchId,
+                );
+
+                return {
+                    ...savedTest,
+                    course: course
+                        ? {
+                              courseId: course.courseId,
+                              title: course.title,
+                              description: course.description,
+                          }
+                        : undefined,
+                    questionCount,
+                    attemptCount: 0,
+                };
+            } catch (error) {
+                await queryRunner.rollbackTransaction();
+                this.logger.error('Error creating test with questions:', error);
+                throw error;
+            } finally {
+                await queryRunner.release();
+            }
         });
     }
 
@@ -541,7 +617,10 @@ export class TestService {
             // Validate course ownership
             await this.validateCourseAccess(test.courseId, userId);
 
-            const result = await this.testRepository.update(id, updateTestDto);
+            // Exclude questions from update (questions are handled separately)
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { questions, ...testUpdateData } = updateTestDto;
+            const result = await this.testRepository.update(id, testUpdateData);
 
             if (result.affected === 0) {
                 throw new NotFoundException(`Test with ID ${id} not found`);

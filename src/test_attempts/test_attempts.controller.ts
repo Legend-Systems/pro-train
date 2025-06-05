@@ -108,6 +108,7 @@ export class TestAttemptsController {
     @ApiResponse({
         status: HttpStatus.CREATED,
         description: '✅ Test attempt started successfully',
+        type: TestAttemptResponseDto,
         schema: {
             example: {
                 success: true,
@@ -121,6 +122,8 @@ export class TestAttemptsController {
                     startTime: '2025-01-15T10:30:00.000Z',
                     expiresAt: '2025-01-15T12:30:00.000Z',
                     progressPercentage: 0,
+                    createdAt: '2025-01-15T10:30:00.000Z',
+                    updatedAt: '2025-01-15T10:30:00.000Z',
                     test: {
                         testId: 1,
                         title: 'JavaScript Fundamentals Quiz',
@@ -128,6 +131,7 @@ export class TestAttemptsController {
                         durationMinutes: 120,
                     },
                     totalQuestions: 25,
+                    answersCount: 0,
                 },
             },
         },

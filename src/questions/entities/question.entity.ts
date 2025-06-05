@@ -130,6 +130,49 @@ export class Question {
     @IsString()
     mediaInstructions?: string;
 
+    @Column('text', { nullable: true })
+    @ApiProperty({
+        description: 'Explanation for the correct answer',
+        example:
+            'Binary search divides the search space in half with each comparison',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    explanation?: string;
+
+    @Column('text', { nullable: true })
+    @ApiProperty({
+        description: 'Hint for the question',
+        example: 'Think about how the algorithm reduces the problem size',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    hint?: string;
+
+    @Column({ nullable: true, default: 'medium' })
+    @ApiProperty({
+        description: 'Difficulty level of the question',
+        example: 'medium',
+        enum: ['easy', 'medium', 'hard', 'expert'],
+        default: 'medium',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    difficulty?: string;
+
+    @Column('simple-array', { nullable: true })
+    @ApiProperty({
+        description: 'Tags for categorizing the question',
+        example: ['algorithms', 'complexity', 'search'],
+        type: [String],
+        required: false,
+    })
+    @IsOptional()
+    tags?: string[];
+
     @CreateDateColumn()
     @ApiProperty({
         description: 'Question creation timestamp',

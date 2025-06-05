@@ -58,14 +58,22 @@ export class TestController {
 
     @Post()
     @ApiOperation({
-        summary: '📝 Create New Test',
+        summary: '📝 Create New Test with Questions',
         description: `
-      **Creates a new test within a course with comprehensive configuration options**
+      **Creates a new test within a course with comprehensive configuration options and optional questions**
       
       This endpoint allows course instructors to create tests including:
       - Test metadata (title, description, type)
       - Timing configuration (duration, attempts)
       - Test behavior settings
+      - Questions with multiple choice, essay, true/false, and other types
+      - Answer options for multiple choice and true/false questions
+      
+      **Enhanced Features:**
+      - Create complete tests with questions in a single API call
+      - Atomic transaction ensures data consistency
+      - Support for all question types and answer options
+      - Automatic question ordering and validation
       
       **Authorization Requirements:**
       - Must be the owner of the course
@@ -76,21 +84,39 @@ export class TestController {
       - Test type determines available features and behavior
       - Duration is optional (null for untimed tests)
       - Maximum attempts defaults to 1 if not specified
+      - Questions are optional (can be added later via separate endpoints)
+      - Question options are required for multiple_choice and true_false types
       
       **Use Cases:**
-      - Creating course examinations
-      - Setting up practice quizzes
-      - Preparing training assessments
+      - Creating complete course examinations with questions
+      - Setting up practice quizzes with instant questions
+      - Preparing training assessments with comprehensive content
+      - Rapid test deployment for time-sensitive assessments
     `,
         operationId: 'createTest',
     })
     @ApiBody({
         type: CreateTestDto,
-        description: 'Test creation data with course assignment',
+        description:
+            'Test creation data with course assignment and optional questions',
         examples: {
-            'final-exam': {
-                summary: '🎓 Final Exam Creation',
-                description: 'Create a comprehensive final examination',
+            'basic-test': {
+                summary: '📝 Basic Test Creation',
+                description:
+                    'Create a test without questions (questions can be added later)',
+                value: {
+                    courseId: 1,
+                    title: 'Chapter 1 Quiz',
+                    description: 'Basic quiz covering chapter 1 material.',
+                    testType: 'quiz',
+                    durationMinutes: 30,
+                    maxAttempts: 2,
+                },
+            },
+            'complete-test-with-questions': {
+                summary: '🎓 Complete Test with Questions',
+                description:
+                    'Create a test with questions and answer options in one API call',
                 value: {
                     courseId: 1,
                     title: 'Final Exam - Computer Science Fundamentals',
@@ -99,6 +125,85 @@ export class TestController {
                     testType: 'exam',
                     durationMinutes: 180,
                     maxAttempts: 1,
+                    questions: [
+                        {
+                            questionText:
+                                'What is the time complexity of binary search algorithm?',
+                            questionType: 'multiple_choice',
+                            points: 5,
+                            orderIndex: 1,
+                            explanation:
+                                'Binary search divides the search space in half with each comparison, making it very efficient',
+                            hint: 'Think about how the algorithm reduces the problem size with each step',
+                            difficulty: 'medium',
+                            tags: ['algorithms', 'complexity', 'search'],
+                            options: [
+                                {
+                                    optionText: 'O(log n)',
+                                    isCorrect: true,
+                                    orderIndex: 1,
+                                },
+                                {
+                                    optionText: 'O(n)',
+                                    isCorrect: false,
+                                    orderIndex: 2,
+                                },
+                                {
+                                    optionText: 'O(n²)',
+                                    isCorrect: false,
+                                    orderIndex: 3,
+                                },
+                                {
+                                    optionText: 'O(1)',
+                                    isCorrect: false,
+                                    orderIndex: 4,
+                                },
+                            ],
+                        },
+                        {
+                            questionText:
+                                'Explain the concept of recursion in programming and provide an example.',
+                            questionType: 'essay',
+                            points: 10,
+                            orderIndex: 2,
+                            explanation:
+                                'Recursion is a programming technique where a function calls itself to solve smaller instances of the same problem',
+                            hint: 'Consider base cases and recursive cases in your explanation',
+                            difficulty: 'hard',
+                            tags: [
+                                'recursion',
+                                'programming concepts',
+                                'functions',
+                            ],
+                        },
+                        {
+                            questionText: 'Is Python a compiled language?',
+                            questionType: 'true_false',
+                            points: 2,
+                            orderIndex: 3,
+                            explanation:
+                                'Python is an interpreted language, not compiled. It converts source code to bytecode at runtime',
+                            hint: 'Think about how Python code is executed',
+                            difficulty: 'easy',
+                            tags: [
+                                'python',
+                                'programming languages',
+                                'compilation',
+                            ],
+                            options: [
+                                {
+                                    optionText: 'True',
+                                    isCorrect: false,
+                                    orderIndex: 1,
+                                },
+                                {
+                                    optionText: 'False',
+                                    isCorrect: true,
+                                    orderIndex: 2,
+                                },
+                            ],
+                        },
+                    ],
                 },
             },
             'practice-quiz': {
@@ -112,18 +217,6 @@ export class TestController {
                     testType: 'quiz',
                     durationMinutes: 45,
                     maxAttempts: 3,
-                },
-            },
-            'untimed-training': {
-                summary: '🏃 Training Module Creation',
-                description: 'Create an untimed training assessment',
-                value: {
-                    courseId: 1,
-                    title: 'Python Basics Training',
-                    description:
-                        'Self-paced training module for Python fundamentals.',
-                    testType: 'training',
-                    maxAttempts: 5,
                 },
             },
         },

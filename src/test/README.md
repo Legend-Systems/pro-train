@@ -30,6 +30,9 @@ test/
 - **Attempt Control** with customizable retry policies
 - **Test Activation** and scheduling controls
 - **Rich Metadata** with descriptions and instructions
+- **Atomic Test Creation** with questions and answer options in single API call
+- **Transaction Safety** ensuring complete test creation or rollback
+- **Question Types Support** (multiple choice, essay, true/false, short answer, fill-in-blank)
 
 ### Test Administration
 - **Course Integration** with seamless course association
@@ -132,38 +135,396 @@ export enum TestType {
 ### Test Management
 
 #### `POST /tests` 🔒 Creator/Admin
-**Create New Test**
+**Create New Test (with Optional Questions)**
 ```typescript
-// Request
+// Basic Request - Test Only (Questions Added Later)
+{
+  "courseId": 1,
+  "title": "Chapter 1 Quiz",
+  "description": "Basic quiz covering chapter 1 material.",
+  "testType": "quiz",
+  "durationMinutes": 30,
+  "maxAttempts": 2
+}
+
+// Complete Request - Test with Questions and Options
 {
   "courseId": 1,
   "title": "Final Exam - Computer Science Fundamentals",
   "description": "Comprehensive final examination covering all course material. Time limit: 3 hours.",
   "testType": "exam",
   "durationMinutes": 180,
-  "maxAttempts": 1
+  "maxAttempts": 1,
+  "questions": [
+    {
+      "questionText": "What is the time complexity of binary search algorithm?",
+      "questionType": "multiple_choice",
+      "points": 5,
+      "orderIndex": 1,
+      "explanation": "Binary search divides the search space in half with each comparison, making it very efficient",
+      "hint": "Think about how the algorithm reduces the problem size with each step",
+      "difficulty": "medium",
+      "tags": ["algorithms", "complexity", "search"],
+      "options": [
+        {
+          "optionText": "O(log n)",
+          "isCorrect": true,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "O(n)",
+          "isCorrect": false,
+          "orderIndex": 2
+        },
+        {
+          "optionText": "O(n²)",
+          "isCorrect": false,
+          "orderIndex": 3
+        },
+        {
+          "optionText": "O(1)",
+          "isCorrect": false,
+          "orderIndex": 4
+        }
+      ]
+    },
+    {
+      "questionText": "Explain the concept of recursion in programming and provide an example.",
+      "questionType": "essay",
+      "points": 10,
+      "orderIndex": 2,
+      "explanation": "Recursion is a programming technique where a function calls itself to solve smaller instances of the same problem",
+      "hint": "Consider base cases and recursive cases in your explanation",
+      "difficulty": "hard",
+      "tags": ["recursion", "programming concepts", "functions"]
+    },
+    {
+      "questionText": "Is Python a compiled language?",
+      "questionType": "true_false",
+      "points": 2,
+      "orderIndex": 3,
+      "explanation": "Python is an interpreted language, not compiled. It converts source code to bytecode at runtime",
+      "hint": "Think about how Python code is executed",
+      "difficulty": "easy",
+      "tags": ["python", "programming languages", "compilation"],
+      "options": [
+        {
+          "optionText": "True",
+          "isCorrect": false,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "False",
+          "isCorrect": true,
+          "orderIndex": 2
+        }
+      ]
+    }
+  ]
 }
 
-// Response
+// Response - StandardResponse Format
 {
   "success": true,
+  "message": "Test created successfully",
   "data": {
-    "testId": 15,
+    "testId": 123,
     "courseId": 1,
     "title": "Final Exam - Computer Science Fundamentals",
-    "description": "Comprehensive final examination...",
+    "description": "Comprehensive final examination covering all course material...",
     "testType": "exam",
     "durationMinutes": 180,
     "maxAttempts": 1,
     "isActive": true,
-    "createdAt": "2025-01-15T10:30:00Z",
+    "createdAt": "2025-01-15T10:35:00Z",
+    "updatedAt": "2025-01-15T10:35:00Z",
     "course": {
-      "id": 1,
+      "courseId": 1,
       "title": "Computer Science Fundamentals",
-      "creator": { "firstName": "John", "lastName": "Doe" }
+      "description": "Introduction to computer science concepts"
+    },
+    "questionCount": 3,
+    "attemptCount": 0
+  }
+}
+```
+
+#### **Complete Test Creation Examples** 📚
+
+The test creation endpoint supports creating comprehensive tests with questions and answer options in a single API call. Below are detailed examples for different test scenarios:
+
+##### **Example 1: Programming Quiz with Mixed Question Types**
+```json
+POST /tests
+{
+  "courseId": 1,
+  "title": "Programming Fundamentals Quiz",
+  "description": "Assessment covering basic programming concepts including algorithms, data structures, and language fundamentals.",
+  "testType": "quiz",
+  "durationMinutes": 60,
+  "maxAttempts": 2,
+  "questions": [
+    {
+      "questionText": "What is the time complexity of binary search algorithm?",
+      "questionType": "multiple_choice",
+      "points": 5,
+      "orderIndex": 1,
+      "explanation": "Binary search divides the search space in half with each comparison, making it very efficient",
+      "hint": "Think about how the algorithm reduces the problem size with each step",
+      "difficulty": "medium",
+      "tags": ["algorithms", "complexity", "search"],
+      "options": [
+        {
+          "optionText": "O(log n)",
+          "isCorrect": true,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "O(n)",
+          "isCorrect": false,
+          "orderIndex": 2
+        },
+        {
+          "optionText": "O(n²)",
+          "isCorrect": false,
+          "orderIndex": 3
+        },
+        {
+          "optionText": "O(1)",
+          "isCorrect": false,
+          "orderIndex": 4
+        }
+      ]
+    },
+    {
+      "questionText": "Explain the concept of recursion in programming and provide an example.",
+      "questionType": "essay",
+      "points": 10,
+      "orderIndex": 2,
+      "explanation": "Recursion is a programming technique where a function calls itself to solve smaller instances of the same problem",
+      "hint": "Consider base cases and recursive cases in your explanation",
+      "difficulty": "hard",
+      "tags": ["recursion", "programming concepts", "functions"]
+    },
+    {
+      "questionText": "Is Python a compiled language?",
+      "questionType": "true_false",
+      "points": 2,
+      "orderIndex": 3,
+      "explanation": "Python is an interpreted language, not compiled. It converts source code to bytecode at runtime",
+      "hint": "Think about how Python code is executed",
+      "difficulty": "easy",
+      "tags": ["python", "programming languages", "compilation"],
+      "options": [
+        {
+          "optionText": "True",
+          "isCorrect": false,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "False",
+          "isCorrect": true,
+          "orderIndex": 2
+        }
+      ]
     }
-  },
-  "message": "Test created successfully"
+  ]
+}
+```
+
+##### **Example 2: Formal Exam with Advanced Questions**
+```json
+POST /tests
+{
+  "courseId": 2,
+  "title": "Data Structures & Algorithms Final Exam",
+  "description": "Comprehensive final examination covering advanced data structures, algorithm design, and complexity analysis. This is a timed exam with limited attempts.",
+  "testType": "exam",
+  "durationMinutes": 180,
+  "maxAttempts": 1,
+  "questions": [
+    {
+      "questionText": "Compare and contrast the time complexities of different sorting algorithms (quicksort, mergesort, heapsort) and explain when you would use each.",
+      "questionType": "essay",
+      "points": 20,
+      "orderIndex": 1,
+      "explanation": "Students should demonstrate understanding of O(n log n) average case complexities, worst-case scenarios, and practical considerations like stability and in-place sorting",
+      "hint": "Consider best-case, average-case, and worst-case scenarios for each algorithm",
+      "difficulty": "expert",
+      "tags": ["sorting", "algorithms", "complexity", "comparison"]
+    },
+    {
+      "questionText": "Which data structure provides the most efficient insertion and deletion operations for maintaining a sorted collection?",
+      "questionType": "multiple_choice",
+      "points": 8,
+      "orderIndex": 2,
+      "explanation": "Balanced binary search trees like AVL or Red-Black trees provide O(log n) insertion, deletion, and search operations while maintaining sorted order",
+      "hint": "Think about data structures that maintain order automatically",
+      "difficulty": "hard",
+      "tags": ["data structures", "trees", "efficiency"],
+      "options": [
+        {
+          "optionText": "Array (sorted)",
+          "isCorrect": false,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "Linked List (sorted)",
+          "isCorrect": false,
+          "orderIndex": 2
+        },
+        {
+          "optionText": "Balanced Binary Search Tree",
+          "isCorrect": true,
+          "orderIndex": 3
+        },
+        {
+          "optionText": "Hash Table",
+          "isCorrect": false,
+          "orderIndex": 4
+        }
+      ]
+    }
+  ]
+}
+```
+
+##### **Example 3: Training Module with Practice Questions**
+```json
+POST /tests
+{
+  "courseId": 3,
+  "title": "JavaScript Fundamentals Practice",
+  "description": "Practice module for JavaScript basics. No time limit, multiple attempts allowed for learning.",
+  "testType": "training",
+  "maxAttempts": 5,
+  "questions": [
+    {
+      "questionText": "What will console.log(typeof null) output?",
+      "questionType": "multiple_choice",
+      "points": 3,
+      "orderIndex": 1,
+      "explanation": "This is a well-known JavaScript quirk. typeof null returns 'object' due to a bug in the original JavaScript implementation that was kept for backward compatibility",
+      "hint": "This is a famous JavaScript gotcha that trips up many developers",
+      "difficulty": "medium",
+      "tags": ["javascript", "types", "quirks"],
+      "options": [
+        {
+          "optionText": "null",
+          "isCorrect": false,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "undefined",
+          "isCorrect": false,
+          "orderIndex": 2
+        },
+        {
+          "optionText": "object",
+          "isCorrect": true,
+          "orderIndex": 3
+        },
+        {
+          "optionText": "string",
+          "isCorrect": false,
+          "orderIndex": 4
+        }
+      ]
+    },
+    {
+      "questionText": "Closures in JavaScript allow inner functions to access variables from their outer scope even after the outer function has returned.",
+      "questionType": "true_false",
+      "points": 2,
+      "orderIndex": 2,
+      "explanation": "This statement is true. Closures are a fundamental concept in JavaScript that allows functions to 'remember' their lexical scope",
+      "hint": "Think about what happens to variables when functions finish executing",
+      "difficulty": "easy",
+      "tags": ["javascript", "closures", "scope"],
+      "options": [
+        {
+          "optionText": "True",
+          "isCorrect": true,
+          "orderIndex": 1
+        },
+        {
+          "optionText": "False",
+          "isCorrect": false,
+          "orderIndex": 2
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### **Best Practices for Test Creation** 💡
+
+1. **Question Ordering**: Use sequential `orderIndex` values (1, 2, 3...) for proper question ordering
+2. **Option Ordering**: Use sequential `orderIndex` values for answer options to ensure consistent display
+3. **Point Values**: Assign appropriate point values based on question difficulty and importance
+4. **Explanations**: Always provide clear explanations for educational value
+5. **Hints**: Use hints to guide students without giving away answers
+6. **Tags**: Use consistent tagging for better question categorization and analytics
+7. **Difficulty Levels**: Use appropriate difficulty levels (easy, medium, hard, expert) for grading curves
+8. **Question Types**: Choose appropriate question types based on learning objectives:
+   - `multiple_choice`: For factual knowledge and concept understanding
+   - `true_false`: For simple concept validation
+   - `essay`: For complex analysis and critical thinking
+   - `short_answer`: For brief explanations
+   - `fill_in_blank`: For specific knowledge testing
+
+#### **Error Handling** ⚠️
+
+The API provides comprehensive error handling with detailed error messages:
+
+```json
+// Validation Error Example
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "questions[0].options",
+      "message": "At least one option must be marked as correct"
+    },
+    {
+      "field": "courseId",
+      "message": "Course ID must be a valid number"
+    }
+  ]
+}
+
+// Course Access Error
+{
+  "success": false,
+  "message": "You do not have permission to create tests for this course",
+  "statusCode": 403
+}
+
+// Database Error
+{
+  "success": false,
+  "message": "Transaction failed - test creation rolled back",
+  "statusCode": 500
+}
+```
+
+#### **Atomic Transaction Behavior** 🔒
+
+The test creation endpoint uses database transactions to ensure data consistency:
+
+- **All-or-Nothing**: Either the entire test (including all questions and options) is created successfully, or nothing is created
+- **Automatic Rollback**: If any part of the creation fails, all changes are automatically rolled back
+- **Data Integrity**: Ensures referential integrity between test, questions, and options
+- **Error Recovery**: Clear error messages help identify and fix issues before retry
+
+```json
+// Example: If question validation fails, entire test creation is rolled back
+{
+  "success": false,
+  "message": "Test creation failed - rolled back all changes",
+  "error": "Question 2: At least one option must be marked as correct",
+  "statusCode": 400
 }
 ```
 

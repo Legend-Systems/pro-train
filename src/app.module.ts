@@ -36,6 +36,8 @@ import { MediaManagerModule } from './media-manager/media-manager.module';
 import { MediaFile } from './media-manager/entities/media-manager.entity';
 import { CourseMaterialsModule } from './course-materials/course-materials.module';
 import { CourseMaterial } from './course-materials/entities/course-material.entity';
+import { Organization } from './org/entities/org.entity';
+import { Branch } from './branch/entities/branch.entity';
 import { CommonModule } from './common/common.module';
 
 @Module({
@@ -80,11 +82,13 @@ import { CommonModule } from './common/common.module';
                 database: configService.get('DATABASE_NAME'),
                 entities: [
                     Answer,
+                    Branch,
                     Communication,
                     Course,
                     CourseMaterial,
                     Leaderboard,
                     MediaFile,
+                    Organization,
                     Question,
                     QuestionOption,
                     Result,

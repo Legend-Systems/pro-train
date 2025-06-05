@@ -54,6 +54,16 @@ export class QuestionOption {
     @IsBoolean()
     isCorrect: boolean;
 
+    @Column()
+    @ApiProperty({
+        description: 'Order index of the option within the question',
+        example: 1,
+        minimum: 1,
+    })
+    @IsNumber()
+    @IsNotEmpty()
+    orderIndex: number;
+
     @CreateDateColumn()
     @ApiProperty({
         description: 'Option creation timestamp',
