@@ -4,6 +4,7 @@ import {
     BadRequestException,
     ForbiddenException,
     InternalServerErrorException,
+    Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
@@ -15,12 +16,15 @@ import { ResultAnalyticsDto } from './dto/result-analytics.dto';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Answer } from '../answers/entities/answer.entity';
 import { Question } from '../questions/entities/question.entity';
+import { Test } from '../test/entities/test.entity';
 import { plainToClass } from 'class-transformer';
 import { AttemptStatus } from '../test_attempts/entities/test_attempt.entity';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 
 @Injectable()
 export class ResultsService {
+    private readonly logger = new Logger(ResultsService.name);
+
     constructor(
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
@@ -30,24 +34,49 @@ export class ResultsService {
         private readonly answerRepository: Repository<Answer>,
         @InjectRepository(Question)
         private readonly questionRepository: Repository<Question>,
+        @InjectRepository(Test)
+        private readonly testRepository: Repository<Test>,
         private readonly leaderboardService: LeaderboardService,
     ) {}
 
     async createFromAttempt(attemptId: number): Promise<ResultResponseDto> {
         try {
-            // Get the test attempt with all related data
-            const attempt = await this.testAttemptRepository.findOne({
-                where: { attemptId },
-                relations: ['test', 'test.course', 'user'],
-            });
+            this.logger.log(`Creating result from attempt ${attemptId}`);
+
+            // Use query builder for more reliable relation loading
+            const attempt = await this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .leftJoinAndSelect('attempt.test', 'test')
+                .leftJoinAndSelect('test.course', 'course')
+                .leftJoinAndSelect('attempt.user', 'user')
+                .leftJoinAndSelect('attempt.orgId', 'orgId')
+                .leftJoinAndSelect('attempt.branchId', 'branchId')
+                .where('attempt.attemptId = :attemptId', { attemptId })
+                .getOne();
 
             if (!attempt) {
+                this.logger.error(`Test attempt ${attemptId} not found`);
                 throw new NotFoundException(
                     `Test attempt with ID ${attemptId} not found`,
                 );
             }
 
+            this.logger.debug(`Found attempt ${attemptId}:`, {
+                status: attempt.status,
+                testId: attempt.testId,
+                userId: attempt.userId,
+                orgId: attempt.orgId?.id || 'null',
+                branchId: attempt.branchId?.id || 'null',
+                hasTest: !!attempt.test,
+                testTitle: attempt.test?.title || 'null',
+                courseId: attempt.test?.courseId || 'null',
+                hasCourse: !!attempt.test?.course,
+            });
+
             if (attempt.status !== AttemptStatus.SUBMITTED) {
+                this.logger.warn(
+                    `Attempt ${attemptId} status is ${attempt.status}, not SUBMITTED`,
+                );
                 throw new BadRequestException(
                     'Cannot create result for incomplete attempt',
                 );
@@ -59,19 +88,127 @@ export class ResultsService {
             });
 
             if (existingResult) {
+                this.logger.warn(
+                    `Result already exists for attempt ${attemptId}: ${existingResult.resultId}`,
+                );
                 throw new BadRequestException(
                     'Result already exists for this attempt',
                 );
             }
 
+            // Validate required data with fallback mechanism
+            if (!attempt.test) {
+                this.logger.warn(
+                    `Test relation not loaded for attempt ${attemptId}. TestId: ${attempt.testId}. Attempting manual fetch...`,
+                );
+
+                // Fallback: manually fetch test data
+                try {
+                    const test = await this.testRepository
+                        .createQueryBuilder('test')
+                        .leftJoinAndSelect('test.course', 'course')
+                        .leftJoinAndSelect('test.orgId', 'orgId')
+                        .leftJoinAndSelect('test.branchId', 'branchId')
+                        .where('test.testId = :testId', {
+                            testId: attempt.testId,
+                        })
+                        .getOne();
+
+                    if (test) {
+                        attempt.test = test;
+                        this.logger.log(
+                            `Successfully fetched test data manually for attempt ${attemptId}`,
+                        );
+                    } else {
+                        this.logger.error(
+                            `Test ${attempt.testId} not found in database for attempt ${attemptId}`,
+                        );
+                        throw new BadRequestException(
+                            'Test not found for this attempt',
+                        );
+                    }
+                } catch (fetchError) {
+                    this.logger.error(
+                        `Failed to manually fetch test data for attempt ${attemptId}:`,
+                        fetchError,
+                    );
+                    throw new BadRequestException(
+                        'Test data not found for attempt - relation not loaded',
+                    );
+                }
+            }
+
+            if (!attempt.test.courseId) {
+                this.logger.error(
+                    `Course ID missing for test ${attempt.test.testId} in attempt ${attemptId}`,
+                );
+                throw new BadRequestException('Course ID not found for test');
+            }
+
             // Calculate the score
+            this.logger.debug(`Calculating score for attempt ${attemptId}`);
             const { score, maxScore, percentage } =
                 await this.calculateScore(attemptId);
+
+            this.logger.debug(`Score calculated for attempt ${attemptId}:`, {
+                score,
+                maxScore,
+                percentage,
+            });
 
             // Determine if passed (assuming 60% pass rate)
             const passed = percentage >= 60;
 
-            // Create the result
+            // Ensure we have org/branch data - inherit from attempt or use defaults
+            let orgId = attempt.orgId;
+            let branchId = attempt.branchId;
+
+            // If attempt doesn't have org/branch, try to get from test or course
+            if (!orgId && attempt.test?.course) {
+                this.logger.debug(
+                    `Attempting to inherit org/branch from test/course for attempt ${attemptId}`,
+                );
+
+                // Try to get org/branch from test first
+                if (attempt.test.orgId) {
+                    orgId = attempt.test.orgId;
+                    this.logger.debug(`Inherited orgId from test: ${orgId.id}`);
+                }
+
+                if (attempt.test.branchId) {
+                    branchId = attempt.test.branchId;
+                    this.logger.debug(
+                        `Inherited branchId from test: ${branchId.id}`,
+                    );
+                }
+
+                // If still no org/branch, get from course
+                if (!orgId && attempt.test.course.orgId) {
+                    orgId = attempt.test.course.orgId;
+                    this.logger.debug(
+                        `Inherited orgId from course: ${orgId.id}`,
+                    );
+                }
+
+                if (!branchId && attempt.test.course.branchId) {
+                    branchId = attempt.test.course.branchId;
+                    this.logger.debug(
+                        `Inherited branchId from course: ${branchId.id}`,
+                    );
+                }
+            }
+
+            // If we still don't have org data, this is a critical error
+            if (!orgId) {
+                this.logger.error(
+                    `No org data found for attempt ${attemptId} - cannot create result`,
+                );
+                throw new BadRequestException(
+                    'Organization data required to create result',
+                );
+            }
+
+            // Create the result with inherited org/branch from attempt
             const resultData: CreateResultDto = {
                 attemptId,
                 userId: attempt.userId,
@@ -84,8 +221,28 @@ export class ResultsService {
                 calculatedAt: new Date(),
             };
 
-            const result = this.resultRepository.create(resultData);
+            this.logger.debug(
+                `Creating result entity for attempt ${attemptId}:`,
+                {
+                    ...resultData,
+                    orgId: orgId?.id || 'null',
+                    branchId: branchId?.id || 'null',
+                },
+            );
+
+            const result = this.resultRepository.create({
+                ...resultData,
+                // Inherit org/branch from the test attempt
+                orgId: orgId,
+                branchId: branchId,
+            });
+
+            this.logger.debug(`Saving result for attempt ${attemptId}`);
             const savedResult = await this.resultRepository.save(result);
+
+            this.logger.log(
+                `Result created successfully for attempt ${attemptId}: ${savedResult.resultId}`,
+            );
 
             // Trigger leaderboard update for the course and user
             try {
@@ -93,26 +250,38 @@ export class ResultsService {
                     attempt.test.courseId,
                     attempt.userId,
                 );
+                this.logger.debug(
+                    `Leaderboard updated for user ${attempt.userId} in course ${attempt.test.courseId}`,
+                );
             } catch (leaderboardError) {
                 // Log error but don't fail the result creation
-                console.error(
+                this.logger.error(
                     `Failed to update leaderboard for user ${attempt.userId} in course ${attempt.test.courseId}`,
                     leaderboardError instanceof Error
-                        ? leaderboardError.message
-                        : leaderboardError,
+                        ? leaderboardError.stack
+                        : String(leaderboardError),
                 );
             }
 
             return this.findOne(savedResult.resultId);
         } catch (error) {
+            this.logger.error(
+                `Failed to create result from attempt ${attemptId}:`,
+                error instanceof Error ? error.stack : String(error),
+            );
+
             if (
                 error instanceof NotFoundException ||
                 error instanceof BadRequestException
             ) {
                 throw error;
             }
+
+            // Provide more specific error information
+            const errorMessage =
+                error instanceof Error ? error.message : 'Unknown error';
             throw new InternalServerErrorException(
-                'Failed to create result from attempt',
+                `Failed to create result from attempt: ${errorMessage}`,
             );
         }
     }

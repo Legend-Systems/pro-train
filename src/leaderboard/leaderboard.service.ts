@@ -2,7 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Leaderboard } from './entities/leaderboard.entity';
-import { CreateLeaderboardDto } from './dto/create-leaderboard.dto';
+
 import { LeaderboardResponseDto } from './dto/leaderboard-response.dto';
 import { Result } from '../results/entities/result.entity';
 import { plainToClass } from 'class-transformer';
@@ -51,7 +51,7 @@ export class LeaderboardService {
                 page,
                 limit,
             };
-        } catch (_error) {
+        } catch {
             throw new InternalServerErrorException(
                 'Failed to fetch course leaderboard',
             );
@@ -85,11 +85,29 @@ export class LeaderboardService {
 
     async updateLeaderboard(courseId: number): Promise<void> {
         try {
-            // Get all results for the course
+            // Get all results for the course with org/branch data
             const results = await this.resultRepository
                 .createQueryBuilder('result')
+                .leftJoinAndSelect('result.orgId', 'org')
+                .leftJoinAndSelect('result.branchId', 'branch')
                 .where('result.courseId = :courseId', { courseId })
                 .getMany();
+
+            if (results.length === 0) {
+                // Clear leaderboard if no results
+                await this.leaderboardRepository.delete({ courseId });
+                return;
+            }
+
+            // Get org/branch from first result (all should have same org/branch for a course)
+            const orgEntity = results[0].orgId;
+            const branchEntity = results[0].branchId;
+
+            if (!orgEntity) {
+                throw new Error(
+                    `No organization data found for course ${courseId} results`,
+                );
+            }
 
             // Group results by user
             const userStats = new Map<
@@ -125,21 +143,20 @@ export class LeaderboardService {
             // Clear existing leaderboard for this course
             await this.leaderboardRepository.delete({ courseId });
 
-            // Create new leaderboard entries
-            const leaderboardEntries: CreateLeaderboardDto[] = sortedUsers.map(
-                ([userId, stats], index) => ({
-                    courseId,
-                    userId,
-                    rank: index + 1,
-                    averageScore: Math.round(stats.averageScore * 100) / 100,
-                    testsCompleted: stats.testsCompleted,
-                    totalPoints: Math.round(stats.totalPoints * 100) / 100,
-                }),
-            );
-
-            if (leaderboardEntries.length > 0) {
-                const entities = leaderboardEntries.map(dto =>
-                    this.leaderboardRepository.create(dto),
+            // Create new leaderboard entries directly with entity objects
+            if (sortedUsers.length > 0) {
+                const entities = sortedUsers.map(([userId, stats], index) =>
+                    this.leaderboardRepository.create({
+                        courseId,
+                        userId,
+                        rank: index + 1,
+                        averageScore:
+                            Math.round(stats.averageScore * 100) / 100,
+                        testsCompleted: stats.testsCompleted,
+                        totalPoints: Math.round(stats.totalPoints * 100) / 100,
+                        orgId: orgEntity,
+                        branchId: branchEntity,
+                    }),
                 );
                 await this.leaderboardRepository.save(entities);
             }
@@ -152,9 +169,11 @@ export class LeaderboardService {
 
     async updateUserScore(courseId: number, userId: string): Promise<void> {
         try {
-            // Get user's results for the course
+            // Get user's results for the course with org/branch data
             const userResults = await this.resultRepository
                 .createQueryBuilder('result')
+                .leftJoinAndSelect('result.orgId', 'org')
+                .leftJoinAndSelect('result.branchId', 'branch')
                 .where('result.courseId = :courseId', { courseId })
                 .andWhere('result.userId = :userId', { userId })
                 .getMany();
@@ -163,6 +182,17 @@ export class LeaderboardService {
                 // Remove user from leaderboard if no results
                 await this.leaderboardRepository.delete({ courseId, userId });
                 return;
+            }
+
+            // Get org/branch data from the first result (all should have the same org/branch)
+            const firstResult = userResults[0];
+            const orgEntity = firstResult.orgId;
+            const branchEntity = firstResult.branchId;
+
+            if (!orgEntity) {
+                throw new Error(
+                    `No organization data found for user ${userId} results in course ${courseId}`,
+                );
             }
 
             // Calculate user stats
@@ -176,7 +206,7 @@ export class LeaderboardService {
             // Find or create leaderboard entry
             let leaderboardEntry = await this.leaderboardRepository.findOne({
                 where: { courseId, userId },
-                relations: ['user', 'course'],
+                relations: ['user', 'course', 'orgId', 'branchId'],
             });
 
             if (leaderboardEntry) {
@@ -189,15 +219,16 @@ export class LeaderboardService {
                 leaderboardEntry.lastUpdated = new Date();
             } else {
                 // Create new entry with temporary rank
-                const createDto: CreateLeaderboardDto = {
+                leaderboardEntry = this.leaderboardRepository.create({
                     courseId,
                     userId,
                     rank: 999999, // Temporary rank, will be updated when recalculating ranks
                     averageScore: Math.round(averageScore * 100) / 100,
                     testsCompleted,
                     totalPoints: Math.round(totalPoints * 100) / 100,
-                };
-                leaderboardEntry = this.leaderboardRepository.create(createDto);
+                    orgId: orgEntity,
+                    branchId: branchEntity,
+                });
             }
 
             await this.leaderboardRepository.save(leaderboardEntry);

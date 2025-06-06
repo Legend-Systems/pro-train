@@ -8,6 +8,7 @@ import {
     Index,
     Check,
     OneToMany,
+    JoinColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -152,9 +153,11 @@ export class TestAttempt {
 
     // Relations
     @ManyToOne(() => Test, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'testId' })
     test: Test;
 
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'userId' })
     user: User;
 
     @OneToMany('Answer', 'attempt')

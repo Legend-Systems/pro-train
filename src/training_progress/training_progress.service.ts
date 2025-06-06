@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { TrainingProgress } from './entities/training_progress.entity';
+import { Course } from '../course/entities/course.entity';
 import { CreateTrainingProgressDto } from './dto/create-training_progress.dto';
 import { UpdateTrainingProgressDto } from './dto/update-training_progress.dto';
 import { TrainingProgressResponseDto } from './dto/training-progress-response.dto';
@@ -16,6 +17,8 @@ export class TrainingProgressService {
     constructor(
         @InjectRepository(TrainingProgress)
         private readonly progressRepository: Repository<TrainingProgress>,
+        @InjectRepository(Course)
+        private readonly courseRepository: Repository<Course>,
     ) {}
 
     async getUserProgress(
@@ -68,7 +71,7 @@ export class TrainingProgressService {
 
             let progressEntry = await this.progressRepository.findOne({
                 where: whereCondition,
-                relations: ['user', 'course', 'test'],
+                relations: ['user', 'course', 'test', 'orgId', 'branchId'],
             });
 
             if (progressEntry) {
@@ -90,7 +93,19 @@ export class TrainingProgressService {
                 }
                 progressEntry.lastUpdated = new Date();
             } else {
-                // Create new progress entry
+                // Need to get course with org/branch info to inherit
+                const course = await this.courseRepository.findOne({
+                    where: { courseId },
+                    relations: ['orgId', 'branchId'],
+                });
+
+                if (!course) {
+                    throw new NotFoundException(
+                        `Course with ID ${courseId} not found`,
+                    );
+                }
+
+                // Create new progress entry with inherited org/branch
                 const createDto: CreateTrainingProgressDto = {
                     userId,
                     courseId,
@@ -100,7 +115,12 @@ export class TrainingProgressService {
                     questionsCompleted: updateData?.questionsCompleted || 0,
                     totalQuestions: updateData?.totalQuestions || 0,
                 };
-                progressEntry = this.progressRepository.create(createDto);
+                progressEntry = this.progressRepository.create({
+                    ...createDto,
+                    // Inherit org/branch from course
+                    orgId: course.orgId,
+                    branchId: course.branchId,
+                });
             }
 
             const savedProgress =

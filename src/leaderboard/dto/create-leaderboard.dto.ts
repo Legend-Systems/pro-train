@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsUUID } from 'class-validator';
+import { IsNumber, IsUUID, IsOptional } from 'class-validator';
 
 export class CreateLeaderboardDto {
     @ApiProperty({
@@ -48,4 +48,20 @@ export class CreateLeaderboardDto {
     })
     @IsNumber()
     totalPoints: number;
+
+    @ApiProperty({
+        description: 'Organization ID for this leaderboard entry',
+        example: 1,
+    })
+    @IsNumber()
+    orgId: number;
+
+    @ApiProperty({
+        description: 'Branch ID for this leaderboard entry',
+        example: 1,
+        required: false,
+    })
+    @IsNumber()
+    @IsOptional()
+    branchId?: number;
 }

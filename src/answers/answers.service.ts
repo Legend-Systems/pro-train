@@ -83,10 +83,10 @@ export class AnswersService {
         scope: OrgBranchScope,
     ): Promise<StandardResponse<AnswerResponseDto>> {
         return this.retryService.executeDatabase(async () => {
-            // Validate attempt ownership and status
+            // Validate attempt ownership and status - include org/branch relations
             const attempt = await this.testAttemptRepository.findOne({
                 where: { attemptId: createAnswerDto.attemptId },
-                relations: ['user'],
+                relations: ['user', 'orgId', 'branchId'],
             });
 
             if (!attempt) {
@@ -159,11 +159,14 @@ export class AnswersService {
                 }
             }
 
-            // Create the answer
+            // Create the answer with inherited org/branch from attempt
             const answer = this.answerRepository.create({
                 ...createAnswerDto,
                 isMarked: false,
                 isCorrect: false,
+                // Inherit org/branch from the test attempt
+                orgId: attempt.orgId,
+                branchId: attempt.branchId,
             });
 
             const savedAnswer = await this.answerRepository.save(answer);
@@ -197,6 +200,8 @@ export class AnswersService {
             const answerQuery = this.answerRepository
                 .createQueryBuilder('answer')
                 .leftJoinAndSelect('answer.attempt', 'attempt')
+                .leftJoinAndSelect('answer.orgId', 'orgId')
+                .leftJoinAndSelect('answer.branchId', 'branchId')
                 .where('answer.answerId = :id', { id });
 
             // Apply org/branch scoping
@@ -278,6 +283,8 @@ export class AnswersService {
                 .createQueryBuilder('answer')
                 .leftJoinAndSelect('answer.attempt', 'attempt')
                 .leftJoinAndSelect('answer.question', 'question')
+                .leftJoinAndSelect('answer.orgId', 'orgId')
+                .leftJoinAndSelect('answer.branchId', 'branchId')
                 .where('answer.answerId = :id', { id });
 
             // Apply org/branch scoping
@@ -503,6 +510,8 @@ export class AnswersService {
                 .leftJoinAndSelect('answer.question', 'question')
                 .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
                 .leftJoinAndSelect('answer.attempt', 'attempt')
+                .leftJoinAndSelect('answer.orgId', 'orgId')
+                .leftJoinAndSelect('answer.branchId', 'branchId')
                 .where('answer.attemptId = :attemptId', { attemptId })
                 .andWhere('answer.isMarked = :isMarked', { isMarked: false });
 
