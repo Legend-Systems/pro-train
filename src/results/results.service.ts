@@ -20,6 +20,7 @@ import { Test } from '../test/entities/test.entity';
 import { plainToClass } from 'class-transformer';
 import { AttemptStatus } from '../test_attempts/entities/test_attempt.entity';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
+import { CommunicationsService } from '../communications/communications.service';
 
 @Injectable()
 export class ResultsService {
@@ -37,6 +38,7 @@ export class ResultsService {
         @InjectRepository(Test)
         private readonly testRepository: Repository<Test>,
         private readonly leaderboardService: LeaderboardService,
+        private readonly communicationsService: CommunicationsService,
     ) {}
 
     async createFromAttempt(attemptId: number): Promise<ResultResponseDto> {
@@ -260,6 +262,22 @@ export class ResultsService {
                     leaderboardError instanceof Error
                         ? leaderboardError.stack
                         : String(leaderboardError),
+                );
+            }
+
+            // Send results summary email to the user
+            try {
+                await this.sendResultsSummaryEmail(savedResult, attempt);
+                this.logger.debug(
+                    `Results summary email sent to user ${attempt.userId} for result ${savedResult.resultId}`,
+                );
+            } catch (emailError) {
+                // Log error but don't fail the result creation
+                this.logger.error(
+                    `Failed to send results summary email for result ${savedResult.resultId}`,
+                    emailError instanceof Error
+                        ? emailError.stack
+                        : String(emailError),
                 );
             }
 
@@ -708,5 +726,77 @@ export class ResultsService {
         queryBuilder.orderBy(`result.${sortBy}`, sortOrder);
 
         return queryBuilder;
+    }
+
+    private async sendResultsSummaryEmail(
+        result: Result,
+        attempt: TestAttempt,
+    ): Promise<void> {
+        try {
+            // Get user information
+            if (!attempt.user) {
+                this.logger.warn(
+                    `User information not available for result ${result.resultId}`,
+                );
+                return;
+            }
+
+            // Calculate completion time (if available)
+            let completionTime = 'Not available';
+            if (attempt.startTime && attempt.submitTime) {
+                const durationMs =
+                    new Date(attempt.submitTime).getTime() -
+                    new Date(attempt.startTime).getTime();
+                const durationMinutes = Math.round(durationMs / (1000 * 60));
+                completionTime = `${durationMinutes} minutes`;
+            }
+
+            // Get question count for more accurate data
+            const questionCount = await this.questionRepository.count({
+                where: { testId: attempt.testId },
+            });
+
+            // Get correct answers count by checking answers with points
+            const allAnswers = await this.answerRepository.find({
+                where: { attemptId: attempt.attemptId },
+                relations: ['question'],
+            });
+
+            const correctAnswersCount = allAnswers.filter(
+                answer =>
+                    answer.pointsAwarded !== null &&
+                    answer.pointsAwarded !== undefined &&
+                    answer.pointsAwarded > 0,
+            ).length;
+
+            // Prepare template data with proper data types and fallbacks
+            const templateData = {
+                recipientName:
+                    `${attempt.user.firstName || ''} ${attempt.user.lastName || ''}`.trim() ||
+                    'Student',
+                recipientEmail: attempt.user.email || '',
+                testTitle: attempt.test?.title || 'Test',
+                score: Number(result.score) || 0,
+                totalQuestions: questionCount || 1,
+                correctAnswers: correctAnswersCount || 0,
+                percentage: Number(result.percentage) || 0,
+                completionTime: completionTime || 'Not available',
+                resultsUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/results/${result.resultId}`,
+            };
+
+            await this.communicationsService.sendResultsSummaryEmail(
+                templateData,
+            );
+
+            this.logger.log(
+                `Results summary email queued for user ${attempt.user.email} (Result ID: ${result.resultId})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send results summary email for result ${result.resultId}:`,
+                error instanceof Error ? error.stack : String(error),
+            );
+            throw error;
+        }
     }
 }

@@ -43,6 +43,27 @@ export class EmailTemplateService {
         Handlebars.registerHelper('and', (a: any, b: any): boolean => a && b);
         Handlebars.registerHelper('or', (a: any, b: any): boolean => a || b);
         Handlebars.registerHelper('not', a => !a);
+        
+        // Conditional comparison helper for if blocks
+        Handlebars.registerHelper('ifCond', function(this: any, v1: any, operator: string, v2: any, options: any) {
+            const operators: Record<string, (a: any, b: any) => boolean> = {
+                '==': (a, b) => a == b,
+                '===': (a, b) => a === b,
+                '!=': (a, b) => a != b,
+                '!==': (a, b) => a !== b,
+                '<': (a, b) => a < b,
+                '<=': (a, b) => a <= b,
+                '>': (a, b) => a > b,
+                '>=': (a, b) => a >= b,
+                '&&': (a, b) => a && b,
+                '||': (a, b) => a || b
+            };
+            
+            if (operators[operator]) {
+                return operators[operator](v1, v2) ? options.fn(this) : options.inverse(this);
+            }
+            return options.inverse(this);
+        });
 
         // Date formatting helper
         Handlebars.registerHelper(

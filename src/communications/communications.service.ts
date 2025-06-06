@@ -792,6 +792,77 @@ export class CommunicationsService {
         }
     }
 
+    async sendResultsSummaryEmail(templateData: {
+        recipientName: string;
+        recipientEmail: string;
+        testTitle: string;
+        score: number;
+        totalQuestions: number;
+        correctAnswers: number;
+        percentage: number;
+        completionTime: string;
+        resultsUrl: string;
+        feedback?: string;
+    }): Promise<void> {
+        try {
+            const baseData = this.getBaseTemplateData(
+                templateData.recipientEmail,
+                templateData.recipientName,
+            );
+
+            const fullTemplateData = {
+                ...baseData,
+                ...templateData,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.RESULTS_SUMMARY,
+                fullTemplateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: templateData.recipientEmail,
+                recipientName: templateData.recipientName,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'trainpro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.RESULTS_SUMMARY,
+                templateUsed: 'results-summary',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    testTitle: templateData.testTitle,
+                    score: templateData.score,
+                    percentage: templateData.percentage,
+                    resultsEmailSent: true,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+
+            await this.emailQueueService.queueEmail({
+                to: templateData.recipientEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(
+                `Results summary email queued for: ${templateData.recipientName} (${templateData.recipientEmail})`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `Failed to send results summary email for test ${templateData.testTitle}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
     create(
         createCommunicationDto: CreateCommunicationDto,
         scope: OrgBranchScope,

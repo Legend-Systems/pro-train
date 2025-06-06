@@ -16,6 +16,8 @@ async function bootstrap() {
             'http://127.0.0.1:3000',
             'http://localhost:3001',
             'https://client.trainpro.co.za',
+            'https://wwww.trainpro.co.za',
+            'wwww.trainpro.co.za',
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [

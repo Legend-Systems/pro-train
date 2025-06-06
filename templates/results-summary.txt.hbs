@@ -18,12 +18,16 @@ FEEDBACK:
 
 View Detailed Results: {{resultsUrl}}
 
-{{#if gt percentage 80}}
+{{#if percentage}}
+{{#ifCond percentage ">=" 80}}
 🎉 Excellent work! You've demonstrated strong understanding of the material.
-{{else if gt percentage 60}}
+{{else}}
+{{#ifCond percentage ">=" 60}}
 ✅ Good job! You've shown solid knowledge with room for improvement.
 {{else}}
 📚 Keep studying! Consider reviewing the material and retaking the test if allowed.
+{{/ifCond}}
+{{/ifCond}}
 {{/if}}
 
 We're here to support your learning journey. Keep up the great work!
