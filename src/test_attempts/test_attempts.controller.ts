@@ -449,13 +449,33 @@ export class TestAttemptsController {
         @Body() submitData: SubmitTestAttemptDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
-    ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.submitAttempt(
-            id,
-            submitData,
-            scope,
-            req.user.id,
-        );
+    ): Promise<StandardApiResponse<TestAttemptResponseDto>> {
+        try {
+            this.logger.log(
+                `Submitting test attempt ${id} by user: ${req.user.id}`,
+            );
+
+            const result = await this.testAttemptsService.submitAttempt(
+                id,
+                submitData,
+                scope,
+                req.user.id,
+            );
+
+            this.logger.log(`Test attempt ${id} submitted successfully`);
+
+            return {
+                success: true,
+                message: 'Test attempt submitted successfully',
+                data: result,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error submitting test attempt ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Patch(':id/progress')
@@ -490,13 +510,33 @@ export class TestAttemptsController {
         @Body() updateTestAttemptDto: UpdateTestAttemptDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
-    ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.updateProgress(
-            id,
-            updateTestAttemptDto,
-            scope,
-            req.user.id,
-        );
+    ): Promise<StandardApiResponse<TestAttemptResponseDto>> {
+        try {
+            this.logger.log(
+                `Updating progress for test attempt ${id} by user: ${req.user.id}`,
+            );
+
+            const result = await this.testAttemptsService.updateProgress(
+                id,
+                updateTestAttemptDto,
+                scope,
+                req.user.id,
+            );
+
+            this.logger.log(`Progress updated for test attempt ${id}`);
+
+            return {
+                success: true,
+                message: 'Progress updated successfully',
+                data: result,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error updating progress for test attempt ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Post(':id/calculate-score')
@@ -525,8 +565,29 @@ export class TestAttemptsController {
     async calculateScore(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.calculateScore(id, scope);
+    ): Promise<StandardApiResponse<TestAttemptResponseDto>> {
+        try {
+            this.logger.log(`Calculating score for test attempt ${id}`);
+
+            const result = await this.testAttemptsService.calculateScore(
+                id,
+                scope,
+            );
+
+            this.logger.log(`Score calculated for test attempt ${id}`);
+
+            return {
+                success: true,
+                message: 'Score calculated successfully',
+                data: result,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error calculating score for test attempt ${id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Delete(':id/cancel')
@@ -556,8 +617,32 @@ export class TestAttemptsController {
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
-    ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.cancelAttempt(id, scope, req.user.id);
+    ): Promise<StandardApiResponse<TestAttemptResponseDto>> {
+        try {
+            this.logger.log(
+                `Cancelling test attempt ${id} by user: ${req.user.id}`,
+            );
+
+            const result = await this.testAttemptsService.cancelAttempt(
+                id,
+                scope,
+                req.user.id,
+            );
+
+            this.logger.log(`Test attempt ${id} cancelled successfully`);
+
+            return {
+                success: true,
+                message: 'Test attempt cancelled successfully',
+                data: result,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error cancelling test attempt ${id} by user ${req.user.id}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Get('test/:testId/active')

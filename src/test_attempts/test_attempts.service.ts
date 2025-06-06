@@ -354,6 +354,57 @@ export class TestAttemptsService {
     }
 
     /**
+     * Clean up expired attempts for a specific test
+     */
+    private async cleanupExpiredAttemptsForTest(
+        testId: number,
+        scope: OrgBranchScope,
+    ): Promise<void> {
+        try {
+            const query = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.testId = :testId', { testId })
+                .andWhere('attempt.status = :status', {
+                    status: AttemptStatus.IN_PROGRESS,
+                });
+
+            // Apply org/branch scoping
+            if (scope.orgId) {
+                query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
+            }
+            if (scope.branchId) {
+                query.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const potentialExpiredAttempts = await query.getMany();
+
+            if (potentialExpiredAttempts.length === 0) {
+                return;
+            }
+
+            const now = new Date();
+            const expiredAttempts = potentialExpiredAttempts.filter(
+                attempt => attempt.expiresAt && now > attempt.expiresAt
+            );
+
+            if (expiredAttempts.length > 0) {
+                this.logger.log(
+                    `Found ${expiredAttempts.length} expired attempts for test ${testId}, cleaning up...`
+                );
+                await this.cleanupExpiredAttempts(expiredAttempts);
+            }
+        } catch (error) {
+            this.logger.error(
+                `Failed to cleanup expired attempts for test ${testId}:`,
+                error instanceof Error ? error.stack : String(error),
+            );
+            // Don't throw - this is cleanup, not critical path
+        }
+    }
+
+    /**
      * Validate if a new attempt is allowed
      */
     private async validateNewAttemptAllowed(
@@ -895,6 +946,9 @@ export class TestAttemptsService {
             if (!test) {
                 throw new NotFoundException('Test not found');
             }
+
+            // Clean up expired attempts before retrieving data
+            await this.cleanupExpiredAttemptsForTest(testId, scope);
 
             const query = this.testAttemptRepository
                 .createQueryBuilder('attempt')
