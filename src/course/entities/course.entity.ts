@@ -7,6 +7,7 @@ import {
     ManyToOne,
     OneToMany,
     Index,
+    JoinColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
@@ -105,7 +106,8 @@ export class Course {
     branchId?: Branch;
 
     // Relations
-    @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+    @ManyToOne(() => User, user => user.id, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'createdBy' })
     creator: User;
 
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })

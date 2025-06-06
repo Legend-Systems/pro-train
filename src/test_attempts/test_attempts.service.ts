@@ -12,10 +12,13 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CreateTestAttemptDto } from './dto/create-test_attempt.dto';
 import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
+import { SubmitTestAttemptDto } from './dto/submit-test-attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttempt, AttemptStatus } from './entities/test_attempt.entity';
 import { Test } from '../test/entities/test.entity';
 import { User } from '../user/entities/user.entity';
+import { Organization } from '../org/entities/org.entity';
+import { Branch } from '../branch/entities/branch.entity';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptListResponseDto } from './dto/test-attempt-list-response.dto';
@@ -153,6 +156,7 @@ export class TestAttemptsService {
 
     /**
      * Start a new test attempt or return existing active attempt
+     * Intelligently handles expired attempts, corrupted data, and edge cases
      */
     async startAttempt(
         createAttemptDto: CreateTestAttemptDto,
@@ -176,111 +180,299 @@ export class TestAttemptsService {
                 throw new BadRequestException('Test is not active');
             }
 
-            // Check if user has an active attempt first
-            const activeAttemptQuery = this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .where('attempt.testId = :testId', {
-                    testId: createAttemptDto.testId,
-                })
-                .andWhere('attempt.userId = :userId', { userId })
-                .andWhere('attempt.status = :status', {
-                    status: AttemptStatus.IN_PROGRESS,
-                });
-
-            // Apply org/branch scoping
-            if (scope.orgId) {
-                activeAttemptQuery.andWhere('attempt.orgId = :orgId', {
-                    orgId: scope.orgId,
-                });
-            }
-            if (scope.branchId) {
-                activeAttemptQuery.andWhere('attempt.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
-
-            const activeAttempt = await activeAttemptQuery.getOne();
-
-            // If active attempt exists, return it instead of throwing error
-            if (activeAttempt) {
-                this.logger.log(
-                    `Returning existing active attempt ${activeAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
-                );
-                return this.mapToResponseDto(activeAttempt);
-            }
-
-            // Check if user has exceeded max attempts
-            const query = this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .where('attempt.testId = :testId', {
-                    testId: createAttemptDto.testId,
-                })
-                .andWhere('attempt.userId = :userId', { userId });
-
-            // Apply org/branch scoping
-            if (scope.orgId) {
-                query.andWhere('attempt.orgId = :orgId', {
-                    orgId: scope.orgId,
-                });
-            }
-            if (scope.branchId) {
-                query.andWhere('attempt.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
-
-            const userAttempts = await query.getCount();
-
-            if (userAttempts >= test.maxAttempts) {
-                throw new BadRequestException(
-                    `Maximum attempts (${test.maxAttempts}) exceeded for this test`,
-                );
-            }
-
-            // Calculate expiration time
-            const startTime = new Date();
-            const expiresAt = test.durationMinutes
-                ? new Date(startTime.getTime() + test.durationMinutes * 60000)
-                : undefined;
-
-            // Create new attempt
-            const attempt = this.testAttemptRepository.create({
-                testId: createAttemptDto.testId,
+            // Smart attempt detection and cleanup
+            const validAttempt = await this.findOrCleanupUserAttempt(
+                createAttemptDto.testId,
                 userId,
-                attemptNumber: userAttempts + 1,
+                scope,
+            );
+
+            if (validAttempt) {
+                this.logger.log(
+                    `Returning existing valid attempt ${validAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
+                );
+                return this.mapToResponseDto(validAttempt);
+            }
+
+            // Check attempt limits before creating new attempt
+            const attemptValidation = await this.validateNewAttemptAllowed(
+                createAttemptDto.testId,
+                userId,
+                scope,
+                test.maxAttempts,
+            );
+
+            if (!attemptValidation.allowed) {
+                throw new BadRequestException(attemptValidation.reason);
+            }
+
+            // Create new attempt with proper error handling
+            const newAttempt = await this.createNewAttempt(
+                createAttemptDto.testId,
+                userId,
+                scope,
+                test,
+                attemptValidation.attemptNumber,
+            );
+
+            this.logger.log(
+                `Created new attempt ${newAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
+            );
+
+            return this.mapToResponseDto(newAttempt);
+        });
+    }
+
+    /**
+     * Intelligently find valid user attempt or cleanup invalid ones
+     */
+    private async findOrCleanupUserAttempt(
+        testId: number,
+        userId: string,
+        scope: OrgBranchScope,
+    ): Promise<TestAttempt | null> {
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .where('attempt.testId = :testId', { testId })
+            .andWhere('attempt.userId = :userId', { userId })
+            .andWhere('attempt.status = :status', {
                 status: AttemptStatus.IN_PROGRESS,
-                startTime,
-                expiresAt,
-                progressPercentage: 0,
-                // Inherit org/branch from test
-                orgId: test.orgId,
-                branchId: test.branchId,
             });
 
+        // Apply org/branch scoping
+        if (scope.orgId) {
+            query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
+        }
+        if (scope.branchId) {
+            query.andWhere('attempt.branchId = :branchId', {
+                branchId: scope.branchId,
+            });
+        }
+
+        const potentialAttempts = await query
+            .orderBy('attempt.createdAt', 'DESC')
+            .getMany();
+
+        if (potentialAttempts.length === 0) {
+            return null;
+        }
+
+        const now = new Date();
+        const validAttempts: TestAttempt[] = [];
+        const expiredAttempts: TestAttempt[] = [];
+
+        // Categorize attempts by validity
+        for (const attempt of potentialAttempts) {
+            if (attempt.expiresAt && now > attempt.expiresAt) {
+                expiredAttempts.push(attempt);
+            } else {
+                validAttempts.push(attempt);
+            }
+        }
+
+        // Clean up expired attempts
+        if (expiredAttempts.length > 0) {
+            await this.cleanupExpiredAttempts(expiredAttempts);
+        }
+
+        // Handle multiple valid attempts (shouldn't happen, but be defensive)
+        if (validAttempts.length > 1) {
+            this.logger.warn(
+                `Found ${validAttempts.length} valid in-progress attempts for test ${testId} and user ${userId}. Keeping the most recent.`,
+            );
+
+            // Keep the most recent, mark others as cancelled
+            const [mostRecent, ...outdated] = validAttempts;
+            await this.cleanupOutdatedAttempts(outdated);
+            return mostRecent;
+        }
+
+        // Return the single valid attempt, if any
+        return validAttempts[0] || null;
+    }
+
+    /**
+     * Clean up expired attempts by updating their status
+     */
+    private async cleanupExpiredAttempts(
+        expiredAttempts: TestAttempt[],
+    ): Promise<void> {
+        try {
+            for (const attempt of expiredAttempts) {
+                attempt.status = AttemptStatus.EXPIRED;
+                await this.testAttemptRepository.save(attempt);
+
+                this.logger.log(
+                    `Marked attempt ${attempt.attemptId} as expired`,
+                );
+
+                // Invalidate cache for this attempt
+                await this.invalidateAttemptCache(
+                    attempt.attemptId,
+                    attempt.userId,
+                    attempt.testId,
+                );
+            }
+        } catch (error) {
+            this.logger.error(
+                'Failed to cleanup expired attempts:',
+                error instanceof Error ? error.stack : String(error),
+            );
+            // Don't throw - this is cleanup, not critical path
+        }
+    }
+
+    /**
+     * Clean up outdated attempts when multiple valid ones exist
+     */
+    private async cleanupOutdatedAttempts(
+        outdatedAttempts: TestAttempt[],
+    ): Promise<void> {
+        try {
+            for (const attempt of outdatedAttempts) {
+                attempt.status = AttemptStatus.CANCELLED;
+                await this.testAttemptRepository.save(attempt);
+
+                this.logger.log(
+                    `Marked outdated attempt ${attempt.attemptId} as cancelled`,
+                );
+
+                // Invalidate cache for this attempt
+                await this.invalidateAttemptCache(
+                    attempt.attemptId,
+                    attempt.userId,
+                    attempt.testId,
+                );
+            }
+        } catch (error) {
+            this.logger.error(
+                'Failed to cleanup outdated attempts:',
+                error instanceof Error ? error.stack : String(error),
+            );
+            // Don't throw - this is cleanup, not critical path
+        }
+    }
+
+    /**
+     * Validate if a new attempt is allowed
+     */
+    private async validateNewAttemptAllowed(
+        testId: number,
+        userId: string,
+        scope: OrgBranchScope,
+        maxAttempts: number,
+    ): Promise<{ allowed: boolean; reason?: string; attemptNumber: number }> {
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .where('attempt.testId = :testId', { testId })
+            .andWhere('attempt.userId = :userId', { userId });
+
+        // Apply org/branch scoping
+        if (scope.orgId) {
+            query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
+        }
+        if (scope.branchId) {
+            query.andWhere('attempt.branchId = :branchId', {
+                branchId: scope.branchId,
+            });
+        }
+
+        // Count all non-cancelled attempts
+        const totalAttempts = await query
+            .andWhere('attempt.status != :cancelledStatus', {
+                cancelledStatus: AttemptStatus.CANCELLED,
+            })
+            .getCount();
+
+        if (totalAttempts >= maxAttempts) {
+            return {
+                allowed: false,
+                reason: `Maximum attempts (${maxAttempts}) exceeded for this test`,
+                attemptNumber: totalAttempts + 1,
+            };
+        }
+
+        return {
+            allowed: true,
+            attemptNumber: totalAttempts + 1,
+        };
+    }
+
+    /**
+     * Create a new attempt with proper error handling
+     */
+    private async createNewAttempt(
+        testId: number,
+        userId: string,
+        scope: OrgBranchScope,
+        test: {
+            durationMinutes?: number;
+            orgId: Organization;
+            branchId?: Branch;
+        },
+        attemptNumber: number,
+    ): Promise<TestAttempt> {
+        const startTime = new Date();
+        const expiresAt = test.durationMinutes
+            ? new Date(startTime.getTime() + test.durationMinutes * 60000)
+            : undefined;
+
+        const attempt = this.testAttemptRepository.create({
+            testId,
+            userId,
+            attemptNumber,
+            status: AttemptStatus.IN_PROGRESS,
+            startTime,
+            expiresAt,
+            progressPercentage: 0,
+            // Inherit org/branch from test
+            orgId: test.orgId,
+            branchId: test.branchId,
+        });
+
+        try {
             const savedAttempt = await this.testAttemptRepository.save(attempt);
 
             // Invalidate related caches
             await this.invalidateAttemptCache(
                 savedAttempt.attemptId,
                 userId,
-                createAttemptDto.testId,
+                testId,
                 scope.orgId,
                 scope.branchId,
             );
 
-            this.logger.log(
-                `Created new attempt ${savedAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
+            return savedAttempt;
+        } catch (error) {
+            this.logger.error(
+                `Failed to create new attempt for test ${testId} and user ${userId}:`,
+                error instanceof Error ? error.stack : String(error),
             );
 
-            return this.mapToResponseDto(savedAttempt);
-        });
+            // Try to handle specific database errors
+            if (error instanceof Error) {
+                if (
+                    error.message.includes('duplicate') ||
+                    error.message.includes('unique')
+                ) {
+                    throw new BadRequestException(
+                        'An attempt is already in progress. Please refresh and try again.',
+                    );
+                }
+            }
+
+            throw new BadRequestException(
+                'Failed to start test attempt. Please try again.',
+            );
+        }
     }
 
     /**
-     * Submit a test attempt
+     * Submit a test attempt with bulk answers
      */
     async submitAttempt(
         attemptId: number,
+        submitData: SubmitTestAttemptDto,
         scope: OrgBranchScope,
         userId: string,
     ): Promise<TestAttemptResponseDto> {
@@ -295,6 +487,39 @@ export class TestAttemptsService {
                 throw new BadRequestException(
                     'Cannot submit attempt that is not in progress',
                 );
+            }
+
+            // Process bulk answers first
+            if (submitData.answers && submitData.answers.length > 0) {
+                this.logger.log(
+                    `Processing ${submitData.answers.length} answers for attempt ${attemptId}`,
+                );
+
+                // Create answers using the answers service
+                const bulkAnswersDto = {
+                    answers: submitData.answers.map(answer => ({
+                        attemptId,
+                        questionId: answer.questionId,
+                        selectedOptionId: answer.selectedOptionId,
+                        textAnswer: answer.answerText,
+                        timeSpent: answer.timeSpent,
+                    })),
+                };
+
+                try {
+                    await this.answersService.bulkCreate(bulkAnswersDto, scope);
+                    this.logger.log(
+                        `Successfully created ${submitData.answers.length} answers for attempt ${attemptId}`,
+                    );
+                } catch (error) {
+                    this.logger.error(
+                        `Failed to create answers for attempt ${attemptId}:`,
+                        error instanceof Error ? error.stack : String(error),
+                    );
+                    throw new BadRequestException(
+                        'Failed to save answers. Please try again.',
+                    );
+                }
             }
 
             // Update attempt status
@@ -583,7 +808,7 @@ export class TestAttemptsService {
         const query = this.testAttemptRepository
             .createQueryBuilder('attempt')
             .leftJoinAndSelect('attempt.test', 'test')
-            .leftJoinAndSelect('attempt.test.course', 'course')
+            .leftJoinAndSelect('test.course', 'course')
             .leftJoinAndSelect('attempt.orgId', 'orgId')
             .leftJoinAndSelect('attempt.branchId', 'branchId')
             .where('attempt.attemptId = :attemptId', { attemptId })
@@ -1084,10 +1309,13 @@ export class TestAttemptsService {
             }
 
             // Check if attempt has expired
-            if (activeAttempt.expiresAt && new Date() > activeAttempt.expiresAt) {
+            if (
+                activeAttempt.expiresAt &&
+                new Date() > activeAttempt.expiresAt
+            ) {
                 activeAttempt.status = AttemptStatus.EXPIRED;
                 await this.testAttemptRepository.save(activeAttempt);
-                
+
                 // Invalidate related caches
                 await this.invalidateAttemptCache(
                     activeAttempt.attemptId,
@@ -1111,12 +1339,14 @@ export class TestAttemptsService {
         attemptId: number,
         scope: OrgBranchScope,
         userId: string,
-    ): Promise<TestAttemptResponseDto & { 
-        timeRemaining?: number; 
-        timeElapsed: number; 
-        questionsAnswered: number;
-        totalQuestions: number;
-    }> {
+    ): Promise<
+        TestAttemptResponseDto & {
+            timeRemaining?: number;
+            timeElapsed: number;
+            questionsAnswered: number;
+            totalQuestions: number;
+        }
+    > {
         return this.retryService.executeDatabase(async () => {
             const attempt = await this.findAttemptByIdAndUserWithScope(
                 attemptId,
@@ -1125,27 +1355,43 @@ export class TestAttemptsService {
             );
 
             const baseDto = this.mapToResponseDto(attempt);
-            
+
             // Calculate timing data
             const now = new Date();
-            const timeElapsed = Math.floor((now.getTime() - attempt.startTime.getTime()) / 1000);
-            
+            const timeElapsed = Math.floor(
+                (now.getTime() - attempt.startTime.getTime()) / 1000,
+            );
+
             let timeRemaining: number | undefined;
             if (attempt.expiresAt) {
-                timeRemaining = Math.max(0, Math.floor((attempt.expiresAt.getTime() - now.getTime()) / 1000));
-                
+                timeRemaining = Math.max(
+                    0,
+                    Math.floor(
+                        (attempt.expiresAt.getTime() - now.getTime()) / 1000,
+                    ),
+                );
+
                 // If time has expired, update status
-                if (timeRemaining === 0 && attempt.status === AttemptStatus.IN_PROGRESS) {
+                if (
+                    timeRemaining === 0 &&
+                    attempt.status === AttemptStatus.IN_PROGRESS
+                ) {
                     attempt.status = AttemptStatus.EXPIRED;
                     await this.testAttemptRepository.save(attempt);
                 }
             }
 
             // Get answer count for this attempt
-            const questionsAnswered = await this.answersService.countByAttempt(attemptId, scope);
-            
+            const questionsAnswered = await this.answersService.countByAttempt(
+                attemptId,
+                scope,
+            );
+
             // Get total questions for the test
-            const totalQuestions = await this.testService.getQuestionCount(attempt.testId, scope);
+            const totalQuestions = await this.testService.getQuestionCount(
+                attempt.testId,
+                scope,
+            );
 
             return {
                 ...baseDto,

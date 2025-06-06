@@ -147,11 +147,10 @@ export class CourseResponseDto {
     updatedAt: Date;
 
     @ApiProperty({
-        description: 'Course creator information (simplified)',
-        type: () => CourseCreatorDto,
+        description: 'Course creator information (full user object)',
         required: false,
     })
-    creator?: CourseCreatorDto;
+    creator?: any;
 
     @ApiProperty({
         description: 'Organization this course belongs to',

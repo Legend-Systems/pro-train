@@ -312,10 +312,30 @@ export enum AttemptStatus {
 ```
 
 #### `POST /test-attempts/:attemptId/submit` 🔒 Protected
-**Submit Test Attempt**
+**Submit Test Attempt with Bulk Answers**
+
+⚠️ **Important**: Starting and exiting a test is counted as an attempt. Answers are only submitted when the user clicks "Submit Test" - no individual answer submissions during the test.
+
 ```typescript
-// Request
+// Request - Submit all answers at once
 {
+  "answers": [
+    {
+      "questionId": 45,
+      "selectedOptionId": 180,
+      "timeSpent": 45
+    },
+    {
+      "questionId": 46,
+      "answerText": "Variables store data values in programming",
+      "timeSpent": 120
+    },
+    {
+      "questionId": 47,
+      "selectedOptionId": 185,
+      "timeSpent": 60
+    }
+  ],
   "finalReview": true,
   "confirmSubmission": true
 }
@@ -360,6 +380,12 @@ export enum AttemptStatus {
   "message": "Test submitted successfully"
 }
 ```
+
+**Key Changes:**
+- **Bulk Answer Submission**: All answers are submitted together when the test is completed
+- **Session Storage**: Answers are stored locally in the browser until submission
+- **No Individual Submissions**: Individual answers are not sent to the server during the test
+- **Attempt Counting**: Starting a test creates an attempt, regardless of completion
 
 ### Attempt Progress & Navigation
 

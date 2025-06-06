@@ -27,6 +27,7 @@ import {
 import { TestAttemptsService } from './test_attempts.service';
 import { CreateTestAttemptDto } from './dto/create-test_attempt.dto';
 import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
+import { SubmitTestAttemptDto } from './dto/submit-test-attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
@@ -445,10 +446,16 @@ export class TestAttemptsController {
     })
     async submitAttempt(
         @Param('id', ParseIntPipe) id: number,
+        @Body() submitData: SubmitTestAttemptDto,
         @OrgBranchScope() scope: OrgBranchScope,
         @Req() req: AuthenticatedRequest,
     ): Promise<TestAttemptResponseDto> {
-        return this.testAttemptsService.submitAttempt(id, scope, req.user.id);
+        return this.testAttemptsService.submitAttempt(
+            id,
+            submitData,
+            scope,
+            req.user.id,
+        );
     }
 
     @Patch(':id/progress')

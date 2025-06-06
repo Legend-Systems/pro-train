@@ -19,7 +19,6 @@ import {
     CourseDetailDto,
     CourseStatsDto,
     StandardOperationResponse,
-    CourseCreatorDto,
 } from './dto/course-response.dto';
 import { Course, CourseStatus } from './entities/course.entity';
 import { Test } from '../test/entities/test.entity';
@@ -394,21 +393,9 @@ export class CourseService {
                         course.courseId,
                     );
 
-                    // Map User entity to simplified CourseCreatorDto
-                    const creatorDto: CourseCreatorDto | undefined =
-                        course.creator
-                            ? {
-                                  id: course.creator.id,
-                                  email: course.creator.email,
-                                  firstName: course.creator.firstName,
-                                  lastName: course.creator.lastName,
-                                  role: course.creator.role,
-                              }
-                            : undefined;
-
                     return {
                         ...course,
-                        creator: creatorDto,
+                        creator: course.creator,
                         testCount,
                         studentCount,
                         isActive: course.status === CourseStatus.ACTIVE,
@@ -507,7 +494,7 @@ export class CourseService {
             this.logger.debug(`Executing query for course ${id} with scope:`, {
                 orgId: scope?.orgId,
                 branchId: scope?.branchId,
-                userId: scope?.userId
+                userId: scope?.userId,
             });
 
             const course = await query.getOne();
@@ -515,7 +502,7 @@ export class CourseService {
             if (!course) {
                 this.logger.warn(`Course ${id} not found in database`, {
                     scope: scope,
-                    queryConditions: 'status=ACTIVE with org/branch filters'
+                    queryConditions: 'status=ACTIVE with org/branch filters',
                 });
                 return null;
             }
@@ -526,26 +513,15 @@ export class CourseService {
                 status: course.status,
                 createdBy: course.createdBy,
                 orgId: course.orgId?.id,
-                branchId: course.branchId?.id
+                branchId: course.branchId?.id,
             });
 
             // Get statistics with caching
             const stats = await this.getStats(id);
 
-            // Map User entity to simplified CourseCreatorDto to avoid complex nested structures
-            const creatorDto: CourseCreatorDto | undefined = course.creator
-                ? {
-                      id: course.creator.id,
-                      email: course.creator.email,
-                      firstName: course.creator.firstName,
-                      lastName: course.creator.lastName,
-                      role: course.creator.role,
-                  }
-                : undefined;
-
             const result: CourseDetailDto = {
                 ...course,
-                creator: creatorDto,
+                creator: course.creator,
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
                 isActive: course.status === CourseStatus.ACTIVE,
@@ -581,7 +557,7 @@ export class CourseService {
                 isActive: result.isActive,
                 createdBy: result.createdBy,
                 testCount: result.testCount,
-                studentCount: result.studentCount
+                studentCount: result.studentCount,
             });
 
             return result;
