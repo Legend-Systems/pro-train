@@ -238,6 +238,30 @@ export class CourseDetailDto extends CourseResponseDto {
         totalAttempts: number;
         averageScore: number;
     };
+
+    @ApiProperty({
+        description: 'Course materials',
+        type: 'array',
+        items: {
+            type: 'object',
+            properties: {
+                materialId: { type: 'number', example: 1 },
+                title: { type: 'string', example: 'Course Introduction' },
+                description: {
+                    type: 'string',
+                    example: 'Introduction to the course materials',
+                },
+                sortOrder: { type: 'number', example: 1 },
+                isActive: { type: 'boolean', example: true },
+                mediaFile: { type: 'object' },
+                creator: { type: 'object' },
+                createdAt: { type: 'string', format: 'date-time' },
+                updatedAt: { type: 'string', format: 'date-time' },
+            },
+        },
+        required: false,
+    })
+    courseMaterials?: any[];
 }
 
 export class CourseStatsDto {

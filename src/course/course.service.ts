@@ -522,6 +522,7 @@ export class CourseService {
             const result: CourseDetailDto = {
                 ...course,
                 creator: course.creator,
+                courseMaterials: course.courseMaterials || [],
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
                 isActive: course.status === CourseStatus.ACTIVE,
