@@ -14,7 +14,6 @@ import {
     HttpCode,
     Logger,
     ParseIntPipe,
-    NotFoundException,
     ForbiddenException,
 } from '@nestjs/common';
 import {
@@ -588,7 +587,7 @@ export class CourseController {
         } catch (error) {
             this.logger.error(
                 `Error getting course ${id} for edit by user ${scope.userId}:`,
-                error.message || error,
+                error instanceof Error ? error.message : error,
             );
 
             if (error instanceof ForbiddenException) {
@@ -990,23 +989,24 @@ export class CourseController {
     })
     async softDeleteCourse(
         @Param('id', ParseIntPipe) id: number,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
             this.logger.log(
-                `Soft deleting course ${id} by user: ${req.user.id}`,
+                `Soft deleting course ${id} by user: ${scope.userId}`,
             );
 
             // First validate ownership
             await this.courseService.validateOwnershipWithDeleted(
                 id,
-                req.user.id,
+                scope.userId,
+                scope,
             );
 
-            return await this.courseService.softDelete(id, req.user.id);
+            return await this.courseService.softDelete(id, scope.userId);
         } catch (error) {
             this.logger.error(
-                `Error soft deleting course ${id} by user ${req.user.id}:`,
+                `Error soft deleting course ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;
@@ -1108,27 +1108,22 @@ export class CourseController {
     })
     async restoreCourse(
         @Param('id', ParseIntPipe) id: number,
-        @Request() req: AuthenticatedRequest,
+        @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         try {
-            this.logger.log(`Restoring course ${id} by user: ${req.user.id}`);
+            this.logger.log(`Restoring course ${id} by user: ${scope.userId}`);
 
-            // Note: We need to use findByIdWithDeleted to validate ownership of deleted courses
-            const course = await this.courseService.findByIdWithDeleted(id);
-            if (!course) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
+            // Validate ownership with proper permission logic
+            await this.courseService.validateOwnershipWithDeleted(
+                id,
+                scope.userId,
+                scope,
+            );
 
-            if (course.createdBy !== req.user.id) {
-                throw new ForbiddenException(
-                    'You are not authorized to restore this course',
-                );
-            }
-
-            return await this.courseService.restoreCourse(id, req.user.id);
+            return await this.courseService.restoreCourse(id, scope.userId);
         } catch (error) {
             this.logger.error(
-                `Error restoring course ${id} by user ${req.user.id}:`,
+                `Error restoring course ${id} by user ${scope.userId}:`,
                 error,
             );
             throw error;

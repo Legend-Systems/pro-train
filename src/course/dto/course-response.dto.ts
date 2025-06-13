@@ -262,6 +262,30 @@ export class CourseDetailDto extends CourseResponseDto {
         required: false,
     })
     courseMaterials?: any[];
+
+    @ApiProperty({
+        description: 'Course tests',
+        type: 'array',
+        items: {
+            type: 'object',
+            properties: {
+                testId: { type: 'number', example: 1 },
+                title: { type: 'string', example: 'Chapter 1 Quiz' },
+                description: {
+                    type: 'string',
+                    example: 'Test your knowledge of chapter 1',
+                },
+                testType: { type: 'string', example: 'quiz' },
+                timeLimit: { type: 'number', example: 30 },
+                maxAttempts: { type: 'number', example: 3 },
+                isActive: { type: 'boolean', example: true },
+                createdAt: { type: 'string', format: 'date-time' },
+                updatedAt: { type: 'string', format: 'date-time' },
+            },
+        },
+        required: false,
+    })
+    tests?: any[];
 }
 
 export class CourseStatsDto {

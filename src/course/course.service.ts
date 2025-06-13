@@ -339,7 +339,8 @@ export class CourseService {
                 status: CourseStatus.ACTIVE,
             });
 
-            // Apply org/branch scoping
+            // Apply org/branch scoping - only if user has these assignments
+            // For users without org/branch assignments, they can see all active courses
             if (scope?.orgId) {
                 query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
             }
@@ -474,6 +475,7 @@ export class CourseService {
                 'courseMaterials.creator',
                 'materialCreator',
             );
+            // Note: Tests will be loaded separately to avoid complex joins
             query.where('course.courseId = :id', { id });
 
             // Filter by status - only show active courses by default
@@ -481,7 +483,8 @@ export class CourseService {
                 status: CourseStatus.ACTIVE,
             });
 
-            // Apply org/branch scoping
+            // Apply org/branch scoping - only if user has these assignments
+            // For users without org/branch assignments, they can see all active courses
             if (scope?.orgId) {
                 query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
             }
@@ -516,6 +519,12 @@ export class CourseService {
                 branchId: course.branchId?.id,
             });
 
+            // Get tests for this course separately
+            const tests = await this.testRepository.find({
+                where: { courseId: id, isActive: true },
+                order: { createdAt: 'ASC' },
+            });
+
             // Get statistics with caching
             const stats = await this.getStats(id);
 
@@ -523,6 +532,7 @@ export class CourseService {
                 ...course,
                 creator: course.creator,
                 courseMaterials: course.courseMaterials || [],
+                tests: tests || [],
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
                 isActive: course.status === CourseStatus.ACTIVE,
@@ -580,12 +590,7 @@ export class CourseService {
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const course = await this.findOne(id, scope);
-            if (!course) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
-
-            // Validate ownership
+            // Validate ownership (which also checks if course exists)
             await this.validateOwnership(id, scope.userId, scope);
 
             // Update the course directly using repository since we already have validated access
@@ -625,12 +630,7 @@ export class CourseService {
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const course = await this.findOne(id, scope);
-            if (!course) {
-                throw new NotFoundException(`Course with ID ${id} not found`);
-            }
-
-            // Validate ownership
+            // Validate ownership (which also checks if course exists)
             await this.validateOwnership(id, scope.userId, scope);
 
             // Check if course has tests
@@ -705,8 +705,19 @@ export class CourseService {
                 );
             }
 
-            const course = await this.findOne(id, scope);
-            if (!course) {
+            // Check if course exists without calling findOne to avoid circular dependency
+            const courseExists = await this.courseRepository.findOne({
+                where: {
+                    courseId: id,
+                    status: CourseStatus.ACTIVE,
+                    ...(scope?.orgId && { orgId: { id: scope.orgId } }),
+                    ...(scope?.branchId && {
+                        branchId: { id: scope.branchId },
+                    }),
+                },
+            });
+
+            if (!courseExists) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
@@ -745,7 +756,7 @@ export class CourseService {
                     // Get results for these attempts
                     const results = await this.resultRepository
                         .createQueryBuilder('result')
-                        .innerJoin('result.testAttempt', 'attempt')
+                        .innerJoin('result.attempt', 'attempt')
                         .where('attempt.testId IN (:...testIds)', { testIds })
                         .getMany();
 
@@ -807,32 +818,95 @@ export class CourseService {
         userId: string,
         scope?: OrgBranchScope,
     ): Promise<void> {
-        const course = await this.findOne(courseId, scope);
+        // Get course directly from repository to avoid circular calls
+        const course = await this.courseRepository.findOne({
+            where: {
+                courseId,
+                status: CourseStatus.ACTIVE,
+                ...(scope?.orgId && { orgId: { id: scope.orgId } }),
+                ...(scope?.branchId && { branchId: { id: scope.branchId } }),
+            },
+            relations: ['orgId', 'branchId'],
+        });
+
         if (!course) {
             throw new NotFoundException(`Course with ID ${courseId} not found`);
         }
 
-        if (course.createdBy !== userId) {
-            throw new ForbiddenException(
-                'You are not authorized to modify this course',
-            );
+        // If user is the creator, they always have access
+        if (course.createdBy === userId) {
+            return;
         }
+
+        // Check if user has elevated permissions (admin or brandon) within the same organization
+        if (scope?.userRole && scope?.orgId) {
+            const hasElevatedPermissions =
+                scope.userRole === 'brandon' ||
+                scope.userRole === 'admin' ||
+                scope.userRole === 'owner';
+
+            if (hasElevatedPermissions) {
+                // For elevated users, check if the course belongs to their organization
+                const courseOrgId = course.orgId?.id;
+
+                // Brandon users can edit across organizations
+                if (scope.userRole === 'brandon') {
+                    return;
+                }
+
+                // Admin and owner users can edit within their organization
+                if (courseOrgId === scope.orgId) {
+                    return;
+                }
+            }
+        }
+
+        throw new ForbiddenException(
+            'You are not authorized to modify this course',
+        );
     }
 
     async validateOwnershipWithDeleted(
         courseId: number,
         userId: string,
+        scope?: OrgBranchScope,
     ): Promise<void> {
         const course = await this.findByIdWithDeleted(courseId);
         if (!course) {
             throw new NotFoundException(`Course with ID ${courseId} not found`);
         }
 
-        if (course.createdBy !== userId) {
-            throw new ForbiddenException(
-                'You are not authorized to modify this course',
-            );
+        // If user is the creator, they always have access
+        if (course.createdBy === userId) {
+            return;
         }
+
+        // Check if user has elevated permissions (admin or brandon) within the same organization
+        if (scope?.userRole && scope?.orgId) {
+            const hasElevatedPermissions =
+                scope.userRole === 'brandon' ||
+                scope.userRole === 'admin' ||
+                scope.userRole === 'owner';
+
+            if (hasElevatedPermissions) {
+                // For elevated users, check if the course belongs to their organization
+                const courseOrgId = course.orgId?.id;
+
+                // Brandon users can edit across organizations
+                if (scope.userRole === 'brandon') {
+                    return;
+                }
+
+                // Admin and owner users can edit within their organization
+                if (courseOrgId === scope.orgId) {
+                    return;
+                }
+            }
+        }
+
+        throw new ForbiddenException(
+            'You are not authorized to modify this course',
+        );
     }
 
     async findById(id: number): Promise<Course | null> {
@@ -959,19 +1033,15 @@ export class CourseService {
             this.logger.warn(`Cache get failed for key ${cacheKey}:`, error);
         }
 
-        const count = await this.testAttemptRepository
-            .createQueryBuilder('attempt')
-            .innerJoin('attempt.test', 'test')
-            .where('test.courseId = :courseId', { courseId })
-            .select('COUNT(DISTINCT attempt.userId)', 'count')
-            .getRawOne()
-            .then((result: { count: string }) => parseInt(result.count) || 0);
+        const count = await this.courseRepository.count({
+            where: { courseId, status: CourseStatus.ACTIVE },
+        });
 
         try {
             await this.cacheManager.set(
                 cacheKey,
                 count,
-                this.CACHE_TTL.COUNTS * 1000,
+                this.CACHE_TTL.USER_DATA * 1000,
             );
             this.logger.debug(`Cache set for student count: ${cacheKey}`);
         } catch (error) {
