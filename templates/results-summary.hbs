@@ -86,18 +86,23 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
+            flex-direction: row;
             margin: 0 auto;
+            text-align: center;
         }
         
         .score-percentage {
             font-size: 36px;
             font-weight: 700;
+            line-height: 1;
+            margin: 0;
         }
         
         .score-label {
             font-size: 12px;
             opacity: 0.9;
+            line-height: 1;
+            margin: 0;
         }
         
         .score-details {
@@ -247,13 +252,6 @@
             
             <div class="results-card">
                 <div class="test-title">{{testTitle}}</div>
-                
-                <div class="score-display">
-                    <div class="score-circle">
-                        <div class="score-percentage">{{correctAnswers / totalQuestions * 100}}%</div>
-                        <div class="score-label">SCORE</div>
-                    </div>
-                </div>
         
                 <div class="score-details">
                     <div class="score-item">
