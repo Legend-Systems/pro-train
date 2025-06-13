@@ -143,20 +143,24 @@ export class AnswersService {
                 );
             }
 
-            // Validate selected option if provided
+            // Validate selected option if provided and get the option entity
+            let selectedOption: QuestionOption | undefined;
             if (createAnswerDto.selectedOptionId) {
-                const option = await this.questionOptionRepository.findOne({
-                    where: {
-                        optionId: createAnswerDto.selectedOptionId,
-                        questionId: createAnswerDto.questionId,
+                const foundOption = await this.questionOptionRepository.findOne(
+                    {
+                        where: {
+                            optionId: createAnswerDto.selectedOptionId,
+                            questionId: createAnswerDto.questionId,
+                        },
                     },
-                });
+                );
 
-                if (!option) {
+                if (!foundOption) {
                     throw new BadRequestException(
                         'Selected option does not belong to this question',
                     );
                 }
+                selectedOption = foundOption;
             }
 
             // Create the answer with inherited org/branch from attempt
@@ -164,6 +168,10 @@ export class AnswersService {
                 ...createAnswerDto,
                 isMarked: false,
                 isCorrect: false,
+                // Set relationships
+                attempt: attempt,
+                question: question,
+                selectedOption: selectedOption,
                 // Inherit org/branch from the test attempt
                 orgId: attempt.orgId,
                 branchId: attempt.branchId,
@@ -234,23 +242,31 @@ export class AnswersService {
                 );
             }
 
-            // Validate selected option if provided
+            // Validate selected option if provided and get the option entity
+            let selectedOption: QuestionOption | undefined;
             if (updateAnswerDto.selectedOptionId) {
-                const option = await this.questionOptionRepository.findOne({
-                    where: {
-                        optionId: updateAnswerDto.selectedOptionId,
-                        questionId: answer.questionId,
+                const foundOption = await this.questionOptionRepository.findOne(
+                    {
+                        where: {
+                            optionId: updateAnswerDto.selectedOptionId,
+                            questionId: answer.questionId,
+                        },
                     },
-                });
+                );
 
-                if (!option) {
+                if (!foundOption) {
                     throw new BadRequestException(
                         'Selected option does not belong to this question',
                     );
                 }
+                selectedOption = foundOption;
             }
 
+            // Update the answer with new data and relationships
             Object.assign(answer, updateAnswerDto);
+            if (selectedOption) {
+                answer.selectedOption = selectedOption;
+            }
             const updatedAnswer = await this.answerRepository.save(answer);
 
             // Invalidate related caches
@@ -471,15 +487,56 @@ export class AnswersService {
         bulkAnswersDto: BulkAnswersDto,
         scope: OrgBranchScope,
     ): Promise<StandardResponse<AnswerResponseDto[]>> {
+        const result = await this.bulkCreateWithEntities(bulkAnswersDto, scope);
+        return {
+            success: result.success,
+            message: result.message,
+            data: result.data.dtos,
+            ...(result.errors && { errors: result.errors }),
+        };
+    }
+
+    /**
+     * Bulk create answers and return both DTOs and entities
+     * This is used internally to avoid timing issues with auto-marking
+     */
+    async bulkCreateWithEntities(
+        bulkAnswersDto: BulkAnswersDto,
+        scope: OrgBranchScope,
+    ): Promise<{
+        success: boolean;
+        message: string;
+        data: {
+            dtos: AnswerResponseDto[];
+            entities: Answer[];
+        };
+        errors?: string[];
+    }> {
         return this.retryService.executeDatabase(async () => {
-            const results: AnswerResponseDto[] = [];
+            const resultDtos: AnswerResponseDto[] = [];
+            const resultEntities: Answer[] = [];
             const errors: string[] = [];
 
             for (const answerDto of bulkAnswersDto.answers) {
                 try {
                     const result = await this.create(answerDto, scope);
                     if (result.success && result.data) {
-                        results.push(result.data);
+                        resultDtos.push(result.data);
+
+                        // Fetch the actual entity with question loaded for auto-marking
+                        const answerEntity = await this.answerRepository
+                            .createQueryBuilder('answer')
+                            .innerJoinAndSelect('answer.question', 'question')
+                            .leftJoinAndSelect('answer.orgId', 'orgId')
+                            .leftJoinAndSelect('answer.branchId', 'branchId')
+                            .where('answer.answerId = :answerId', {
+                                answerId: result.data.answerId,
+                            })
+                            .getOne();
+
+                        if (answerEntity) {
+                            resultEntities.push(answerEntity);
+                        }
                     }
                 } catch (error) {
                     // Continue with other answers even if one fails
@@ -496,24 +553,23 @@ export class AnswersService {
                 message:
                     errors.length === 0
                         ? 'All answers created successfully'
-                        : `Created ${results.length} answers with ${errors.length} errors`,
-                data: results,
+                        : `Created ${resultDtos.length} answers with ${errors.length} errors`,
+                data: {
+                    dtos: resultDtos,
+                    entities: resultEntities,
+                },
                 ...(errors.length > 0 && { errors }),
             };
         });
     }
 
-    async autoMark(attemptId: number, scope: OrgBranchScope): Promise<void> {
+    async autoMark(attemptId: number, scope: OrgBranchScope): Promise<number> {
         return this.retryService.executeDatabase(async () => {
             const answersQuery = this.answerRepository
                 .createQueryBuilder('answer')
                 .leftJoinAndSelect('answer.question', 'question')
                 .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
-                .leftJoinAndSelect('answer.attempt', 'attempt')
-                .leftJoinAndSelect('answer.orgId', 'orgId')
-                .leftJoinAndSelect('answer.branchId', 'branchId')
-                .where('answer.attemptId = :attemptId', { attemptId })
-                .andWhere('answer.isMarked = :isMarked', { isMarked: false });
+                .where('answer.attemptId = :attemptId', { attemptId });
 
             // Apply org/branch scoping
             if (scope.orgId) {
@@ -527,38 +583,229 @@ export class AnswersService {
                 });
             }
 
-            const answers = await answersQuery.getMany();
+            const answersWithQuestions = await answersQuery.getMany();
 
-            for (const answer of answers) {
-                if (
-                    answer.selectedOptionId &&
-                    answer.selectedOption &&
-                    answer.question.questionType ===
-                        QuestionType.MULTIPLE_CHOICE
-                ) {
-                    const selectedOption =
-                        answer.selectedOption as QuestionOption;
-                    answer.isCorrect = selectedOption.isCorrect;
-                    answer.pointsAwarded = answer.isCorrect
-                        ? answer.question.points
-                        : 0;
+            console.log(
+                'answersWithQuestions',
+                answersWithQuestions,
+                'attemptId',
+                attemptId,
+                'last time this shit did not work',
+            );
+
+            this.logger.log(
+                `📊 Found ${answersWithQuestions.length} scoped answers for attempt ${attemptId}`,
+            );
+
+            // Step 2: Filter to only unmarked answers
+            const unmarkedAnswers = answersWithQuestions.filter(
+                answer => !answer.isMarked,
+            );
+
+            this.logger.log(
+                `�� Step 3: Found ${unmarkedAnswers.length} unmarked answers to process`,
+            );
+
+            if (unmarkedAnswers.length === 0) {
+                this.logger.log(
+                    `✅ All answers already marked for attempt ${attemptId}`,
+                );
+                return 0;
+            }
+
+            // Step 4: Process each unmarked answer
+            let markedCount = 0;
+            let correctCount = 0;
+            let incorrectCount = 0;
+            let skippedCount = 0;
+
+            this.logger.log(
+                `🎯 Step 4: Starting individual answer processing...`,
+            );
+
+            for (const answer of unmarkedAnswers) {
+                const questionId = answer.questionId;
+                const questionType = answer.question?.questionType;
+                const questionText =
+                    answer.question?.questionText || 'Unknown Question';
+                const maxPoints = answer.question?.points || 0;
+
+                this.logger.log(
+                    `\n🔍 PROCESSING ANSWER ${answer.answerId} for Question ${questionId}`,
+                );
+                this.logger.log(`   📋 Question: "${questionText}"`);
+                this.logger.log(`   🏷️  Type: ${questionType}`);
+                this.logger.log(`   💯 Max Points: ${maxPoints}`);
+                this.logger.log(
+                    `   👤 User Selection: ${answer.selectedOptionId || 'None'}`,
+                );
+                this.logger.log(
+                    `   📝 Text Answer: ${answer.textAnswer || 'None'}`,
+                );
+
+                // Check if this is an auto-markable question type
+                if (!this.isAutoMarkableQuestionType(questionType)) {
+                    this.logger.log(
+                        `   ⏭️  SKIPPED: Question type '${questionType}' requires manual marking`,
+                    );
+                    skippedCount++;
+                    continue;
+                }
+
+                // Check if user provided a selection for objective questions
+                if (!answer.selectedOptionId) {
+                    this.logger.log(
+                        `   ⏭️  SKIPPED: No option selected for objective question`,
+                    );
+                    skippedCount++;
+                    continue;
+                }
+
+                try {
+                    // Step 5: Get all options for this question
+                    this.logger.log(
+                        `   🔍 Fetching options for question ${questionId}...`,
+                    );
+
+                    const questionOptions =
+                        await this.questionOptionRepository.find({
+                            where: { questionId: questionId },
+                            order: { orderIndex: 'ASC' },
+                        });
+
+                    this.logger.log(
+                        `   📊 Found ${questionOptions.length} options for question ${questionId}`,
+                    );
+
+                    if (questionOptions.length === 0) {
+                        this.logger.warn(
+                            `   ❌ SKIPPED: No options found for question ${questionId}`,
+                        );
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // Log all available options
+                    this.logger.log(`   📋 Available Options:`);
+                    questionOptions.forEach(option => {
+                        this.logger.log(
+                            `      ${option.isCorrect ? '✅' : '❌'} Option ${option.optionId}: "${option.optionText}" (Correct: ${option.isCorrect})`,
+                        );
+                    });
+
+                    // Find the user's selected option
+                    const selectedOption = questionOptions.find(
+                        opt => opt.optionId === answer.selectedOptionId,
+                    );
+
+                    if (!selectedOption) {
+                        this.logger.warn(
+                            `   ❌ SKIPPED: Selected option ${answer.selectedOptionId} not found among available options`,
+                        );
+                        this.logger.warn(
+                            `   Available option IDs: [${questionOptions.map(opt => opt.optionId).join(', ')}]`,
+                        );
+                        skippedCount++;
+                        continue;
+                    }
+
+                    // Find all correct options
+                    const correctOptions = questionOptions.filter(
+                        opt => opt.isCorrect,
+                    );
+
+                    this.logger.log(
+                        `   ✅ Correct Answer(s): ${correctOptions.map(opt => `"${opt.optionText}" (ID: ${opt.optionId})`).join(', ')}`,
+                    );
+
+                    // Determine if the user's answer is correct
+                    const isCorrect = selectedOption.isCorrect;
+                    const pointsAwarded = isCorrect ? maxPoints : 0;
+
+                    // Log the marking decision
+                    this.logger.log(
+                        `   👤 User Selected: "${selectedOption.optionText}" (ID: ${selectedOption.optionId})`,
+                    );
+                    this.logger.log(
+                        `   🎯 MARKING RESULT: ${isCorrect ? '✅ CORRECT' : '❌ INCORRECT'}`,
+                    );
+                    this.logger.log(
+                        `   💯 Points Awarded: ${pointsAwarded}/${maxPoints}`,
+                    );
+
+                    // Step 6: Update the answer with marking results
+                    answer.isCorrect = isCorrect;
+                    answer.pointsAwarded = pointsAwarded;
                     answer.isMarked = true;
                     answer.markedAt = new Date();
 
+                    // Save the marked answer
                     await this.answerRepository.save(answer);
+
+                    // Update counters
+                    markedCount++;
+                    if (isCorrect) {
+                        correctCount++;
+                    } else {
+                        incorrectCount++;
+                    }
+
+                    this.logger.log(
+                        `   ✅ Answer ${answer.answerId} successfully marked and saved`,
+                    );
 
                     // Invalidate cache for this answer
                     await this.invalidateAnswerCache(
                         answer.answerId,
                         attemptId,
-                        answer.questionId,
+                        questionId,
                         scope.userId,
                         scope.orgId,
                         scope.branchId,
                     );
+                } catch (error) {
+                    this.logger.error(
+                        `   ❌ ERROR marking answer ${answer.answerId}:`,
+                        error,
+                    );
+                    skippedCount++;
                 }
             }
+
+            // Step 7: Final summary
+            this.logger.log(
+                `\n🏁 AUTO-MARKING COMPLETED FOR ATTEMPT ${attemptId}`,
+            );
+            this.logger.log(`📊 SUMMARY:`);
+            this.logger.log(
+                `   📝 Scoped Answers Found: ${answersWithQuestions.length}`,
+            );
+            this.logger.log(
+                `   🎯 Unmarked Answers: ${unmarkedAnswers.length}`,
+            );
+            this.logger.log(`   ✅ Successfully Marked: ${markedCount}`);
+            this.logger.log(`   🎉 Correct Answers: ${correctCount}`);
+            this.logger.log(`   ❌ Incorrect Answers: ${incorrectCount}`);
+            this.logger.log(
+                `   ⏭️  Skipped (Manual Required): ${skippedCount}`,
+            );
+            this.logger.log(
+                `   📈 Success Rate: ${markedCount > 0 ? Math.round((correctCount / markedCount) * 100) : 0}%`,
+            );
+
+            return markedCount;
         });
+    }
+
+    /**
+     * Check if a question type can be auto-marked
+     */
+    private isAutoMarkableQuestionType(questionType: string): boolean {
+        const autoMarkableTypes = [
+            QuestionType.MULTIPLE_CHOICE,
+            QuestionType.TRUE_FALSE,
+        ];
+        return autoMarkableTypes.includes(questionType as QuestionType);
     }
 
     async countByQuestion(
@@ -744,12 +991,9 @@ export class AnswersService {
                 : undefined,
             selectedOption: answer.selectedOption
                 ? {
-                      optionId: (answer.selectedOption as QuestionOption)
-                          .optionId,
-                      optionText: (answer.selectedOption as QuestionOption)
-                          .optionText,
-                      isCorrect: (answer.selectedOption as QuestionOption)
-                          .isCorrect,
+                      optionId: answer.selectedOption.optionId,
+                      optionText: answer.selectedOption.optionText,
+                      isCorrect: answer.selectedOption.isCorrect,
                   }
                 : undefined,
         };

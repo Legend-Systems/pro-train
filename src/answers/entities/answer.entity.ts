@@ -5,6 +5,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
+    JoinColumn,
     Index,
     Check,
 } from 'typeorm';
@@ -19,6 +20,7 @@ import {
 } from 'class-validator';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
 import { Question } from '../../questions/entities/question.entity';
+import { QuestionOption } from '../../questions_options/entities/questions_option.entity';
 import { User } from '../../user/entities/user.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
@@ -162,13 +164,16 @@ export class Answer {
     branchId?: Branch;
 
     @ManyToOne(() => TestAttempt, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'attemptId' })
     attempt: TestAttempt;
 
     @ManyToOne(() => Question, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'questionId' })
     question: Question;
 
-    @ManyToOne('QuestionOption', { nullable: true, onDelete: 'RESTRICT' })
-    selectedOption: any;
+    @ManyToOne(() => QuestionOption, { nullable: true, onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'selectedOptionId' })
+    selectedOption?: QuestionOption;
 
     @ManyToOne(() => User, { nullable: true, onDelete: 'RESTRICT' })
     markedByUser: User;

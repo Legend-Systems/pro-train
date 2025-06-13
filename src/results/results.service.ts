@@ -613,52 +613,141 @@ export class ResultsService {
         maxScore: number;
         percentage: number;
     }> {
-        // Get all answers for the attempt
-        const answers = await this.answerRepository.find({
-            where: { attemptId },
-            relations: ['question', 'selectedOption'],
-        });
+        this.logger.debug(
+            `Starting score calculation for attempt ${attemptId}`,
+        );
 
-        // Get all questions for the test
+        // Get the attempt with org/branch info for scoping
         const attempt = await this.testAttemptRepository.findOne({
             where: { attemptId },
-            relations: ['test'],
+            relations: ['test', 'orgId', 'branchId'],
         });
 
-        const questions = await this.questionRepository.find({
-            where: { testId: attempt?.testId },
-        });
+        if (!attempt) {
+            throw new NotFoundException(`Attempt ${attemptId} not found`);
+        }
+
+        this.logger.debug(
+            `Attempt found - testId: ${attempt.testId}, orgId: ${attempt.orgId?.id}, branchId: ${attempt.branchId?.id}`,
+        );
+
+        // Get all answers for the attempt with proper scoping
+        const answersQuery = this.answerRepository
+            .createQueryBuilder('answer')
+            .leftJoinAndSelect('answer.question', 'question')
+            .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
+            .where('answer.attemptId = :attemptId', { attemptId });
+
+        // Apply org/branch scoping to answers
+        if (attempt.orgId) {
+            answersQuery.andWhere('answer.orgId = :orgId', {
+                orgId: attempt.orgId.id,
+            });
+        }
+        if (attempt.branchId) {
+            answersQuery.andWhere('answer.branchId = :branchId', {
+                branchId: attempt.branchId.id,
+            });
+        }
+
+        const answers = await answersQuery.getMany();
+        this.logger.debug(
+            `Found ${answers.length} scoped answers for attempt ${attemptId}`,
+        );
+
+        // Get all questions for the test with proper scoping
+        const questionsQuery = this.questionRepository
+            .createQueryBuilder('question')
+            .where('question.testId = :testId', { testId: attempt.testId });
+
+        // Apply org/branch scoping to questions
+        if (attempt.orgId) {
+            questionsQuery.andWhere('question.orgId = :orgId', {
+                orgId: attempt.orgId.id,
+            });
+        }
+        if (attempt.branchId) {
+            questionsQuery.andWhere('question.branchId = :branchId', {
+                branchId: attempt.branchId.id,
+            });
+        }
+
+        const questions = await questionsQuery.getMany();
+        this.logger.debug(
+            `Found ${questions.length} scoped questions for test ${attempt.testId}`,
+        );
 
         let totalScore = 0;
         let maxScore = 0;
 
+        this.logger.debug(`Processing questions for score calculation:`);
+
         for (const question of questions) {
-            maxScore += question.points;
+            const questionPoints = Number(question.points) || 0;
+            maxScore += questionPoints;
 
             const answer = answers.find(
                 a => a.questionId === question.questionId,
             );
-            if (
-                answer &&
-                answer.pointsAwarded !== null &&
-                answer.pointsAwarded !== undefined
-            ) {
-                totalScore += answer.pointsAwarded;
-            } else if (answer && answer.selectedOption) {
-                // Auto-calculate for objective questions
-                const isCorrect = answer.selectedOption.isCorrect;
-                if (isCorrect) {
-                    totalScore += question.points;
+
+            let pointsEarned = 0;
+
+            if (answer) {
+                // Check if answer has been marked with points
+                if (
+                    answer.pointsAwarded !== null &&
+                    answer.pointsAwarded !== undefined
+                ) {
+                    pointsEarned = Number(answer.pointsAwarded) || 0;
+                    this.logger.debug(
+                        `Question ${question.questionId}: Using marked points ${pointsEarned}/${questionPoints}`,
+                    );
+                } else if (answer.selectedOption) {
+                    // Auto-calculate for objective questions
+                    const isCorrect = answer.selectedOption.isCorrect;
+                    if (isCorrect) {
+                        pointsEarned = questionPoints;
+                    }
+                    this.logger.debug(
+                        `Question ${question.questionId}: Auto-calculated ${pointsEarned}/${questionPoints} (correct: ${isCorrect})`,
+                    );
+                } else {
+                    this.logger.debug(
+                        `Question ${question.questionId}: No answer or selection - 0/${questionPoints}`,
+                    );
                 }
+            } else {
+                this.logger.debug(
+                    `Question ${question.questionId}: No answer found - 0/${questionPoints}`,
+                );
             }
+
+            totalScore += pointsEarned;
         }
 
-        const percentage = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+        // Calculate percentage with proper validation
+        let percentage = 0;
+        if (maxScore > 0) {
+            percentage = (totalScore / maxScore) * 100;
+            // Round to 2 decimal places
+            percentage = Math.round(percentage * 100) / 100;
+        }
+
+        this.logger.debug(
+            `Score calculation completed for attempt ${attemptId}:`,
+            {
+                totalScore,
+                maxScore,
+                percentage,
+                questionsProcessed: questions.length,
+                answersFound: answers.length,
+            },
+        );
 
         return {
             score: totalScore,
             maxScore,
-            percentage: Math.round(percentage * 100) / 100,
+            percentage,
         };
     }
 

@@ -23,6 +23,7 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { MarkAnswerDto } from './dto/mark-answer.dto';
 import { BulkAnswersDto } from './dto/bulk-answers.dto';
 import { AnswerResponseDto } from './dto/answer-response.dto';
+import { AutoMarkResponseDto } from './dto/auto-mark-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardResponse } from '../common/types';
@@ -350,25 +351,38 @@ export class AnswersController {
         description: `
         **Automatically mark objective questions in an attempt**
         
-        This endpoint triggers automatic marking for multiple choice
-        and other objective questions that can be graded programmatically.
+        This endpoint triggers automatic marking for multiple choice and true/false
+        questions that can be graded programmatically by comparing selected options
+        with correct answers.
+        
+        **Supported Question Types:**
+        - Multiple Choice: Compares selected option with correct option(s)
+        - True/False: Compares selected option (True/False) with correct answer
         
         **Features:**
-        - Automatic grading of multiple choice questions
+        - Automatic grading of objective questions
+        - Detailed logging of marking decisions
         - Instant score calculation and feedback
         - Bulk processing for efficiency
         - Preserves manual marking for subjective questions
         
         **Business Rules:**
-        - Only processes unmarked objective questions
-        - Compares selected options with correct answers
+        - Only processes unmarked objective questions with selected options
+        - Compares selected options with correct answers using isCorrect flag
         - Awards full points for correct answers, zero for incorrect
         - Updates marking timestamps and status
+        - Skips questions without selected options (text-based questions)
+        
+        **Marking Logic:**
+        - Identifies user's selected option by selectedOptionId
+        - Checks the isCorrect flag on the selected option
+        - Awards question.points if correct, 0 if incorrect
+        - Logs detailed information about each marking decision
         
         **Security:**
         - JWT authentication required
         - Instructor-level permissions recommended
-        - Comprehensive processing logs
+        - Comprehensive processing and audit logs
         `,
     })
     @ApiParam({
@@ -379,19 +393,30 @@ export class AnswersController {
     @ApiResponse({
         status: HttpStatus.OK,
         description: '✅ Auto-marking completed successfully',
-        example: {
-            message: 'Auto-marking completed for attempt 1',
-            markedQuestions: 5,
-        },
+        type: AutoMarkResponseDto,
     })
     async autoMarkAttempt(
         @Param('attemptId', ParseIntPipe) attemptId: number,
         @OrgBranchScope() scope: OrgBranchScope,
-    ): Promise<{ message: string; markedQuestions: number }> {
-        await this.answersService.autoMark(attemptId, scope);
+    ): Promise<AutoMarkResponseDto> {
+        // Get total unmarked answers before marking
+        const totalUnmarkedAnswers = await this.answersService.countByAttempt(
+            attemptId,
+            scope,
+        );
+
+        const markedQuestions = await this.answersService.autoMark(
+            attemptId,
+            scope,
+        );
+
+        const skippedQuestions = totalUnmarkedAnswers - markedQuestions;
+        
         return {
             message: `Auto-marking completed for attempt ${attemptId}`,
-            markedQuestions: 0, // This would be returned from the service
+            markedQuestions,
+            totalUnmarkedAnswers,
+            skippedQuestions,
         };
     }
 }

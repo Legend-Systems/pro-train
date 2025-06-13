@@ -513,11 +513,26 @@ export class Answer {
 
 **Auto-mark Attempt**
 
+Automatically marks objective questions (multiple choice and true/false) by comparing selected options with correct answers.
+
+**Supported Question Types:**
+- Multiple Choice: Compares selected option with correct option(s)
+- True/False: Compares selected option (True/False) with correct answer
+
+**Marking Logic:**
+- Identifies user's selected option by selectedOptionId
+- Fetches the selected option from the database
+- Checks the isCorrect flag on the selected option
+- Awards question.points if correct, 0 if incorrect
+- Logs detailed information about each marking decision
+
 ```typescript
 // Response
 {
   "message": "Auto-marking completed for attempt 1",
-  "markedQuestions": 5
+  "markedQuestions": 5,
+  "totalUnmarkedAnswers": 8,
+  "skippedQuestions": 3
 }
 ```
 
@@ -544,8 +559,8 @@ async findByQuestion(questionId: number, scope: OrgBranchScope): Promise<AnswerR
 // Bulk answer creation
 async bulkCreate(dto: BulkAnswersDto, scope: OrgBranchScope): Promise<StandardResponse<AnswerResponseDto[]>>
 
-// Auto-mark objective questions
-async autoMark(attemptId: number, scope: OrgBranchScope): Promise<void>
+// Auto-mark objective questions (returns count of marked questions)
+async autoMark(attemptId: number, scope: OrgBranchScope): Promise<number>
 
 // Count answers by question
 async countByQuestion(questionId: number, scope: OrgBranchScope): Promise<number>

@@ -370,7 +370,9 @@ export class TestAttemptsService {
 
             // Apply org/branch scoping
             if (scope.orgId) {
-                query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
+                query.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
             }
             if (scope.branchId) {
                 query.andWhere('attempt.branchId = :branchId', {
@@ -386,12 +388,12 @@ export class TestAttemptsService {
 
             const now = new Date();
             const expiredAttempts = potentialExpiredAttempts.filter(
-                attempt => attempt.expiresAt && now > attempt.expiresAt
+                attempt => attempt.expiresAt && now > attempt.expiresAt,
             );
 
             if (expiredAttempts.length > 0) {
                 this.logger.log(
-                    `Found ${expiredAttempts.length} expired attempts for test ${testId}, cleaning up...`
+                    `Found ${expiredAttempts.length} expired attempts for test ${testId}, cleaning up...`,
                 );
                 await this.cleanupExpiredAttempts(expiredAttempts);
             }
@@ -541,6 +543,7 @@ export class TestAttemptsService {
             }
 
             // Process bulk answers first
+            let createdAnswerEntities: any[] = [];
             if (submitData.answers && submitData.answers.length > 0) {
                 this.logger.log(
                     `Processing ${submitData.answers.length} answers for attempt ${attemptId}`,
@@ -556,12 +559,32 @@ export class TestAttemptsService {
                         timeSpent: answer.timeSpent,
                     })),
                 };
-
                 try {
-                    await this.answersService.bulkCreate(bulkAnswersDto, scope);
-                    this.logger.log(
-                        `Successfully created ${submitData.answers.length} answers for attempt ${attemptId}`,
-                    );
+                    const bulkResult =
+                        await this.answersService.bulkCreateWithEntities(
+                            bulkAnswersDto,
+                            scope,
+                        );
+                    if (bulkResult.success) {
+                        createdAnswerEntities = bulkResult.data.entities;
+                        this.logger.log(
+                            `Successfully created ${submitData.answers.length} answers for attempt ${attemptId}`,
+                        );
+                        this.logger.log(
+                            `🔍 DEBUG: Created ${createdAnswerEntities.length} answer entities for auto-marking`,
+                        );
+                        // Log first entity details for debugging
+                        if (createdAnswerEntities.length > 0) {
+                            const firstEntity = createdAnswerEntities[0];
+                            this.logger.log(
+                                `🔍 DEBUG: First entity - ID: ${firstEntity.answerId}, Question: ${firstEntity.questionId}, HasQuestion: ${!!firstEntity.question}`,
+                            );
+                        }
+                    } else {
+                        throw new Error(
+                            `Bulk create failed: ${bulkResult.message}`,
+                        );
+                    }
                 } catch (error) {
                     this.logger.error(
                         `Failed to create answers for attempt ${attemptId}:`,
@@ -596,9 +619,15 @@ export class TestAttemptsService {
                 );
 
                 // Step 1: Auto-mark objective questions
-                await this.answersService.autoMark(attemptId, scope);
                 this.logger.log(
-                    `Auto-marking completed for attempt ${attemptId}`,
+                    `🔍 DEBUG: Passing ${createdAnswerEntities.length} entities to autoMark`,
+                );
+                const markedCount = await this.answersService.autoMark(
+                    attemptId,
+                    scope,
+                );
+                this.logger.log(
+                    `Auto-marking completed for attempt ${attemptId} - marked ${markedCount} questions`,
                 );
 
                 // Step 2: Create result based on marked answers
