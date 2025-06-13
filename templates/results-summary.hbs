@@ -78,7 +78,6 @@
         }
         
         .score-circle {
-            display: inline-block;
             width: 120px;
             height: 120px;
             border-radius: 50%;
@@ -251,11 +250,11 @@
                 
                 <div class="score-display">
                     <div class="score-circle">
-                        <div class="score-percentage">{{percentage}}%</div>
+                        <div class="score-percentage">{{correctAnswers / totalQuestions * 100}}%</div>
                         <div class="score-label">SCORE</div>
                     </div>
                 </div>
-                
+        
                 <div class="score-details">
                     <div class="score-item">
                         <div class="score-item-value">{{correctAnswers}}/{{totalQuestions}}</div>
@@ -266,24 +265,6 @@
                         <div class="score-item-label">Completion Time</div>
                     </div>
                 </div>
-                
-                {{#if percentage}}
-                  {{#ifCond percentage ">=" 80}}
-                  <div class="performance-badge excellent">
-                      🎉 Excellent Performance!
-                  </div>
-                  {{else}}
-                    {{#ifCond percentage ">=" 60}}
-                    <div class="performance-badge good">
-                        ✅ Good Job!
-                    </div>
-                    {{else}}
-                    <div class="performance-badge needs-improvement">
-                        📚 Keep Studying!
-                    </div>
-                    {{/ifCond}}
-                  {{/ifCond}}
-                {{/if}}
             </div>
             
             {{#if feedback}}
@@ -298,17 +279,15 @@
             </div>
             
             <div class="message">
-                {{#if percentage}}
-                  {{#ifCond percentage ">=" 80}}
-                  🌟 Outstanding achievement! You've not just learned the material - you've mastered it. This score reflects your dedication, focus, and natural ability to absorb and apply knowledge. You're setting a fantastic example for other learners and proving that excellence is within reach when you commit to growth.
+                {{#ifCond this.percentage ">=" 80}}
+                🌟 Outstanding achievement! You've not just learned the material - you've mastered it. This score reflects your dedication, focus, and natural ability to absorb and apply knowledge. You're setting a fantastic example for other learners and proving that excellence is within reach when you commit to growth.
+                {{else}}
+                  {{#ifCond this.percentage ">=" 60}}
+                  👏 Solid performance! You've grasped the core concepts and shown real understanding. The areas where you can improve aren't weaknesses - they're your next opportunities for growth. With your foundation this strong, focusing on those specific areas will take you to the next level quickly.
                   {{else}}
-                    {{#ifCond percentage ">=" 60}}
-                    👏 Solid performance! You've grasped the core concepts and shown real understanding. The areas where you can improve aren't weaknesses - they're your next opportunities for growth. With your foundation this strong, focusing on those specific areas will take you to the next level quickly.
-                    {{else}}
-                    💪 Every expert was once a beginner, and every master was once a disaster! Your score shows you're in the learning process, which is exactly where growth happens. This isn't about where you are - it's about where you're going. Use this feedback as your roadmap, and remember that persistence always pays off.
-                    {{/ifCond}}
+                  💪 Every expert was once a beginner, and every master was once a disaster! Your score shows you're in the learning process, which is exactly where growth happens. This isn't about where you are - it's about where you're going. Use this feedback as your roadmap, and remember that persistence always pays off.
                   {{/ifCond}}
-                {{/if}}
+                {{/ifCond}}
             </div>
             
             <div class="message">

@@ -840,23 +840,76 @@ export class ResultsService {
                 completionTime = `${durationMinutes} minutes`;
             }
 
-            // Get question count for more accurate data
-            const questionCount = await this.questionRepository.count({
-                where: { testId: attempt.testId },
-            });
+            // Get question count with proper scoping
+            const questionQuery = this.questionRepository
+                .createQueryBuilder('question')
+                .where('question.testId = :testId', { testId: attempt.testId });
 
-            // Get correct answers count by checking answers with points
-            const allAnswers = await this.answerRepository.find({
-                where: { attemptId: attempt.attemptId },
-                relations: ['question'],
-            });
+            // Apply org/branch scoping to questions
+            if (attempt.orgId) {
+                questionQuery.andWhere('question.orgId = :orgId', {
+                    orgId: attempt.orgId.id,
+                });
+            }
+            if (attempt.branchId) {
+                questionQuery.andWhere('question.branchId = :branchId', {
+                    branchId: attempt.branchId.id,
+                });
+            }
 
-            const correctAnswersCount = allAnswers.filter(
-                answer =>
+            const questionCount = await questionQuery.getCount();
+
+            // Get answers with proper scoping
+            const answersQuery = this.answerRepository
+                .createQueryBuilder('answer')
+                .leftJoinAndSelect('answer.question', 'question')
+                .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
+                .where('answer.attemptId = :attemptId', {
+                    attemptId: attempt.attemptId,
+                });
+
+            // Apply org/branch scoping to answers
+            if (attempt.orgId) {
+                answersQuery.andWhere('answer.orgId = :orgId', {
+                    orgId: attempt.orgId.id,
+                });
+            }
+            if (attempt.branchId) {
+                answersQuery.andWhere('answer.branchId = :branchId', {
+                    branchId: attempt.branchId.id,
+                });
+            }
+
+            const allAnswers = await answersQuery.getMany();
+
+            // Calculate correct answers count properly
+            let correctAnswersCount = 0;
+            for (const answer of allAnswers) {
+                // Check if answer has been marked with points
+                if (
                     answer.pointsAwarded !== null &&
                     answer.pointsAwarded !== undefined &&
-                    answer.pointsAwarded > 0,
-            ).length;
+                    answer.pointsAwarded > 0
+                ) {
+                    correctAnswersCount++;
+                } else if (answer.selectedOption && answer.question) {
+                    // For auto-marked questions, check if the selected option is correct
+                    if (answer.selectedOption.isCorrect) {
+                        correctAnswersCount++;
+                    }
+                }
+            }
+
+            this.logger.debug(
+                `Email data calculation for result ${result.resultId}:`,
+                {
+                    questionCount,
+                    totalAnswers: allAnswers.length,
+                    correctAnswersCount,
+                    resultScore: result.score,
+                    resultPercentage: result.percentage,
+                },
+            );
 
             // Prepare template data with proper data types and fallbacks
             const templateData = {
@@ -872,6 +925,11 @@ export class ResultsService {
                 completionTime: completionTime || 'Not available',
                 resultsUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/results/${result.resultId}`,
             };
+
+            this.logger.debug(
+                `Sending email with template data:`,
+                templateData,
+            );
 
             await this.communicationsService.sendResultsSummaryEmail(
                 templateData,
