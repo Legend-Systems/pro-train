@@ -18,6 +18,7 @@ async function bootstrap() {
             'https://client.trainpro.co.za',
             'https://www.trainpro.co.za',
             'https://trainpro.co.za',
+            'https://pro-train.vercel.app',
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [
