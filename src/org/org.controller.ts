@@ -93,35 +93,274 @@ export class OrgController {
             university: {
                 summary: '🎓 University Example',
                 description:
-                    'Large educational institution with multiple campuses',
+                    'Large educational institution with multiple campuses and comprehensive white labeling',
                 value: {
                     name: 'Stanford University',
                     description:
                         'Leading research university with world-class programs in technology, medicine, and business',
                     logoUrl: 'https://cdn.stanford.edu/logo.png',
                     website: 'https://www.stanford.edu',
+                    whiteLabelingConfig: {
+                        branding: {
+                            primaryLogo:
+                                'https://cdn.stanford.edu/logo-primary.png',
+                            secondaryLogo:
+                                'https://cdn.stanford.edu/logo-compact.png',
+                            faviconUrl: 'https://cdn.stanford.edu/favicon.ico',
+                            logoPosition: 'left',
+                            colors: {
+                                primary: '#8C1515',
+                                secondary: '#B83A4B',
+                                accent: '#007C92',
+                                background: '#ffffff',
+                                surface: '#f8f9fa',
+                                text: {
+                                    primary: '#2E2D29',
+                                    secondary: '#5f5e5a',
+                                    muted: '#8d8b84',
+                                },
+                                sidebar: {
+                                    background: '#2E2D29',
+                                    text: '#ffffff',
+                                    active: '#8C1515',
+                                    hover: '#5f5e5a',
+                                },
+                                header: {
+                                    background: '#ffffff',
+                                    text: '#2E2D29',
+                                    border: '#e5e7eb',
+                                },
+                            },
+                            theme: {
+                                mode: 'light',
+                                allowUserToggle: true,
+                                roundedCorners: 'medium',
+                                fontSize: 'medium',
+                            },
+                        },
+                        localization: {
+                            defaultLanguage: 'en',
+                            supportedLanguages: ['en', 'es', 'zh'],
+                            allowUserLanguageChange: true,
+                            region: 'US',
+                            timezone: 'America/Los_Angeles',
+                            dateFormat: 'MM/DD/YYYY',
+                            timeFormat: '12h',
+                            currency: 'USD',
+                            numberFormat: {
+                                decimal: '.',
+                                thousands: ',',
+                            },
+                        },
+                        dashboard: {
+                            layout: 'sidebar',
+                            sidebarCollapsible: true,
+                            showBreadcrumbs: true,
+                            showOrganizationName: true,
+                            showBranchName: true,
+                            organizationNamePosition: 'header',
+                            features: {
+                                darkModeToggle: true,
+                                languageSelector: true,
+                                profileMenu: true,
+                                notifications: true,
+                                search: true,
+                                help: true,
+                            },
+                        },
+                        authentication: {
+                            loginLogo:
+                                'https://cdn.stanford.edu/login-logo.png',
+                            loginWelcomeMessage:
+                                'Welcome to Stanford University Training Portal',
+                            showPoweredBy: false,
+                            customFooterText:
+                                '© 2025 Stanford University. All rights reserved.',
+                        },
+                    },
                 },
             },
             corporation: {
-                summary: '🏢 Corporate Example',
-                description: 'Technology company with training programs',
+                summary: '🏢 Corporate Example with Full White Labeling',
+                description:
+                    'Technology company with comprehensive branding and training programs',
                 value: {
                     name: 'TechCorp Industries',
                     description:
                         'Global technology company providing innovative solutions and employee training programs',
                     logoUrl: 'https://cdn.techcorp.com/brand/logo.png',
                     website: 'https://www.techcorp.com',
+                    whiteLabelingConfig: {
+                        branding: {
+                            primaryLogo:
+                                'https://cdn.techcorp.com/logo-primary.png',
+                            secondaryLogo:
+                                'https://cdn.techcorp.com/logo-compact.png',
+                            faviconUrl: 'https://cdn.techcorp.com/favicon.ico',
+                            logoPosition: 'center',
+                            colors: {
+                                primary: '#1f2937',
+                                secondary: '#374151',
+                                accent: '#3b82f6',
+                                background: '#ffffff',
+                                surface: '#f9fafb',
+                                text: {
+                                    primary: '#111827',
+                                    secondary: '#6b7280',
+                                    muted: '#9ca3af',
+                                },
+                                sidebar: {
+                                    background: '#1f2937',
+                                    text: '#f9fafb',
+                                    active: '#3b82f6',
+                                    hover: '#374151',
+                                },
+                                header: {
+                                    background: '#ffffff',
+                                    text: '#1f2937',
+                                    border: '#e5e7eb',
+                                },
+                            },
+                            theme: {
+                                mode: 'light',
+                                allowUserToggle: true,
+                                roundedCorners: 'small',
+                                fontSize: 'medium',
+                            },
+                            customCss:
+                                '.corporate-theme { font-family: "Inter", sans-serif; }',
+                        },
+                        localization: {
+                            defaultLanguage: 'en',
+                            supportedLanguages: ['en', 'es', 'fr', 'de', 'ja'],
+                            allowUserLanguageChange: true,
+                            region: 'US',
+                            timezone: 'America/New_York',
+                            dateFormat: 'MM/DD/YYYY',
+                            timeFormat: '12h',
+                            currency: 'USD',
+                            numberFormat: {
+                                decimal: '.',
+                                thousands: ',',
+                            },
+                        },
+                        dashboard: {
+                            layout: 'hybrid',
+                            sidebarCollapsible: true,
+                            showBreadcrumbs: true,
+                            showOrganizationName: true,
+                            showBranchName: false,
+                            organizationNamePosition: 'both',
+                            features: {
+                                darkModeToggle: true,
+                                languageSelector: true,
+                                profileMenu: true,
+                                notifications: true,
+                                search: true,
+                                help: true,
+                            },
+                        },
+                        authentication: {
+                            loginLogo:
+                                'https://cdn.techcorp.com/login-logo.png',
+                            loginBackground:
+                                'https://cdn.techcorp.com/login-bg.jpg',
+                            loginWelcomeMessage:
+                                'Welcome to TechCorp Learning Platform',
+                            showPoweredBy: true,
+                            customFooterText:
+                                '© 2025 TechCorp Industries. All rights reserved.',
+                        },
+                    },
                 },
             },
             training: {
-                summary: '📚 Training Institute Example',
-                description: 'Professional certification and training center',
+                summary: '📚 Training Institute with Custom Branding',
+                description:
+                    'Professional certification and training center with comprehensive white labeling',
                 value: {
                     name: 'Professional Skills Academy',
                     description:
                         'Comprehensive professional development and certification programs for working professionals',
                     logoUrl: 'https://cdn.psa.edu/logo.png',
                     website: 'https://www.psa.edu',
+                    whiteLabelingConfig: {
+                        branding: {
+                            primaryLogo: 'https://cdn.psa.edu/logo-primary.png',
+                            secondaryLogo: 'https://cdn.psa.edu/logo-mini.png',
+                            faviconUrl: 'https://cdn.psa.edu/favicon.ico',
+                            logoPosition: 'left',
+                            colors: {
+                                primary: '#059669',
+                                secondary: '#10b981',
+                                accent: '#f59e0b',
+                                background: '#ffffff',
+                                surface: '#f0fdf4',
+                                text: {
+                                    primary: '#064e3b',
+                                    secondary: '#047857',
+                                    muted: '#6b7280',
+                                },
+                                sidebar: {
+                                    background: '#064e3b',
+                                    text: '#ecfdf5',
+                                    active: '#10b981',
+                                    hover: '#047857',
+                                },
+                                header: {
+                                    background: '#f0fdf4',
+                                    text: '#064e3b',
+                                    border: '#d1fae5',
+                                },
+                            },
+                            theme: {
+                                mode: 'light',
+                                allowUserToggle: false,
+                                roundedCorners: 'large',
+                                fontSize: 'medium',
+                            },
+                            customCss:
+                                '.skills-academy { background: linear-gradient(to right, #10b981, #059669); }',
+                        },
+                        localization: {
+                            defaultLanguage: 'en',
+                            supportedLanguages: ['en', 'es'],
+                            allowUserLanguageChange: true,
+                            region: 'US',
+                            timezone: 'America/Chicago',
+                            dateFormat: 'MM/DD/YYYY',
+                            timeFormat: '12h',
+                            currency: 'USD',
+                            numberFormat: {
+                                decimal: '.',
+                                thousands: ',',
+                            },
+                        },
+                        dashboard: {
+                            layout: 'sidebar',
+                            sidebarCollapsible: false,
+                            showBreadcrumbs: true,
+                            showOrganizationName: true,
+                            showBranchName: true,
+                            organizationNamePosition: 'header',
+                            features: {
+                                darkModeToggle: false,
+                                languageSelector: true,
+                                profileMenu: true,
+                                notifications: true,
+                                search: true,
+                                help: true,
+                            },
+                        },
+                        authentication: {
+                            loginLogo: 'https://cdn.psa.edu/login-logo.png',
+                            loginWelcomeMessage:
+                                'Professional Skills Academy - Your Career Growth Partner',
+                            showPoweredBy: false,
+                            customFooterText:
+                                '© 2025 Professional Skills Academy. Empowering Careers.',
+                        },
+                    },
                 },
             },
         },
@@ -749,6 +988,87 @@ export class OrgController {
                     isActive: true,
                 },
             },
+            'white-labeling-update': {
+                summary: '🎨 White Labeling Configuration Update',
+                description: 'Update comprehensive branding and dashboard customization',
+                value: {
+                    whiteLabelingConfig: {
+                        branding: {
+                            primaryLogo: 'https://cdn.stanford.edu/logo-2025.png',
+                            secondaryLogo: 'https://cdn.stanford.edu/logo-compact-2025.png',
+                            faviconUrl: 'https://cdn.stanford.edu/favicon-2025.ico',
+                            logoPosition: 'center',
+                            colors: {
+                                primary: '#8C1515',
+                                secondary: '#B83A4B',
+                                accent: '#007C92',
+                                background: '#ffffff',
+                                surface: '#f8f9fa',
+                                text: {
+                                    primary: '#2E2D29',
+                                    secondary: '#5f5e5a',
+                                    muted: '#8d8b84',
+                                },
+                                sidebar: {
+                                    background: '#2E2D29',
+                                    text: '#ffffff',
+                                    active: '#8C1515',
+                                    hover: '#5f5e5a',
+                                },
+                                header: {
+                                    background: '#ffffff',
+                                    text: '#2E2D29',
+                                    border: '#e5e7eb',
+                                },
+                            },
+                            theme: {
+                                mode: 'auto',
+                                allowUserToggle: true,
+                                roundedCorners: 'medium',
+                                fontSize: 'large',
+                            },
+                            customCss: '.stanford-updated { transition: all 0.3s ease; border-radius: 12px; }',
+                        },
+                        localization: {
+                            defaultLanguage: 'en',
+                            supportedLanguages: ['en', 'es', 'zh', 'hi'],
+                            allowUserLanguageChange: true,
+                            region: 'US',
+                            timezone: 'America/Los_Angeles',
+                            dateFormat: 'MM/DD/YYYY',
+                            timeFormat: '12h',
+                            currency: 'USD',
+                            numberFormat: {
+                                decimal: '.',
+                                thousands: ',',
+                            },
+                        },
+                        dashboard: {
+                            layout: 'sidebar',
+                            sidebarCollapsible: true,
+                            showBreadcrumbs: true,
+                            showOrganizationName: true,
+                            showBranchName: true,
+                            organizationNamePosition: 'header',
+                            features: {
+                                darkModeToggle: true,
+                                languageSelector: true,
+                                profileMenu: true,
+                                notifications: true,
+                                search: true,
+                                help: true,
+                            },
+                        },
+                        authentication: {
+                            loginLogo: 'https://cdn.stanford.edu/login-logo-2025.png',
+                            loginBackground: 'https://cdn.stanford.edu/login-bg-2025.jpg',
+                            loginWelcomeMessage: 'Welcome to Stanford University Training Portal 2025',
+                            showPoweredBy: false,
+                            customFooterText: '© 2025 Stanford University. Advancing Knowledge, Transforming Lives.',
+                        },
+                    },
+                },
+            },
             'status-change': {
                 summary: '⚡ Status Change',
                 description: 'Activate or deactivate organization',
@@ -1147,9 +1467,9 @@ export class OrgController {
                 },
             },
             training: {
-                summary: '📚 Training Center',
+                summary: '📚 Training Center with White Labeling',
                 description:
-                    'Professional development and certification center',
+                    'Professional development center with comprehensive branding',
                 value: {
                     name: 'Downtown Training Center',
                     address: '789 Learning Avenue, Business District, NY 10001',
@@ -1167,6 +1487,54 @@ export class OrgController {
                             'Friday',
                             'Saturday',
                         ],
+                    },
+                    whiteLabelingConfig: {
+                        branding: {
+                            branchLogo: 'https://cdn.skillsacademy.edu/downtown-logo.png',
+                            showBranchLogo: true,
+                            colorOverrides: {
+                                accent: '#8b5cf6',
+                                sidebar: {
+                                    active: '#8b5cf6',
+                                },
+                            },
+                            customBranchCss: '.training-center { background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 100%); padding: 1rem; border-radius: 8px; }',
+                        },
+                        localization: {
+                            timezone: 'America/New_York',
+                            region: 'US',
+                            currency: 'USD',
+                        },
+                        dashboard: {
+                            showBranchMetrics: true,
+                            branchWelcomeMessage: 'Welcome to Downtown Training Center - Your Professional Development Hub',
+                            customMenuItems: [
+                                {
+                                    label: 'Certification Courses',
+                                    url: '/training/certifications',
+                                    icon: 'certificate',
+                                    position: 'sidebar',
+                                    order: 2,
+                                    visibleToRoles: ['student', 'instructor', 'admin'],
+                                },
+                                {
+                                    label: 'Skills Assessment',
+                                    url: '/training/assessment',
+                                    icon: 'chart-bar',
+                                    position: 'sidebar',
+                                    order: 3,
+                                    visibleToRoles: ['student', 'instructor'],
+                                },
+                                {
+                                    label: 'Career Services',
+                                    url: '/training/career',
+                                    icon: 'briefcase',
+                                    position: 'header',
+                                    order: 1,
+                                    visibleToRoles: ['student'],
+                                },
+                            ],
+                        },
                     },
                 },
             },
@@ -1523,6 +1891,81 @@ export class OrgController {
     @ApiBody({
         type: UpdateBranchDto,
         description: 'Branch update data (all fields optional)',
+        examples: {
+            'contact-update': {
+                summary: '📞 Contact Information Update',
+                description: 'Update branch contact details',
+                value: {
+                    contactNumber: '+1-310-825-9999',
+                    email: 'new.contact@university.edu',
+                    managerName: 'Dr. Michael Thompson',
+                },
+            },
+            'branding-overhaul': {
+                summary: '🎨 Complete Branding Overhaul',
+                description: 'Update comprehensive branch white labeling',
+                value: {
+                    whiteLabelingConfig: {
+                        branding: {
+                            branchLogo: 'https://cdn.university.edu/new-branch-logo-2025.png',
+                            showBranchLogo: true,
+                            colorOverrides: {
+                                accent: '#dc2626',
+                                primary: '#991b1b',
+                                sidebar: {
+                                    active: '#dc2626',
+                                    hover: '#b91c1c',
+                                },
+                                header: {
+                                    background: '#fef2f2',
+                                    text: '#991b1b',
+                                    border: '#fecaca',
+                                },
+                            },
+                            customBranchCss: '.branch-2025 { box-shadow: 0 10px 25px rgba(220, 38, 38, 0.15); border-left: 5px solid #dc2626; background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%); }',
+                        },
+                        localization: {
+                            timezone: 'America/Los_Angeles',
+                            region: 'US',
+                            currency: 'USD',
+                        },
+                        dashboard: {
+                            showBranchMetrics: true,
+                            branchWelcomeMessage: 'Welcome to our Renovated Campus - Innovation Meets Excellence',
+                            customMenuItems: [
+                                {
+                                    label: 'New Resources',
+                                    url: '/branch/new-resources',
+                                    icon: 'star',
+                                    position: 'sidebar',
+                                    order: 1,
+                                    visibleToRoles: ['admin', 'instructor', 'student'],
+                                },
+                                {
+                                    label: 'Facility Tour',
+                                    url: '/branch/tour',
+                                    icon: 'map',
+                                    position: 'header',
+                                    order: 2,
+                                    visibleToRoles: ['visitor', 'student'],
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
+            'hours-update': {
+                summary: '⏰ Operating Hours Update',
+                description: 'Modify branch operating schedule',
+                value: {
+                    operatingHours: {
+                        opening: '08:00',
+                        closing: '18:00',
+                        days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                    },
+                },
+            },
+        },
     })
     @ApiResponse({
         status: HttpStatus.OK,

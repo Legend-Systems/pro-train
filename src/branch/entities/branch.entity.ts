@@ -14,6 +14,7 @@ import {
     IsObject,
 } from 'class-validator';
 import { Organization } from '../../org/entities/org.entity';
+import { BranchWhiteLabelingConfig } from '../../org/interfaces/organization.interface';
 
 export interface OperatingHours {
     opening: string;
@@ -110,6 +111,46 @@ export class Branch {
     @IsOptional()
     @IsObject({ message: 'Operating hours must be an object' })
     operatingHours?: OperatingHours;
+
+    @Column({ type: 'json', nullable: true })
+    @ApiProperty({
+        description:
+            'Branch-specific white labeling configuration for dashboard customization',
+        example: {
+            branding: {
+                branchLogo: 'https://cdn.example.com/logos/downtown-branch.png',
+                showBranchLogo: true,
+                colorOverrides: {
+                    accent: '#10b981',
+                    sidebar: { active: '#10b981' },
+                },
+                customBranchCss:
+                    '.branch-header { border-left: 4px solid #10b981; }',
+            },
+            localization: {
+                timezone: 'America/Los_Angeles',
+                region: 'CA',
+                currency: 'CAD',
+            },
+            dashboard: {
+                showBranchMetrics: true,
+                branchWelcomeMessage:
+                    'Welcome to our Downtown Training Center!',
+                customMenuItems: [
+                    {
+                        label: 'Local Resources',
+                        url: '/branch/resources',
+                        position: 'sidebar',
+                        order: 10,
+                        visibleToRoles: ['admin', 'manager', 'user'],
+                    },
+                ],
+            },
+        },
+        required: false,
+    })
+    @IsOptional()
+    whiteLabelingConfig?: BranchWhiteLabelingConfig;
 
     @ManyToOne(() => Organization, organization => organization.branches)
     @ApiProperty({

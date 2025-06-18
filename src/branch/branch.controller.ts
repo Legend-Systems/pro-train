@@ -109,9 +109,66 @@ export class BranchController {
                     email: 'downtown@company.com',
                 },
             },
+            'branch-with-branding': {
+                summary: '🎨 Branch with Custom Branding',
+                description: 'Create a branch with organization-specific branding overrides',
+                value: {
+                    name: 'Technology Innovation Hub',
+                    address: '100 Innovation Drive, Tech District, San Francisco, CA 94105',
+                    contactNumber: '+1-415-555-0123',
+                    email: 'techhub@company.com',
+                    managerName: 'Alex Chen',
+                    operatingHours: {
+                        opening: '08:00',
+                        closing: '20:00',
+                        days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                    },
+                    whiteLabelingConfig: {
+                        branding: {
+                            branchLogo: 'https://cdn.company.com/tech-hub-logo.png',
+                            showBranchLogo: true,
+                            colorOverrides: {
+                                accent: '#6366f1',
+                                sidebar: {
+                                    active: '#6366f1',
+                                },
+                            },
+                            customBranchCss: '.tech-hub { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; }',
+                        },
+                        localization: {
+                            timezone: 'America/Los_Angeles',
+                            region: 'US',
+                            currency: 'USD',
+                        },
+                        dashboard: {
+                            showBranchMetrics: true,
+                            branchWelcomeMessage: 'Welcome to the Technology Innovation Hub - Where Ideas Become Reality',
+                            customMenuItems: [
+                                {
+                                    label: 'Innovation Resources',
+                                    url: '/tech/resources',
+                                    icon: 'lightbulb',
+                                    position: 'sidebar',
+                                    order: 3,
+                                    visibleToRoles: ['developer', 'admin', 'manager'],
+                                },
+                                {
+                                    label: 'Project Labs',
+                                    url: '/tech/labs',
+                                    icon: 'beaker',
+                                    position: 'sidebar',
+                                    order: 4,
+                                    visibleToRoles: ['developer', 'researcher'],
+                                },
+                            ],
+                        },
+                    },
+                },
+            },
             'full-branch': {
-                summary: '🏫 Complete Branch Setup',
-                description: 'Create a branch with all operational details',
+                summary: '🏫 Complete Branch Setup with White Labeling',
+                description:
+                    'Create a branch with all operational details and branch-specific customization',
                 value: {
                     name: 'Medical Center Campus',
                     address: '450 Medical Plaza Drive, CA 90095',
@@ -129,6 +186,66 @@ export class BranchController {
                             'Friday',
                             'Saturday',
                         ],
+                    },
+                    whiteLabelingConfig: {
+                        branding: {
+                            branchLogo:
+                                'https://cdn.university.edu/medical-logo.png',
+                            showBranchLogo: true,
+                            colorOverrides: {
+                                accent: '#DC2626',
+                                sidebar: {
+                                    active: '#DC2626',
+                                },
+                            },
+                            customBranchCss:
+                                '.medical-branch { border-left: 4px solid #DC2626; background: #fef2f2; }',
+                        },
+                        localization: {
+                            timezone: 'America/Los_Angeles',
+                            region: 'CA',
+                            currency: 'USD',
+                        },
+                        dashboard: {
+                            showBranchMetrics: true,
+                            branchWelcomeMessage:
+                                'Welcome to the Medical Center Training Portal - Excellence in Healthcare Education',
+                            customMenuItems: [
+                                {
+                                    label: 'Medical Resources',
+                                    url: '/medical/resources',
+                                    icon: 'medical-cross',
+                                    position: 'sidebar',
+                                    order: 5,
+                                    visibleToRoles: [
+                                        'doctor',
+                                        'nurse',
+                                        'admin',
+                                        'student',
+                                    ],
+                                },
+                                {
+                                    label: 'Emergency Protocols',
+                                    url: '/medical/emergency',
+                                    icon: 'emergency',
+                                    position: 'header',
+                                    order: 1,
+                                    visibleToRoles: ['doctor', 'nurse'],
+                                },
+                                {
+                                    label: 'Patient Safety Guidelines',
+                                    url: '/medical/safety',
+                                    icon: 'shield',
+                                    position: 'sidebar',
+                                    order: 6,
+                                    visibleToRoles: [
+                                        'doctor',
+                                        'nurse',
+                                        'admin',
+                                    ],
+                                },
+                            ],
+                        },
                     },
                 },
             },
@@ -523,6 +640,44 @@ export class BranchController {
                 description: 'Activate or deactivate branch',
                 value: {
                     isActive: false,
+                },
+            },
+            'branding-update': {
+                summary: '🎨 White Labeling Update',
+                description: 'Update branch-specific branding and customization',
+                value: {
+                    whiteLabelingConfig: {
+                        branding: {
+                            branchLogo: 'https://cdn.company.com/updated-branch-logo.png',
+                            showBranchLogo: true,
+                            colorOverrides: {
+                                accent: '#f59e0b',
+                                sidebar: {
+                                    active: '#f59e0b',
+                                },
+                            },
+                            customBranchCss: '.branch-updated { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); }',
+                        },
+                        localization: {
+                            timezone: 'America/New_York',
+                            region: 'US',
+                            currency: 'USD',
+                        },
+                        dashboard: {
+                            showBranchMetrics: true,
+                            branchWelcomeMessage: 'Welcome to our Updated Training Facility - Excellence in Education',
+                            customMenuItems: [
+                                {
+                                    label: 'Updated Resources',
+                                    url: '/updated/resources',
+                                    icon: 'refresh',
+                                    position: 'sidebar',
+                                    order: 2,
+                                    visibleToRoles: ['admin', 'instructor', 'student'],
+                                },
+                            ],
+                        },
+                    },
                 },
             },
         },

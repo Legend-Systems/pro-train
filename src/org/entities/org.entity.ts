@@ -8,6 +8,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsBoolean, IsOptional, IsUrl } from 'class-validator';
 import { Branch } from '../../branch/entities/branch.entity';
+import { WhiteLabelingConfig } from '../interfaces/organization.interface';
 
 @Entity('organizations')
 @Index('IDX_ORG_NAME', ['name'])
@@ -58,7 +59,8 @@ export class Organization {
 
     @Column({ nullable: true })
     @ApiProperty({
-        description: 'Organization logo URL',
+        description:
+            'Organization logo URL (legacy field - use whiteLabelingConfig for comprehensive branding)',
         example: 'https://cdn.example.com/logos/acme-corp.png',
         required: false,
     })
@@ -83,6 +85,79 @@ export class Organization {
         required: false,
     })
     email?: string;
+
+    @Column({ type: 'json', nullable: true })
+    @ApiProperty({
+        description:
+            'Comprehensive white labeling configuration for dashboard customization',
+        example: {
+            branding: {
+                primaryLogo: 'https://cdn.example.com/logo-primary.png',
+                colors: {
+                    primary: '#1e40af',
+                    secondary: '#3b82f6',
+                    accent: '#10b981',
+                    background: '#ffffff',
+                    surface: '#f8fafc',
+                    text: {
+                        primary: '#1f2937',
+                        secondary: '#6b7280',
+                        muted: '#9ca3af',
+                    },
+                    sidebar: {
+                        background: '#1f2937',
+                        text: '#f9fafb',
+                        active: '#3b82f6',
+                        hover: '#374151',
+                    },
+                    header: {
+                        background: '#ffffff',
+                        text: '#1f2937',
+                        border: '#e5e7eb',
+                    },
+                },
+                theme: {
+                    mode: 'light',
+                    allowUserToggle: true,
+                    roundedCorners: 'medium',
+                    fontSize: 'medium',
+                },
+            },
+            localization: {
+                defaultLanguage: 'en',
+                supportedLanguages: ['en', 'es', 'fr'],
+                allowUserLanguageChange: true,
+                region: 'US',
+                timezone: 'America/New_York',
+                dateFormat: 'MM/DD/YYYY',
+                timeFormat: '12h',
+                currency: 'USD',
+                numberFormat: { decimal: '.', thousands: ',' },
+            },
+            dashboard: {
+                layout: 'sidebar',
+                sidebarCollapsible: true,
+                showBreadcrumbs: true,
+                showOrganizationName: true,
+                showBranchName: true,
+                organizationNamePosition: 'header',
+                features: {
+                    darkModeToggle: true,
+                    languageSelector: true,
+                    profileMenu: true,
+                    notifications: true,
+                    search: true,
+                    help: true,
+                },
+            },
+            authentication: {
+                showPoweredBy: true,
+            },
+        },
+        required: false,
+    })
+    @IsOptional()
+    whiteLabelingConfig?: WhiteLabelingConfig;
 
     @OneToMany(() => Branch, branch => branch.organization)
     @ApiProperty({
