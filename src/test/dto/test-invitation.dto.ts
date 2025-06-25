@@ -6,7 +6,6 @@ import {
     IsEnum,
     IsArray,
     IsDate,
-    IsUUID,
     ArrayMinSize,
     MaxLength,
 } from 'class-validator';
@@ -173,6 +172,7 @@ export class TestInvitationResponseDto {
     @ApiProperty({
         description: 'Test details',
         type: 'object',
+        additionalProperties: true,
     })
     test: {
         testId: number;
@@ -192,6 +192,7 @@ export class TestInvitationResponseDto {
     @ApiProperty({
         description: 'Invited user details',
         type: 'object',
+        additionalProperties: true,
     })
     user: {
         userId: string;
@@ -204,6 +205,7 @@ export class TestInvitationResponseDto {
     @ApiProperty({
         description: 'User who sent the invitation',
         type: 'object',
+        additionalProperties: true,
     })
     inviter: {
         userId: string;
@@ -280,6 +282,7 @@ export class TestInvitationListResponseDto {
     @ApiProperty({
         description: 'Summary statistics',
         type: 'object',
+        additionalProperties: true,
     })
     summary: {
         pending: number;
