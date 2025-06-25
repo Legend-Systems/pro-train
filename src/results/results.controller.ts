@@ -329,7 +329,7 @@ export class ResultsController {
         @Query() filterDto: ResultFilterDto,
     ) {
         this.logger.log(`Getting results for user: ${scope.userId}`);
-        return this.resultsService.findUserResults(scope.userId, filterDto);
+        return this.resultsService.findUserResults(scope.userId, scope, filterDto);
     }
 
     @Get('test/:testId')
@@ -414,6 +414,7 @@ export class ResultsController {
 
         return this.resultsService.findTestResults(
             testId,
+            scope,
             scope.userId,
             filterDto,
         );
@@ -491,6 +492,7 @@ export class ResultsController {
 
         return this.resultsService.findCourseResults(
             courseId,
+            scope,
             scope.userId,
             filterDto,
         );
@@ -588,7 +590,7 @@ export class ResultsController {
         this.logger.log(
             `Getting analytics for test: ${testId} by user: ${scope.userId}`,
         );
-        return this.resultsService.getTestAnalytics(testId, scope.userId);
+        return this.resultsService.getTestAnalytics(testId, scope, scope.userId);
     }
 
     @Get(':id')
@@ -656,7 +658,7 @@ export class ResultsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultResponseDto> {
         this.logger.log(`Getting result: ${id} for user: ${scope.userId}`);
-        return this.resultsService.findOne(id, scope.userId);
+        return this.resultsService.findOne(id, scope, scope.userId);
     }
 
     @Post(':id/recalculate')
@@ -745,6 +747,6 @@ export class ResultsController {
         @OrgBranchScope() scope: OrgBranchScope,
     ): Promise<ResultResponseDto> {
         this.logger.log(`Recalculating result: ${id} by user: ${scope.userId}`);
-        return this.resultsService.recalculateResult(id, scope.userId);
+        return this.resultsService.recalculateResult(id, scope, scope.userId);
     }
 }

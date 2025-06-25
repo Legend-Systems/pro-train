@@ -390,6 +390,8 @@ export class AuthService {
 
     async signIn(
         signInDto: SignInDto,
+        ipAddress?: string,
+        userAgent?: string,
     ): Promise<StandardApiResponse<SessionResponseDto>> {
         const { email, password } = signInDto;
 
@@ -414,6 +416,14 @@ export class AuthService {
             orgId: user.orgId?.id,
             branchId: user.branchId?.id,
         });
+
+        // Send login notification email (don't wait for it to complete)
+        this.sendLoginNotificationEmail(user, ipAddress, userAgent).catch(
+            error => {
+                // Log error but don't fail the login process
+                console.error('Failed to send login notification email:', error);
+            },
+        );
 
         // Get user leaderboard stats
         const userStats = await this.leaderboardService.getUserOverallStats(
@@ -1017,6 +1027,110 @@ export class AuthService {
             },
             message: 'Invitation token is valid',
         };
+    }
+
+    /**
+     * Send login notification email
+     */
+    private async sendLoginNotificationEmail(
+        user: User,
+        ipAddress?: string,
+        userAgent?: string,
+    ): Promise<void> {
+        try {
+            const baseUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const appName = this.configService.get<string>(
+                'APP_NAME',
+                'trainpro Platform',
+            );
+
+            // Get approximate location from IP (you might want to use a geolocation service)
+            const location = ipAddress ? `IP: ${ipAddress}` : 'Unknown location';
+
+            const templateData = {
+                recipientName: `${user.firstName} ${user.lastName}`,
+                recipientEmail: user.email,
+                loginDateTime: new Date().toLocaleString('en-US', {
+                    timeZone: 'UTC',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZoneName: 'short',
+                }),
+                ipAddress: ipAddress || 'Unknown',
+                userAgent: userAgent || 'Unknown browser',
+                location,
+                deviceInfo: userAgent ? this.parseUserAgent(userAgent) : 'Unknown device',
+                dashboardUrl: `${baseUrl}/dashboard`,
+                profileUrl: `${baseUrl}/profile`,
+                securityUrl: `${baseUrl}/profile/security`,
+                companyName: appName,
+                companyUrl: baseUrl,
+                supportEmail: this.configService.get<string>(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.LOGIN_NOTIFICATION,
+                templateData,
+            );
+
+            await this.emailQueueService.queueEmail(
+                {
+                    to: user.email,
+                    subject: rendered.subject,
+                    html: rendered.html,
+                    text: rendered.text,
+                },
+                EmailJobPriority.HIGH,
+                0, // Send immediately
+                {
+                    userId: user.id,
+                    templateType: EmailType.LOGIN_NOTIFICATION,
+                    loginMetadata: {
+                        ipAddress,
+                        userAgent,
+                        loginTime: new Date(),
+                    },
+                },
+            );
+        } catch (error) {
+            console.error('Failed to send login notification email:', error);
+            // Don't throw error - email failure shouldn't block login
+        }
+    }
+
+    /**
+     * Parse user agent string to extract device info
+     */
+    private parseUserAgent(userAgent: string): string {
+        try {
+            // Simple user agent parsing (you might want to use a library like ua-parser-js)
+            if (userAgent.includes('Mobile')) {
+                return 'Mobile Device';
+            } else if (userAgent.includes('Tablet')) {
+                return 'Tablet';
+            } else if (userAgent.includes('Chrome')) {
+                return 'Chrome Browser';
+            } else if (userAgent.includes('Firefox')) {
+                return 'Firefox Browser';
+            } else if (userAgent.includes('Safari')) {
+                return 'Safari Browser';
+            } else if (userAgent.includes('Edge')) {
+                return 'Edge Browser';
+            }
+            return 'Desktop Browser';
+        } catch {
+            return 'Unknown device';
+        }
     }
 
     /**

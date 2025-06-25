@@ -818,9 +818,15 @@ export class AuthController {
     })
     async signIn(
         @Body() signInDto: SignInDto,
+        @Request() req: any,
     ): Promise<StandardApiResponse<SessionResponseDto>> {
         this.logger.log(`Sign in attempt for email: ${signInDto.email}`);
-        return this.authService.signIn(signInDto);
+        
+        // Extract IP address and user agent for security logging
+        const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];
+        const userAgent = req.headers['user-agent'];
+        
+        return this.authService.signIn(signInDto, ipAddress, userAgent);
     }
 
     @Post('refresh')

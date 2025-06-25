@@ -27,6 +27,7 @@ export enum EmailType {
     PASSWORD_RESET = 'password_reset',
     PASSWORD_CHANGED = 'password_changed',
     EMAIL_VERIFICATION = 'email_verification',
+    LOGIN_NOTIFICATION = 'login_notification',
     TEST_NOTIFICATION = 'test_notification',
     RESULTS_SUMMARY = 'results_summary',
     COURSE_ENROLLMENT = 'course_enrollment',
