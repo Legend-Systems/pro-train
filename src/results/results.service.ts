@@ -32,11 +32,26 @@ export class ResultsService {
 
     // Cache key patterns with org/branch scoping
     private readonly CACHE_KEYS = {
-        USER_RESULTS: (userId: string, filters: string, orgId?: string, branchId?: string) =>
+        USER_RESULTS: (
+            userId: string,
+            filters: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
             `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:${userId}:results:${filters}`,
-        TEST_RESULTS: (testId: number, filters: string, orgId?: string, branchId?: string) =>
+        TEST_RESULTS: (
+            testId: number,
+            filters: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
             `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:${testId}:results:${filters}`,
-        COURSE_RESULTS: (courseId: number, filters: string, orgId?: string, branchId?: string) =>
+        COURSE_RESULTS: (
+            courseId: number,
+            filters: string,
+            orgId?: string,
+            branchId?: string,
+        ) =>
             `org:${orgId || 'global'}:branch:${branchId || 'global'}:course:${courseId}:results:${filters}`,
         RESULT_DETAILS: (resultId: number, orgId?: string, branchId?: string) =>
             `org:${orgId || 'global'}:branch:${branchId || 'global'}:result:${resultId}`,
@@ -274,22 +289,171 @@ export class ResultsService {
                 `Result created successfully for attempt ${attemptId}: ${savedResult.resultId}`,
             );
 
-            // Trigger leaderboard update for the course and user
-            try {
-                await this.leaderboardService.updateUserScore(
-                    attempt.test.courseId,
-                    attempt.userId,
-                );
-                this.logger.debug(
-                    `Leaderboard updated for user ${attempt.userId} in course ${attempt.test.courseId}`,
-                );
-            } catch (leaderboardError) {
-                // Log error but don't fail the result creation
+            // Phase 1: Enhanced Logging & Validation for Leaderboard Update
+            this.logger.debug(`=== PHASE 1: Preparing Leaderboard Update ===`);
+            this.logger.debug(`Leaderboard update preparation:`, {
+                attemptId: attemptId,
+                userId: attempt.userId,
+                courseId: attempt.test.courseId,
+                resultId: savedResult.resultId,
+                score: score,
+                maxScore: maxScore,
+                percentage: percentage,
+                passed: passed,
+                orgId: orgId?.id || 'null',
+                branchId: branchId?.id || 'null',
+                testId: attempt.testId,
+                testTitle: attempt.test?.title || 'unknown',
+                timestamp: new Date().toISOString(),
+            });
+
+            // Phase 1: Pre-call validation
+            const leaderboardValidation = this.validateLeaderboardPrerequisites(
+                attempt,
+                savedResult,
+                { orgId, branchId },
+            );
+
+            if (!leaderboardValidation.isValid) {
                 this.logger.error(
-                    `Failed to update leaderboard for user ${attempt.userId} in course ${attempt.test.courseId}`,
-                    leaderboardError instanceof Error
-                        ? leaderboardError.stack
-                        : String(leaderboardError),
+                    `=== PHASE 1: Leaderboard Update Validation Failed ===`,
+                    {
+                        attemptId,
+                        errors: leaderboardValidation.errors,
+                        warnings: leaderboardValidation.warnings,
+                    },
+                );
+
+                // Don't proceed if critical validation fails
+                if (leaderboardValidation.isCritical) {
+                    this.logger.error(
+                        `Critical validation failure - skipping leaderboard update for attempt ${attemptId}`,
+                    );
+                } else {
+                    this.logger.warn(
+                        `Non-critical validation issues found - proceeding with leaderboard update for attempt ${attemptId}`,
+                    );
+                }
+            } else {
+                this.logger.debug(
+                    `=== PHASE 1: Validation Passed - Proceeding ===`,
+                );
+            }
+
+            // Phase 2 & 3: Enhanced Leaderboard Service Call with Data Flow Verification
+            if (
+                leaderboardValidation.isValid ||
+                !leaderboardValidation.isCritical
+            ) {
+                try {
+                    this.logger.debug(
+                        `=== PHASE 2 & 3: Initiating Leaderboard Service Call ===`,
+                    );
+
+                    // Phase 3: Verify data flow before call
+                    const preCallVerification =
+                        await this.verifyDataFlowIntegrity(
+                            savedResult.resultId,
+                            attempt.userId,
+                            attempt.test.courseId,
+                            { orgId, branchId },
+                        );
+
+                    this.logger.debug(
+                        `Pre-call data verification:`,
+                        preCallVerification,
+                    );
+
+                    if (!preCallVerification.isValid) {
+                        throw new Error(
+                            `Data flow verification failed: ${preCallVerification.errors.join(', ')}`,
+                        );
+                    }
+
+                    // Phase 2: Enhanced service call with proper error context
+                    this.logger.debug(
+                        `Calling leaderboardService.updateUserScore with:`,
+                        {
+                            courseId: attempt.test.courseId,
+                            userId: attempt.userId,
+                            callContext: 'post-auto-marking',
+                        },
+                    );
+
+                    const startTime = Date.now();
+                    await this.leaderboardService.updateUserScore(
+                        attempt.test.courseId,
+                        attempt.userId,
+                    );
+                    const duration = Date.now() - startTime;
+
+                    this.logger.debug(
+                        `=== SUCCESS: Leaderboard updated successfully ===`,
+                        {
+                            userId: attempt.userId,
+                            courseId: attempt.test.courseId,
+                            resultId: savedResult.resultId,
+                            duration: `${duration}ms`,
+                            score: score,
+                            percentage: percentage,
+                        },
+                    );
+
+                    // Phase 3: Post-call verification
+                    const postCallVerification =
+                        await this.verifyLeaderboardUpdate(
+                            attempt.userId,
+                            attempt.test.courseId,
+                            savedResult,
+                        );
+
+                    this.logger.debug(
+                        `Post-call verification:`,
+                        postCallVerification,
+                    );
+
+                    if (!postCallVerification.isValid) {
+                        this.logger.warn(
+                            `Post-call verification failed but leaderboard service completed:`,
+                            postCallVerification,
+                        );
+                    }
+                } catch (leaderboardError) {
+                    // Phase 2: Enhanced error logging and analysis
+                    this.logger.error(
+                        `=== PHASE 2: Leaderboard Update Failed ===`,
+                    );
+                    this.logger.error(`Leaderboard service error details:`, {
+                        attemptId: attemptId,
+                        userId: attempt.userId,
+                        courseId: attempt.test.courseId,
+                        resultId: savedResult.resultId,
+                        errorType:
+                            leaderboardError?.constructor?.name || 'Unknown',
+                        errorMessage:
+                            leaderboardError instanceof Error
+                                ? leaderboardError.message
+                                : String(leaderboardError),
+                        errorStack:
+                            leaderboardError instanceof Error
+                                ? leaderboardError.stack
+                                : 'No stack available',
+                        orgId: orgId?.id || 'null',
+                        branchId: branchId?.id || 'null',
+                        timestamp: new Date().toISOString(),
+                    });
+
+                    // Phase 2: Attempt to diagnose the failure
+                    await this.diagnoseLeaderboardFailure(
+                        attempt.userId,
+                        attempt.test.courseId,
+                        leaderboardError,
+                        { orgId, branchId },
+                    );
+                }
+            } else {
+                this.logger.warn(
+                    `Skipping leaderboard update due to critical validation failures for attempt ${attemptId}`,
                 );
             }
 
@@ -309,7 +473,15 @@ export class ResultsService {
                 );
             }
 
-            return this.findOne(savedResult.resultId, { orgId, branchId }, attempt.userId);
+            return this.findOne(
+                savedResult.resultId,
+                {
+                    orgId: orgId?.id,
+                    branchId: branchId?.id,
+                    userId: attempt.userId,
+                },
+                attempt.userId,
+            );
         } catch (error) {
             this.logger.error(
                 `Failed to create result from attempt ${attemptId}:`,
@@ -346,7 +518,10 @@ export class ResultsService {
             const { page = 1, limit = 10, ...filters } = filterDto;
             const skip = (page - 1) * limit;
 
-            const queryBuilder = this.buildFilterQuery({ ...filters, userId }, scope);
+            const queryBuilder = this.buildFilterQuery(
+                { ...filters, userId },
+                scope,
+            );
 
             const [results, total] = await queryBuilder
                 .skip(skip)
@@ -388,7 +563,10 @@ export class ResultsService {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
             const skip = (page - 1) * limit;
 
-            const queryBuilder = this.buildFilterQuery({ ...filters, testId }, scope);
+            const queryBuilder = this.buildFilterQuery(
+                { ...filters, testId },
+                scope,
+            );
 
             // If specific user requested, add user filter
             if (userId) {
@@ -435,10 +613,13 @@ export class ResultsService {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
             const skip = (page - 1) * limit;
 
-            const queryBuilder = this.buildFilterQuery({
-                ...filters,
-                courseId,
-            }, scope);
+            const queryBuilder = this.buildFilterQuery(
+                {
+                    ...filters,
+                    courseId,
+                },
+                scope,
+            );
 
             // If specific user requested, add user filter
             if (userId) {
@@ -470,7 +651,11 @@ export class ResultsService {
         }
     }
 
-    async findOne(id: number, scope: OrgBranchScope, userId?: string): Promise<ResultResponseDto> {
+    async findOne(
+        id: number,
+        scope: OrgBranchScope,
+        userId?: string,
+    ): Promise<ResultResponseDto> {
         try {
             const queryBuilder = this.resultRepository
                 .createQueryBuilder('result')
@@ -484,10 +669,14 @@ export class ResultsService {
 
             // Apply org/branch scoping
             if (scope.orgId) {
-                queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
+                queryBuilder.andWhere('orgId.id = :orgId', {
+                    orgId: scope.orgId,
+                });
             }
             if (scope.branchId) {
-                queryBuilder.andWhere('branchId.id = :branchId', { branchId: scope.branchId });
+                queryBuilder.andWhere('branchId.id = :branchId', {
+                    branchId: scope.branchId,
+                });
             }
 
             const result = await queryBuilder.getOne();
@@ -534,10 +723,14 @@ export class ResultsService {
 
             // Apply org/branch scoping
             if (scope.orgId) {
-                queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
+                queryBuilder.andWhere('orgId.id = :orgId', {
+                    orgId: scope.orgId,
+                });
             }
             if (scope.branchId) {
-                queryBuilder.andWhere('branchId.id = :branchId', { branchId: scope.branchId });
+                queryBuilder.andWhere('branchId.id = :branchId', {
+                    branchId: scope.branchId,
+                });
             }
 
             const results = await queryBuilder.getMany();
@@ -623,9 +816,11 @@ export class ResultsService {
         try {
             // First find the result with scoping
             const result = await this.findOne(resultId, scope, userId);
-            
+
             if (!result) {
-                throw new NotFoundException(`Result with ID ${resultId} not found`);
+                throw new NotFoundException(
+                    `Result with ID ${resultId} not found`,
+                );
             }
 
             // Get the attempt to recalculate
@@ -635,11 +830,15 @@ export class ResultsService {
             });
 
             if (!attempt) {
-                throw new NotFoundException('Associated test attempt not found');
+                throw new NotFoundException(
+                    'Associated test attempt not found',
+                );
             }
 
             // Recalculate the score
-            const { score, maxScore, percentage } = await this.calculateScore(result.attemptId);
+            const { score, maxScore, percentage } = await this.calculateScore(
+                result.attemptId,
+            );
 
             // Update the result
             await this.resultRepository.update(resultId, {
@@ -657,7 +856,9 @@ export class ResultsService {
                 throw error;
             }
             this.logger.error('Failed to recalculate result:', error);
-            throw new InternalServerErrorException('Failed to recalculate result');
+            throw new InternalServerErrorException(
+                'Failed to recalculate result',
+            );
         }
     }
 
@@ -822,7 +1023,9 @@ export class ResultsService {
             queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
         }
         if (scope.branchId) {
-            queryBuilder.andWhere('branchId.id = :branchId', { branchId: scope.branchId });
+            queryBuilder.andWhere('branchId.id = :branchId', {
+                branchId: scope.branchId,
+            });
         }
 
         // Apply user-provided filters
@@ -880,6 +1083,330 @@ export class ResultsService {
         queryBuilder.orderBy(`result.${sortBy}`, sortOrder);
 
         return queryBuilder;
+    }
+
+    /**
+     * Phase 1: Validate prerequisites for leaderboard update
+     */
+    private validateLeaderboardPrerequisites(
+        attempt: TestAttempt,
+        result: Result,
+        scope: { orgId?: any; branchId?: any },
+    ): {
+        isValid: boolean;
+        isCritical: boolean;
+        errors: string[];
+        warnings: string[];
+    } {
+        const errors: string[] = [];
+        const warnings: string[] = [];
+
+        // Critical validations
+        if (!attempt.userId) {
+            errors.push('User ID is missing from attempt');
+        }
+        if (!attempt.test?.courseId) {
+            errors.push('Course ID is missing from test');
+        }
+        if (!result.resultId) {
+            errors.push('Result ID is missing');
+        }
+        if (!scope.orgId) {
+            errors.push('Organization data is missing');
+        }
+
+        // Non-critical validations (warnings)
+        if (!attempt.test?.title) {
+            warnings.push('Test title is missing');
+        }
+        if (!scope.branchId) {
+            warnings.push('Branch data is missing');
+        }
+        if (result.score === null || result.score === undefined) {
+            warnings.push('Result score is null/undefined');
+        }
+        if (result.percentage === null || result.percentage === undefined) {
+            warnings.push('Result percentage is null/undefined');
+        }
+
+        const isCritical = errors.length > 0;
+        const isValid = errors.length === 0;
+
+        return {
+            isValid,
+            isCritical,
+            errors,
+            warnings,
+        };
+    }
+
+    /**
+     * Phase 3: Verify data flow integrity before leaderboard call
+     */
+    private async verifyDataFlowIntegrity(
+        resultId: number,
+        userId: string,
+        courseId: number,
+        scope: { orgId?: any; branchId?: any },
+    ): Promise<{
+        isValid: boolean;
+        errors: string[];
+        resultExists: boolean;
+        userHasResults: boolean;
+        courseExists: boolean;
+    }> {
+        const errors: string[] = [];
+        let resultExists = false;
+        let userHasResults = false;
+        let courseExists = false;
+
+        try {
+            // Verify result exists in database
+            const resultCheck = await this.resultRepository.findOne({
+                where: { resultId },
+                relations: ['orgId', 'branchId'],
+            });
+            resultExists = !!resultCheck;
+
+            if (!resultExists) {
+                errors.push(`Result ${resultId} not found in database`);
+            } else {
+                // Verify org/branch consistency
+                const resultOrgId = resultCheck?.orgId?.id;
+                const resultBranchId = resultCheck?.branchId?.id;
+                const expectedOrgId = scope.orgId?.id;
+                const expectedBranchId = scope.branchId?.id;
+
+                if (expectedOrgId && resultOrgId !== expectedOrgId) {
+                    errors.push(
+                        `Result org mismatch: expected ${expectedOrgId}, found ${resultOrgId}`,
+                    );
+                }
+                if (expectedBranchId && resultBranchId !== expectedBranchId) {
+                    errors.push(
+                        `Result branch mismatch: expected ${expectedBranchId}, found ${resultBranchId}`,
+                    );
+                }
+            }
+
+            // Verify user has results for this course
+            const userResultsCount = await this.resultRepository.count({
+                where: {
+                    userId,
+                    courseId,
+                },
+            });
+            userHasResults = userResultsCount > 0;
+
+            if (!userHasResults) {
+                errors.push(
+                    `No results found for user ${userId} in course ${courseId}`,
+                );
+            }
+
+            // Check if course exists (via a result that references it)
+            const courseResultsCount = await this.resultRepository.count({
+                where: { courseId },
+            });
+            courseExists = courseResultsCount > 0;
+
+            if (!courseExists) {
+                errors.push(`No results found for course ${courseId}`);
+            }
+        } catch (error) {
+            errors.push(
+                `Data integrity check failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+
+        return {
+            isValid: errors.length === 0,
+            errors,
+            resultExists,
+            userHasResults,
+            courseExists,
+        };
+    }
+
+    /**
+     * Phase 3: Verify leaderboard was updated successfully
+     */
+    private async verifyLeaderboardUpdate(
+        userId: string,
+        courseId: number,
+        result: Result,
+    ): Promise<{
+        isValid: boolean;
+        errors: string[];
+        leaderboardExists: boolean;
+        scoreMatches: boolean;
+        rankAssigned: boolean;
+    }> {
+        const errors: string[] = [];
+        let leaderboardExists = false;
+        let scoreMatches = false;
+        let rankAssigned = false;
+
+        try {
+            // Check if leaderboard entry exists
+            const leaderboardEntry = await this.leaderboardService.getUserRank(
+                courseId,
+                userId,
+            );
+
+            leaderboardExists = !!leaderboardEntry;
+
+            if (!leaderboardExists) {
+                errors.push(
+                    `Leaderboard entry not found for user ${userId} in course ${courseId}`,
+                );
+            } else {
+                // Verify score consistency
+                const leaderboardTotalPoints =
+                    leaderboardEntry?.totalPoints || 0;
+                const resultScore = Number(result.score) || 0;
+
+                // Note: leaderboard total points might be sum of multiple results,
+                // so we check if this result's score contributes to the total
+                if (leaderboardTotalPoints < resultScore) {
+                    errors.push(
+                        `Leaderboard total points (${leaderboardTotalPoints}) less than single result score (${resultScore})`,
+                    );
+                } else {
+                    scoreMatches = true;
+                }
+
+                // Verify rank is assigned
+                rankAssigned = (leaderboardEntry?.rank || 0) > 0;
+                if (!rankAssigned) {
+                    errors.push(
+                        `Invalid rank assigned: ${leaderboardEntry?.rank || 'undefined'}`,
+                    );
+                }
+            }
+        } catch (error) {
+            errors.push(
+                `Leaderboard verification failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+
+        return {
+            isValid: errors.length === 0,
+            errors,
+            leaderboardExists,
+            scoreMatches,
+            rankAssigned,
+        };
+    }
+
+    /**
+     * Phase 2: Diagnose leaderboard update failures
+     */
+    private async diagnoseLeaderboardFailure(
+        userId: string,
+        courseId: number,
+        error: any,
+        scope: { orgId?: any; branchId?: any },
+    ): Promise<void> {
+        this.logger.error(`=== LEADERBOARD FAILURE DIAGNOSIS ===`);
+
+        try {
+            // Check if leaderboard service is accessible
+            this.logger.debug(`Diagnosing leaderboard failure for:`, {
+                userId,
+                courseId,
+                orgId: scope.orgId?.id,
+                branchId: scope.branchId?.id,
+            });
+
+            // Test 1: Can we query existing leaderboard?
+            try {
+                const existingLeaderboard =
+                    await this.leaderboardService.getCourseLeaderboard(
+                        courseId,
+                        1,
+                        1,
+                    );
+                this.logger.debug(`Existing leaderboard query successful:`, {
+                    totalEntries: existingLeaderboard.total,
+                    hasEntries: existingLeaderboard.leaderboard.length > 0,
+                });
+            } catch (leaderboardQueryError) {
+                this.logger.error(
+                    `Cannot query existing leaderboard:`,
+                    leaderboardQueryError,
+                );
+            }
+
+            // Test 2: Check if user has other results
+            const userResultsCount = await this.resultRepository.count({
+                where: { userId },
+            });
+            this.logger.debug(`User has ${userResultsCount} total results`);
+
+            // Test 3: Check if course has other results
+            const courseResultsCount = await this.resultRepository.count({
+                where: { courseId },
+            });
+            this.logger.debug(`Course has ${courseResultsCount} total results`);
+
+            // Test 4: Check org/branch consistency
+            const resultWithOrgBranch = await this.resultRepository.findOne({
+                where: { userId, courseId },
+                relations: ['orgId', 'branchId'],
+                order: { createdAt: 'DESC' },
+            });
+
+            if (resultWithOrgBranch) {
+                this.logger.debug(`Latest result org/branch data:`, {
+                    resultOrgId: resultWithOrgBranch.orgId?.id,
+                    resultBranchId: resultWithOrgBranch.branchId?.id,
+                    expectedOrgId: scope.orgId?.id,
+                    expectedBranchId: scope.branchId?.id,
+                });
+            }
+
+            // Error categorization
+            const errorMessage =
+                error instanceof Error ? error.message : String(error);
+            let errorCategory = 'Unknown';
+
+            if (
+                errorMessage.includes('organization') ||
+                errorMessage.includes('org')
+            ) {
+                errorCategory = 'Organization Data Issue';
+            } else if (
+                errorMessage.includes('constraint') ||
+                errorMessage.includes('foreign key')
+            ) {
+                errorCategory = 'Database Constraint Violation';
+            } else if (
+                errorMessage.includes('null') ||
+                errorMessage.includes('undefined')
+            ) {
+                errorCategory = 'Null/Undefined Data';
+            } else if (errorMessage.includes('timeout')) {
+                errorCategory = 'Database Timeout';
+            } else if (errorMessage.includes('connection')) {
+                errorCategory = 'Database Connection Issue';
+            }
+
+            this.logger.error(`Failure category: ${errorCategory}`);
+            this.logger.error(`Raw error analysis:`, {
+                errorType: error?.constructor?.name,
+                hasStack: !!(error instanceof Error && error.stack),
+                messageLength: errorMessage.length,
+                errorCategory,
+            });
+        } catch (diagnosisError) {
+            this.logger.error(
+                `Diagnosis itself failed:`,
+                diagnosisError instanceof Error
+                    ? diagnosisError.message
+                    : String(diagnosisError),
+            );
+        }
     }
 
     private async sendResultsSummaryEmail(

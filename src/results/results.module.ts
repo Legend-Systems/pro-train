@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { ResultsService } from './results.service';
 import { ResultsController } from './results.controller';
 import { Result } from './entities/result.entity';
@@ -13,6 +14,7 @@ import { CommunicationsModule } from '../communications/communications.module';
 @Module({
     imports: [
         TypeOrmModule.forFeature([Result, TestAttempt, Answer, Question, Test]),
+        CacheModule.register(),
         LeaderboardModule,
         CommunicationsModule,
     ],
