@@ -41,7 +41,6 @@ import {
     TestResultsReadyEvent,
 } from '../common/events';
 
-
 @Injectable()
 export class TestService {
     private readonly logger = new Logger(TestService.name);
@@ -392,17 +391,22 @@ export class TestService {
                     );
 
                     let userAttemptData: any = undefined;
-                    
+
                     // Include user-specific attempt data if requested and user is provided
                     if (includeUserData && scope.userId) {
-                        userAttemptData = await this.getUserAttemptData(test.testId, scope.userId);
+                        userAttemptData = await this.getUserAttemptData(
+                            test.testId,
+                            scope.userId,
+                        );
                     }
 
                     let statistics: any = undefined;
-                    
+
                     // Include detailed statistics if requested
                     if (includeStatistics) {
-                        statistics = await this.calculateTestStatistics(test.testId);
+                        statistics = await this.calculateTestStatistics(
+                            test.testId,
+                        );
                     }
 
                     return {
@@ -691,12 +695,6 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Emit test updated event
-            this.eventEmitter.emit(
-                TestUpdatedEvent.eventName,
-                new TestUpdatedEvent(updatedTest.testId, updatedTest.title, updatedTest.courseId, updatedTest.orgId, updatedTest.branchId)
-            );
-
             return {
                 ...updatedTest,
                 course: updatedTest.course
@@ -792,12 +790,6 @@ export class TestService {
             if (!updatedTest) {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
-
-            // Emit test updated event
-            this.eventEmitter.emit(
-                TestUpdatedEvent.eventName,
-                new TestUpdatedEvent(updatedTest.testId, updatedTest.title, updatedTest.courseId, updatedTest.orgId, updatedTest.branchId)
-            );
 
             return {
                 ...updatedTest,
@@ -1119,9 +1111,13 @@ export class TestService {
             }
 
             const maxAttempts = await this.getMaxAttemptsForTest(testId);
-            const inProgressAttempt = allAttempts.find(a => a.status === AttemptStatus.IN_PROGRESS);
-            const completedAttempts = allAttempts.filter(a => a.status === AttemptStatus.SUBMITTED);
-            
+            const inProgressAttempt = allAttempts.find(
+                a => a.status === AttemptStatus.IN_PROGRESS,
+            );
+            const completedAttempts = allAttempts.filter(
+                a => a.status === AttemptStatus.SUBMITTED,
+            );
+
             // For now, we'll get score/percentage from Results entity since TestAttempt doesn't have these fields
             let bestAttempt: any = undefined;
             if (completedAttempts.length > 0) {
@@ -1136,7 +1132,8 @@ export class TestService {
                         attemptId: bestResult.attemptId,
                         score: bestResult.score || 0,
                         percentage: bestResult.percentage || 0,
-                        submittedAt: bestResult.calculatedAt?.toISOString() || '',
+                        submittedAt:
+                            bestResult.calculatedAt?.toISOString() || '',
                         timeSpent: 0, // Not available in Result entity
                     };
                 }
@@ -1146,42 +1143,52 @@ export class TestService {
             const lastAttempt = allAttempts[0];
             const attemptsCount = allAttempts.length;
             const attemptsRemaining = Math.max(0, maxAttempts - attemptsCount);
-            const canStartNewAttempt = !inProgressAttempt && attemptsRemaining > 0;
-            const attemptLimitReached = attemptsRemaining === 0 && !inProgressAttempt;
+            const canStartNewAttempt =
+                !inProgressAttempt && attemptsRemaining > 0;
+            const attemptLimitReached =
+                attemptsRemaining === 0 && !inProgressAttempt;
 
             return {
                 attemptsCount,
                 attemptsRemaining,
-                lastAttempt: lastAttempt ? {
-                    attemptId: lastAttempt.attemptId,
-                    status: lastAttempt.status,
-                    score: 0, // Will be populated from results
-                    percentage: 0, // Will be populated from results
-                    submittedAt: lastAttempt.submitTime?.toISOString(),
-                    timeSpent: 0, // Will be calculated from start/end time
-                    currentQuestionIndex: 0, // Will be tracked separately
-                    progressPercentage: lastAttempt.progressPercentage || 0,
-                    questionsAnswered: 0, // Will be calculated from answers
-                    flaggedQuestions: [], // Will be tracked separately
-                    lastActivity: lastAttempt.updatedAt.toISOString(),
-                } : undefined,
-                inProgressAttempt: inProgressAttempt ? {
-                    attemptId: inProgressAttempt.attemptId,
-                    testId: inProgressAttempt.testId,
-                    userId: inProgressAttempt.userId,
-                    attemptNumber: inProgressAttempt.attemptNumber,
-                    status: inProgressAttempt.status,
-                    startTime: inProgressAttempt.startTime.toISOString(),
-                    submitTime: inProgressAttempt.submitTime?.toISOString(),
-                    expiresAt: inProgressAttempt.expiresAt?.toISOString(),
-                    progressPercentage: inProgressAttempt.progressPercentage || 0,
-                    createdAt: inProgressAttempt.createdAt.toISOString(),
-                    updatedAt: inProgressAttempt.updatedAt.toISOString(),
-                    resumeUrl: `/dashboard/tests/${testId}/take`,
-                    timeElapsed: 0, // Calculate from start time
-                    currentProgress: inProgressAttempt.progressPercentage || 0,
-                    canResume: true,
-                } : undefined,
+                lastAttempt: lastAttempt
+                    ? {
+                          attemptId: lastAttempt.attemptId,
+                          status: lastAttempt.status,
+                          score: 0, // Will be populated from results
+                          percentage: 0, // Will be populated from results
+                          submittedAt: lastAttempt.submitTime?.toISOString(),
+                          timeSpent: 0, // Will be calculated from start/end time
+                          currentQuestionIndex: 0, // Will be tracked separately
+                          progressPercentage:
+                              lastAttempt.progressPercentage || 0,
+                          questionsAnswered: 0, // Will be calculated from answers
+                          flaggedQuestions: [], // Will be tracked separately
+                          lastActivity: lastAttempt.updatedAt.toISOString(),
+                      }
+                    : undefined,
+                inProgressAttempt: inProgressAttempt
+                    ? {
+                          attemptId: inProgressAttempt.attemptId,
+                          testId: inProgressAttempt.testId,
+                          userId: inProgressAttempt.userId,
+                          attemptNumber: inProgressAttempt.attemptNumber,
+                          status: inProgressAttempt.status,
+                          startTime: inProgressAttempt.startTime.toISOString(),
+                          submitTime:
+                              inProgressAttempt.submitTime?.toISOString(),
+                          expiresAt: inProgressAttempt.expiresAt?.toISOString(),
+                          progressPercentage:
+                              inProgressAttempt.progressPercentage || 0,
+                          createdAt: inProgressAttempt.createdAt.toISOString(),
+                          updatedAt: inProgressAttempt.updatedAt.toISOString(),
+                          resumeUrl: `/dashboard/tests/${testId}/take`,
+                          timeElapsed: 0, // Calculate from start time
+                          currentProgress:
+                              inProgressAttempt.progressPercentage || 0,
+                          canResume: true,
+                      }
+                    : undefined,
                 bestAttempt,
                 allAttempts: allAttempts.map(attempt => ({
                     attemptId: attempt.attemptId,
@@ -1191,7 +1198,9 @@ export class TestService {
                     percentage: 0, // Will be populated from results
                     timeSpent: 0, // Will be calculated
                     submittedAt: attempt.submitTime?.toISOString(),
-                    isExpired: attempt.expiresAt ? new Date() > attempt.expiresAt : false,
+                    isExpired: attempt.expiresAt
+                        ? new Date() > attempt.expiresAt
+                        : false,
                 })),
                 canStartNewAttempt,
                 nextAttemptNumber: attemptsCount + 1,

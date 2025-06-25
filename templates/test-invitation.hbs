@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Invitation - {{testTitle}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #6c5ce7;
+        }
+        .logo {
+            color: #6c5ce7;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .invitation-badge {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .invitation-title {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .invitation-subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        .test-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #6c5ce7;
+        }
+        .test-title {
+            color: #6c5ce7;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .detail-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .message-box {
+            background-color: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .message-title {
+            font-weight: bold;
+            color: #0c5460;
+            margin-bottom: 5px;
+        }
+        .action-buttons {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 10px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .btn-accept {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-accept:hover {
+            background-color: #218838;
+        }
+        .btn-decline {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-decline:hover {
+            background-color: #c82333;
+        }
+        .btn-info {
+            background-color: #6c5ce7;
+            color: white;
+        }
+        .btn-info:hover {
+            background-color: #5a4fcf;
+        }
+        .expiry-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .time-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-left: 4px solid #17a2b8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        .inviter-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 3px solid #6c5ce7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{companyName}}</div>
+            <h1>📧 Test Invitation</h1>
+        </div>
+
+        <div class="invitation-badge">
+            <div class="invitation-title">You're Invited!</div>
+            <div class="invitation-subtitle">Complete a test assessment</div>
+        </div>
+
+        <p>Hello {{userFirstName}},</p>
+        
+        <p>You have been invited to take a test assessment. Please review the details below and respond to this invitation.</p>
+
+        <div class="inviter-info">
+            <strong>Invited by:</strong> {{inviterName}}
+        </div>
+
+        {{#if hasCustomMessage}}
+        <div class="message-box">
+            <div class="message-title">Personal Message:</div>
+            <p>{{customMessage}}</p>
+        </div>
+        {{/if}}
+
+        <div class="test-info">
+            <div class="test-title">{{testTitle}}</div>
+            
+            <div class="detail-item">
+                <span class="detail-label">Course:</span>
+                <span class="detail-value">{{courseTitle}}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Test Type:</span>
+                <span class="detail-value">{{testType}}</span>
+            </div>
+            {{#if durationMinutes}}
+            <div class="detail-item">
+                <span class="detail-label">Time Limit:</span>
+                <span class="detail-value">{{durationMinutes}} minutes</span>
+            </div>
+            {{/if}}
+            {{#if maxAttempts}}
+            <div class="detail-item">
+                <span class="detail-label">Attempts Allowed:</span>
+                <span class="detail-value">{{maxAttempts}}</span>
+            </div>
+            {{/if}}
+        </div>
+
+        {{#if hasExpiry}}
+        <div class="expiry-warning">
+            <p><strong>⏰ Important:</strong> This invitation expires on {{formattedExpiryDate}}. Please respond before this date.</p>
+        </div>
+        {{/if}}
+
+        {{#if hasTimeLimit}}
+        <div class="time-info">
+            <p><strong>📝 Test Duration:</strong> Once you start the test, you'll have {{durationMinutes}} minutes to complete it. Make sure you have enough uninterrupted time before beginning.</p>
+        </div>
+        {{/if}}
+
+        <div class="action-buttons">
+            <a href="{{acceptInvitationUrl}}" class="btn btn-accept">✅ Accept Invitation</a>
+            <a href="{{declineInvitationUrl}}" class="btn btn-decline">❌ Decline Invitation</a>
+        </div>
+
+        <p><strong>What happens next?</strong></p>
+        <ul>
+            <li><strong>If you accept:</strong> You'll be able to take the test immediately or at your convenience</li>
+            <li><strong>If you decline:</strong> The invitation will be marked as declined and you won't receive further reminders</li>
+            <li><strong>Need more info?</strong> Click the button below to view detailed test information</li>
+        </ul>
+
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="{{testUrl}}" class="btn btn-info">View Test Details</a>
+        </div>
+
+        <p><strong>Questions or need help?</strong> You can:</p>
+        <ul>
+            <li>Contact {{inviterName}} who sent this invitation</li>
+            <li>Visit your <a href="{{dashboardUrl}}">dashboard</a> to manage all your invitations</li>
+            <li>Reach out to our support team for technical assistance</li>
+        </ul>
+
+        <div class="footer">
+            <p>This invitation was sent to {{recipientEmail}} by {{inviterName}}</p>
+            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{companyName}} - All rights reserved</p>
+            <p><small>Invitation ID: {{invitationId}}</small></p>
+        </div>
+    </div>
+</body>
+</html> 

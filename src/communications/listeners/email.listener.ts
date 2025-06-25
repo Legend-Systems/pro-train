@@ -11,11 +11,8 @@ import {
     UserDeactivatedEvent,
     UserRestoredEvent,
     CourseCreatedEvent,
-    TestCreatedEvent,
-    TestActivatedEvent,
-    TestAttemptStartedEvent,
-    TestCompletedEvent,
-    TestResultsReadyEvent,
+    TestInvitationSentEvent,
+    TestInvitationRespondedEvent,
 } from '../../common/events';
 
 @Injectable()
@@ -253,141 +250,67 @@ export class EmailListener {
         }
     }
 
-    // Test-related event handlers
-    @OnEvent('test.created')
-    async handleTestCreated(event: TestCreatedEvent) {
+    // Test invitation event handlers
+    @OnEvent('test.invitation.sent')
+    async handleTestInvitationSent(event: TestInvitationSentEvent) {
         try {
             this.logger.log(
-                `Handling test created event for: ${event.title}`,
+                `Handling test invitation sent event for: ${event.testTitle} to ${event.userEmail}`,
             );
 
-            await this.communicationsService.sendTestCreatedEmail(
+            await this.communicationsService.sendTestInvitationEmail(
+                event.invitationId,
                 event.testId,
-                event.title,
+                event.testTitle,
                 event.testType,
                 event.courseId,
                 event.courseTitle,
-                event.durationMinutes,
-                event.maxAttempts,
-                event.organizationId,
-                event.branchId,
-                event.isActive,
-            );
-        } catch (error) {
-            this.logger.error(
-                'Failed to handle test created event',
-                error instanceof Error ? error.message : String(error),
-            );
-        }
-    }
-
-    @OnEvent('test.activated')
-    async handleTestActivated(event: TestActivatedEvent) {
-        try {
-            this.logger.log(
-                `Handling test activated event for: ${event.title}`,
-            );
-
-            await this.communicationsService.sendTestActivatedEmail(
-                event.testId,
-                event.title,
-                event.courseTitle,
-                event.testType,
-                event.courseId,
-                event.durationMinutes,
-                event.maxAttempts,
-            );
-        } catch (error) {
-            this.logger.error(
-                'Failed to handle test activated event',
-                error instanceof Error ? error.message : String(error),
-            );
-        }
-    }
-
-    @OnEvent('test.attempt.started')
-    async handleTestAttemptStarted(event: TestAttemptStartedEvent) {
-        try {
-            this.logger.log(
-                `Handling test attempt started event for test: ${event.title}`,
-            );
-
-            await this.communicationsService.sendTestAttemptStartedEmail(
-                event.attemptId,
-                event.testId,
-                event.title,
                 event.userId,
                 event.userEmail,
                 event.userFirstName,
                 event.userLastName,
-                event.startTime,
+                event.invitedBy,
+                event.inviterName,
+                event.message,
                 event.expiresAt,
                 event.durationMinutes,
+                event.maxAttempts,
                 event.organizationId,
                 event.branchId,
             );
         } catch (error) {
             this.logger.error(
-                'Failed to handle test attempt started event',
+                'Failed to handle test invitation sent event',
                 error instanceof Error ? error.message : String(error),
             );
         }
     }
 
-    @OnEvent('test.completed')
-    async handleTestCompleted(event: TestCompletedEvent) {
+    @OnEvent('test.invitation.responded')
+    async handleTestInvitationResponded(event: TestInvitationRespondedEvent) {
         try {
             this.logger.log(
-                `Handling test completed event for test: ${event.title}`,
+                `Handling test invitation response event for: ${event.testTitle} from ${event.userEmail}`,
             );
 
-            await this.communicationsService.sendTestCompletedEmail(
-                event.attemptId,
-                event.testId,
-                event.title,
-                event.userId,
-                event.userEmail,
-                event.userFirstName,
-                event.userLastName,
-                event.score,
-                event.percentage,
-                event.completionTime,
-                event.organizationId,
-                event.branchId,
-            );
+            // Only send confirmation email for accepted invitations
+            if (event.response === 'accepted') {
+                await this.communicationsService.sendTestInvitationAcceptedEmail(
+                    event.invitationId,
+                    event.testId,
+                    event.testTitle,
+                    event.userId,
+                    event.userEmail,
+                    event.userFirstName,
+                    event.userLastName,
+                    event.responseNotes,
+                    event.organizationId,
+                    event.branchId,
+                );
+            }
         } catch (error) {
             this.logger.error(
-                'Failed to handle test completed event',
-                error instanceof Error ? error.message : String(error),
-            );
-        }
-    }
-
-    @OnEvent('test.results.ready')
-    async handleTestResultsReady(event: TestResultsReadyEvent) {
-        try {
-            this.logger.log(
-                `Handling test results ready event for test: ${event.title}`,
-            );
-
-            await this.communicationsService.sendTestResultsReadyEmail(
-                event.resultId,
-                event.testId,
-                event.title,
-                event.userId,
-                event.userEmail,
-                event.userFirstName,
-                event.userLastName,
-                event.score,
-                event.percentage,
-                event.passed,
-                event.resultsUrl,
-                event.organizationId,
-                event.branchId,
-            );
-        } catch (error) {
-            this.logger.error(
-                'Failed to handle test results ready event',
+                'Failed to handle test invitation response event',
                 error instanceof Error ? error.message : String(error),
             );
         }
