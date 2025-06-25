@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
@@ -32,6 +33,14 @@ import { Result } from '../results/entities/result.entity';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 import { RetryService } from '../common/services/retry.service';
+import {
+    TestCreatedEvent,
+    TestActivatedEvent,
+    TestAttemptStartedEvent,
+    TestCompletedEvent,
+    TestResultsReadyEvent,
+} from '../common/events';
+
 
 @Injectable()
 export class TestService {
@@ -84,6 +93,7 @@ export class TestService {
         private readonly retryService: RetryService,
         private readonly courseService: CourseService,
         private readonly dataSource: DataSource,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
 
     /**
@@ -224,6 +234,23 @@ export class TestService {
                     savedTest.courseId,
                     scope.orgId,
                     scope.branchId,
+                );
+
+                // Emit test created event
+                this.eventEmitter.emit(
+                    'test.created',
+                    new TestCreatedEvent(
+                        savedTest.testId,
+                        savedTest.title,
+                        savedTest.testType,
+                        savedTest.courseId,
+                        course.title,
+                        savedTest.durationMinutes,
+                        savedTest.maxAttempts,
+                        scope.orgId,
+                        scope.branchId,
+                        savedTest.isActive,
+                    ),
                 );
 
                 return {
@@ -664,6 +691,12 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
+            // Emit test updated event
+            this.eventEmitter.emit(
+                TestUpdatedEvent.eventName,
+                new TestUpdatedEvent(updatedTest.testId, updatedTest.title, updatedTest.courseId, updatedTest.orgId, updatedTest.branchId)
+            );
+
             return {
                 ...updatedTest,
                 course: updatedTest.course
@@ -759,6 +792,12 @@ export class TestService {
             if (!updatedTest) {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
+
+            // Emit test updated event
+            this.eventEmitter.emit(
+                TestUpdatedEvent.eventName,
+                new TestUpdatedEvent(updatedTest.testId, updatedTest.title, updatedTest.courseId, updatedTest.orgId, updatedTest.branchId)
+            );
 
             return {
                 ...updatedTest,

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Now Available - {{testTitle}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #28a745;
+        }
+        .logo {
+            color: #28a745;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .alert-box {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .alert-title {
+            color: #155724;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .test-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+        }
+        .test-title {
+            color: #28a745;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .test-details {
+            margin: 15px 0;
+        }
+        .detail-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #28a745;
+            color: white;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 20px 0;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .cta-button:hover {
+            background-color: #218838;
+        }
+        .secondary-button {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 10px 25px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 10px 5px;
+            text-align: center;
+        }
+        .secondary-button:hover {
+            background-color: #0056b3;
+        }
+        .urgent-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{companyName}}</div>
+            <h1>🚀 Test Now Available!</h1>
+        </div>
+
+        <div class="alert-box">
+            <div class="alert-title">Test Activated</div>
+            <p>Good news! The test "<strong>{{testTitle}}</strong>" is now active and ready for you to take.</p>
+        </div>
+
+        <div class="test-info">
+            <div class="test-title">{{testTitle}}</div>
+            
+            <div class="test-details">
+                <div class="detail-item">
+                    <span class="detail-label">Course:</span>
+                    <span class="detail-value">{{courseTitle}}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Test Type:</span>
+                    <span class="detail-value">{{testType}}</span>
+                </div>
+                {{#if durationMinutes}}
+                <div class="detail-item">
+                    <span class="detail-label">Time Limit:</span>
+                    <span class="detail-value">{{durationMinutes}} minutes</span>
+                </div>
+                {{/if}}
+                {{#if maxAttempts}}
+                <div class="detail-item">
+                    <span class="detail-label">Attempts Allowed:</span>
+                    <span class="detail-value">{{maxAttempts}}</span>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="{{startTestUrl}}" class="cta-button">Start Test Now</a>
+        </div>
+
+        {{#if durationMinutes}}
+        <div class="urgent-notice">
+            <p><strong>⏰ Time Limit:</strong> You have {{durationMinutes}} minutes to complete this test once you start. Make sure you have enough time and a stable internet connection before beginning.</p>
+        </div>
+        {{/if}}
+
+        <p><strong>Before you start:</strong></p>
+        <ul>
+            <li>Ensure you have a stable internet connection</li>
+            <li>Find a quiet space to concentrate</li>
+            <li>Have any necessary materials ready</li>
+            {{#if durationMinutes}}
+            <li>Set aside at least {{durationMinutes}} minutes of uninterrupted time</li>
+            {{/if}}
+        </ul>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{testUrl}}" class="secondary-button">View Test Details</a>
+            <a href="{{courseUrl}}" class="secondary-button">Go to Course</a>
+        </div>
+
+        <p>You can access this test anytime from your <a href="{{dashboardUrl}}">dashboard</a>.</p>
+
+        <div class="footer">
+            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{companyName}} - All rights reserved</p>
+            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>
+        </div>
+    </div>
+</body>
+</html> 

@@ -843,7 +843,6 @@ export class CommunicationsService {
             });
 
             await this.communicationRepository.save(communication);
-
             await this.emailQueueService.queueEmail({
                 to: templateData.recipientEmail,
                 subject: rendered.subject,
@@ -851,14 +850,343 @@ export class CommunicationsService {
                 text: rendered.text,
             });
 
-            this.logger.log(
-                `Results summary email queued for: ${templateData.recipientName} (${templateData.recipientEmail})`,
-            );
+            this.logger.log(`Results summary email queued for ${templateData.recipientEmail}`);
         } catch (error) {
-            this.logger.error(
-                `Failed to send results summary email for test ${templateData.testTitle}:`,
-                error,
+            this.logger.error('Failed to send results summary email:', error);
+            throw error;
+        }
+    }
+
+    async sendTestCreatedEmail(
+        testId: number,
+        title: string,
+        testType: string,
+        courseId: number,
+        courseTitle: string,
+        durationMinutes?: number,
+        maxAttempts?: number,
+        organizationId?: string,
+        branchId?: string,
+        isActive?: boolean,
+    ): Promise<void> {
+        try {
+            // For now, send to course creator - in future this could be to enrolled students
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
             );
+
+            const templateData = {
+                testTitle: title,
+                testType,
+                courseTitle,
+                courseId,
+                testUrl: `${clientUrl}/dashboard/tests/${testId}`,
+                courseUrl: `${clientUrl}/dashboard/courses/${courseId}`,
+                durationMinutes,
+                maxAttempts,
+                isActive,
+                dashboardUrl: `${clientUrl}/dashboard`,
+                companyName: 'TrainPro Platform',
+                companyUrl: clientUrl,
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                unsubscribeUrl: `${clientUrl}/unsubscribe`,
+            };
+
+            // TODO: Get actual recipients (course creator, enrolled students, etc.)
+            // For now, this is a placeholder - actual implementation would need to:
+            // 1. Get course creator details
+            // 2. Get enrolled students
+            // 3. Send to appropriate recipients based on test type and settings
+
+            this.logger.log(`Test created email template data prepared for test: ${title}`);
+        } catch (error) {
+            this.logger.error('Failed to prepare test created email:', error);
+            throw error;
+        }
+    }
+
+    async sendTestActivatedEmail(
+        testId: number,
+        title: string,
+        courseTitle: string,
+        testType: string,
+        courseId: number,
+        durationMinutes?: number,
+        maxAttempts?: number,
+    ): Promise<void> {
+        try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+
+            const templateData = {
+                testTitle: title,
+                courseTitle,
+                testType,
+                testUrl: `${clientUrl}/dashboard/tests/${testId}`,
+                courseUrl: `${clientUrl}/dashboard/courses/${courseId}`,
+                durationMinutes,
+                maxAttempts,
+                startTestUrl: `${clientUrl}/dashboard/tests/${testId}/take`,
+                dashboardUrl: `${clientUrl}/dashboard`,
+                companyName: 'TrainPro Platform',
+                companyUrl: clientUrl,
+                supportEmail: this.configService.get(
+                    'SUPPORT_EMAIL',
+                    'support@trainpro.com',
+                ),
+                unsubscribeUrl: `${clientUrl}/unsubscribe`,
+            };
+
+            // TODO: Get enrolled students and send activation notifications
+            // For now, this is a placeholder - actual implementation would need to:
+            // 1. Get enrolled students for the course
+            // 2. Send activation emails to all eligible students
+
+            this.logger.log(`Test activated email template data prepared for test: ${title}`);
+        } catch (error) {
+            this.logger.error('Failed to prepare test activated email:', error);
+            throw error;
+        }
+    }
+
+    async sendTestAttemptStartedEmail(
+        attemptId: string,
+        testId: number,
+        title: string,
+        userId: string,
+        userEmail: string,
+        userFirstName: string,
+        userLastName: string,
+        startTime: Date,
+        expiresAt?: Date,
+        durationMinutes?: number,
+        organizationId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            
+            const baseData = this.getBaseTemplateData(
+                userEmail,
+                `${userFirstName} ${userLastName}`,
+            );
+
+            const templateData = {
+                ...baseData,
+                testTitle: title,
+                attemptId,
+                startTime: startTime.toISOString(),
+                expiresAt: expiresAt?.toISOString(),
+                durationMinutes,
+                continueTestUrl: `${clientUrl}/dashboard/tests/${testId}/take`,
+                testDashboardUrl: `${clientUrl}/dashboard/tests/${testId}`,
+                userFirstName,
+                userLastName,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.TEST_NOTIFICATION,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${userFirstName} ${userLastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'TrainPro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.TEST_NOTIFICATION,
+                templateUsed: 'test-attempt-started',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    testId,
+                    attemptId,
+                    testTitle: title,
+                    userId,
+                    startTime: startTime.toISOString(),
+                    expiresAt: expiresAt?.toISOString(),
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+            await this.emailQueueService.queueEmail({
+                to: userEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+            });
+
+            this.logger.log(`Test attempt started email queued for ${userEmail}`);
+        } catch (error) {
+            this.logger.error('Failed to send test attempt started email:', error);
+            throw error;
+        }
+    }
+
+    async sendTestCompletedEmail(
+        attemptId: string,
+        testId: number,
+        title: string,
+        userId: string,
+        userEmail: string,
+        userFirstName: string,
+        userLastName: string,
+        score?: number,
+        percentage?: number,
+        completionTime?: string,
+        organizationId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            
+            const baseData = this.getBaseTemplateData(
+                userEmail,
+                `${userFirstName} ${userLastName}`,
+            );
+
+            const templateData = {
+                ...baseData,
+                testTitle: title,
+                attemptId,
+                score,
+                percentage,
+                completionTime,
+                resultsUrl: `${clientUrl}/dashboard/tests/${testId}/results`,
+                testDashboardUrl: `${clientUrl}/dashboard/tests/${testId}`,
+                userFirstName,
+                userLastName,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.TEST_NOTIFICATION,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${userFirstName} ${userLastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'TrainPro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.TEST_NOTIFICATION,
+                templateUsed: 'test-completed',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    testId,
+                    attemptId,
+                    testTitle: title,
+                    userId,
+                    score,
+                    percentage,
+                    completionTime,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+            await this.emailQueueService.enqueueEmail(communication);
+
+            this.logger.log(`Test completed email queued for ${userEmail}`);
+        } catch (error) {
+            this.logger.error('Failed to send test completed email:', error);
+            throw error;
+        }
+    }
+
+    async sendTestResultsReadyEmail(
+        resultId: string,
+        testId: number,
+        title: string,
+        userId: string,
+        userEmail: string,
+        userFirstName: string,
+        userLastName: string,
+        score: number,
+        percentage: number,
+        passed: boolean,
+        resultsUrl: string,
+        organizationId?: string,
+        branchId?: string,
+    ): Promise<void> {
+        try {
+            const baseData = this.getBaseTemplateData(
+                userEmail,
+                `${userFirstName} ${userLastName}`,
+            );
+
+            const templateData = {
+                ...baseData,
+                testTitle: title,
+                resultId,
+                score,
+                percentage,
+                passed,
+                resultsUrl,
+                userFirstName,
+                userLastName,
+                passedText: passed ? 'Congratulations! You passed!' : 'You did not pass this time.',
+                scoreText: `${score} points (${percentage}%)`,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.RESULTS_SUMMARY,
+                templateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: userEmail,
+                recipientName: `${userFirstName} ${userLastName}`,
+                senderEmail: this.configService.get(
+                    'EMAIL_FROM_ADDRESS',
+                    'noreply@trainpro.com',
+                ),
+                senderName: 'TrainPro Platform',
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.RESULTS_SUMMARY,
+                templateUsed: 'test-results-ready',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    testId,
+                    resultId,
+                    testTitle: title,
+                    userId,
+                    score,
+                    percentage,
+                    passed,
+                    resultsEmailSent: true,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+            await this.emailQueueService.enqueueEmail(communication);
+
+            this.logger.log(`Test results ready email queued for ${userEmail}`);
+        } catch (error) {
+            this.logger.error('Failed to send test results ready email:', error);
             throw error;
         }
     }

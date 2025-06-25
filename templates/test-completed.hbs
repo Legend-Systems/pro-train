@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Completed - {{testTitle}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #17a2b8;
+        }
+        .logo {
+            color: #17a2b8;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .completion-badge {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-left: 4px solid #17a2b8;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .completion-title {
+            color: #0c5460;
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .completion-icon {
+            font-size: 48px;
+            color: #17a2b8;
+            margin-bottom: 15px;
+        }
+        .test-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #17a2b8;
+        }
+        .test-title {
+            color: #17a2b8;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .score-section {
+            background-color: #fff;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .score-display {
+            font-size: 36px;
+            font-weight: bold;
+            color: #17a2b8;
+            margin: 10px 0;
+        }
+        .detail-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #17a2b8;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .cta-button:hover {
+            background-color: #138496;
+        }
+        .next-steps {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-left: 4px solid #28a745;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{companyName}}</div>
+            <h1>Test Completed</h1>
+        </div>
+
+        <div class="completion-badge">
+            <div class="completion-icon">✅</div>
+            <div class="completion-title">Congratulations!</div>
+            <p>You have successfully completed the test.</p>
+        </div>
+
+        <div class="test-info">
+            <div class="test-title">{{testTitle}}</div>
+            
+            <div class="detail-item">
+                <span class="detail-label">Completion Date:</span>
+                <span class="detail-value">{{currentDate}}</span>
+            </div>
+            {{#if completionTime}}
+            <div class="detail-item">
+                <span class="detail-label">Time Taken:</span>
+                <span class="detail-value">{{completionTime}}</span>
+            </div>
+            {{/if}}
+            <div class="detail-item">
+                <span class="detail-label">Attempt ID:</span>
+                <span class="detail-value">{{attemptId}}</span>
+            </div>
+        </div>
+
+        {{#if score}}
+        <div class="score-section">
+            <h3>Your Score</h3>
+            <div class="score-display">
+                {{#if percentage}}
+                    {{percentage}}%
+                {{else}}
+                    {{score}} points
+                {{/if}}
+            </div>
+            {{#if score}}
+            <p>You scored {{score}} points{{#if percentage}} ({{percentage}}%){{/if}}</p>
+            {{/if}}
+        </div>
+        {{/if}}
+
+        <div style="text-align: center;">
+            <a href="{{resultsUrl}}" class="cta-button">View Detailed Results</a>
+        </div>
+
+        <div class="next-steps">
+            <h4>What's Next?</h4>
+            <ul>
+                <li>Your results will be processed and made available shortly</li>
+                <li>You'll receive a detailed results email once grading is complete</li>
+                <li>Check your dashboard for any follow-up materials or assignments</li>
+                <li>Contact your instructor if you have any questions about the test</li>
+            </ul>
+        </div>
+
+        <p><strong>Thank you for completing this test!</strong> Your effort and time are appreciated.</p>
+
+        <p>You can access your full test history and results from your <a href="{{testDashboardUrl}}">test dashboard</a>.</p>
+
+        <div class="footer">
+            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{companyName}} - All rights reserved</p>
+            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>
+        </div>
+    </div>
+</body>
+</html> 

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Test Available - {{testTitle}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #007bff;
+        }
+        .logo {
+            color: #007bff;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .test-info {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #007bff;
+        }
+        .test-title {
+            color: #007bff;
+            font-size: 20px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .test-details {
+            margin: 15px 0;
+        }
+        .detail-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .detail-label {
+            font-weight: bold;
+            color: #555;
+        }
+        .detail-value {
+            color: #333;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .cta-button:hover {
+            background-color: #0056b3;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-active {
+            background-color: #28a745;
+            color: white;
+        }
+        .status-inactive {
+            background-color: #6c757d;
+            color: white;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+        .support-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">{{companyName}}</div>
+            <h1>New Test Available</h1>
+        </div>
+
+        <p>Hello,</p>
+        
+        <p>A new test has been created and is now available for your course:</p>
+
+        <div class="test-info">
+            <div class="test-title">{{testTitle}}</div>
+            
+            <div class="test-details">
+                <div class="detail-item">
+                    <span class="detail-label">Course:</span>
+                    <span class="detail-value">{{courseTitle}}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Test Type:</span>
+                    <span class="detail-value">{{testType}}</span>
+                </div>
+                {{#if durationMinutes}}
+                <div class="detail-item">
+                    <span class="detail-label">Duration:</span>
+                    <span class="detail-value">{{durationMinutes}} minutes</span>
+                </div>
+                {{/if}}
+                {{#if maxAttempts}}
+                <div class="detail-item">
+                    <span class="detail-label">Max Attempts:</span>
+                    <span class="detail-value">{{maxAttempts}}</span>
+                </div>
+                {{/if}}
+                <div class="detail-item">
+                    <span class="detail-label">Status:</span>
+                    <span class="detail-value">
+                        {{#if isActive}}
+                            <span class="status-badge status-active">Active</span>
+                        {{else}}
+                            <span class="status-badge status-inactive">Inactive</span>
+                        {{/if}}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {{#if isActive}}
+        <div style="text-align: center;">
+            <a href="{{testUrl}}" class="cta-button">View Test Details</a>
+        </div>
+        
+        <p><strong>Ready to start?</strong> Click the button above to view the test details and begin when you're ready.</p>
+        {{else}}
+        <div class="support-info">
+            <p><strong>Note:</strong> This test is currently inactive. You will receive another notification when it becomes available for taking.</p>
+        </div>
+        {{/if}}
+
+        <p>You can also access all your tests from your <a href="{{dashboardUrl}}">dashboard</a>.</p>
+
+        <div class="footer">
+            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{companyName}} - All rights reserved</p>
+            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>
+        </div>
+    </div>
+</body>
+</html> 

@@ -7,3 +7,8 @@ export * from './user-org-branch-assigned.event';
 export * from './user-deactivated.event';
 export * from './user-restored.event';
 export * from './course-created.event';
+export * from './test-created.event';
+export * from './test-activated.event';
+export * from './test-attempt-started.event';
+export * from './test-completed.event';
+export * from './test-results-ready.event';
