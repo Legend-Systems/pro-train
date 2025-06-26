@@ -9,10 +9,12 @@ export class TestInvitationRespondedEvent {
         public readonly userEmail: string,
         public readonly userFirstName: string,
         public readonly userLastName: string,
-        public readonly response: InvitationStatus.ACCEPTED | InvitationStatus.DECLINED,
+        public readonly response:
+            | InvitationStatus.ACCEPTED
+            | InvitationStatus.DECLINED,
         public readonly responseNotes?: string,
         public readonly respondedAt?: Date,
         public readonly organizationId?: string,
         public readonly branchId?: string,
     ) {}
-} 
+}

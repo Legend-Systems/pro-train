@@ -19,4 +19,4 @@ export class TestInvitationSentEvent {
         public readonly organizationId?: string,
         public readonly branchId?: string,
     ) {}
-} 
+}

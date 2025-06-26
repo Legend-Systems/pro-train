@@ -971,7 +971,7 @@ export class TestAttemptsService {
 
         const result = await this.retryService.executeDatabase(async () => {
             // Verify test exists and is accessible
-            const test = await this.testService.findOne(testId, scope.userId);
+            const test = await this.testService.findOne(testId, scope);
             if (!test) {
                 throw new NotFoundException('Test not found');
             }

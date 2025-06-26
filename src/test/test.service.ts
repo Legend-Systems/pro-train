@@ -584,7 +584,10 @@ export class TestService {
         };
     }
 
-    async findOne(id: number, userId?: string): Promise<TestDetailDto | null> {
+    async findOne(
+        id: number,
+        scope?: OrgBranchScope,
+    ): Promise<TestDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
@@ -601,9 +604,14 @@ export class TestService {
                 return null;
             }
 
-            // If userId is provided, validate access
-            if (userId) {
-                await this.validateCourseAccess(test.courseId, userId);
+            // If scope is provided, validate access (read operation)
+            if (scope?.userId) {
+                await this.validateCourseAccess(
+                    test.courseId,
+                    scope.userId,
+                    scope,
+                    false,
+                );
             }
 
             // Calculate comprehensive statistics
@@ -674,8 +682,13 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Validate course ownership
-            await this.validateCourseAccess(test.courseId, userId);
+            // Validate course ownership (write operation)
+            await this.validateCourseAccess(
+                test.courseId,
+                userId,
+                undefined,
+                true,
+            );
 
             // Exclude questions from update (questions are handled separately)
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -720,8 +733,13 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Validate course ownership
-            await this.validateCourseAccess(test.courseId, userId);
+            // Validate course ownership (write operation)
+            await this.validateCourseAccess(
+                test.courseId,
+                userId,
+                undefined,
+                true,
+            );
 
             // Check for existing attempts
             const attemptCount = await this.testAttemptRepository.count({
@@ -777,8 +795,13 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Validate course ownership
-            await this.validateCourseAccess(test.courseId, userId);
+            // Validate course ownership (write operation)
+            await this.validateCourseAccess(
+                test.courseId,
+                userId,
+                undefined,
+                true,
+            );
 
             await this.testRepository.update(id, { isActive });
 
@@ -806,7 +829,7 @@ export class TestService {
         });
     }
 
-    async getStats(id: number, userId: string): Promise<TestStatsDto> {
+    async getStats(id: number, scope: OrgBranchScope): Promise<TestStatsDto> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
@@ -816,8 +839,13 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Validate course ownership
-            await this.validateCourseAccess(test.courseId, userId);
+            // Validate course access (read operation)
+            await this.validateCourseAccess(
+                test.courseId,
+                scope.userId,
+                scope,
+                false,
+            );
 
             // Calculate comprehensive statistics
             const statistics = await this.calculateTestStatistics(id);
@@ -849,7 +877,7 @@ export class TestService {
         });
     }
 
-    async getConfig(id: number, userId: string): Promise<TestConfigDto> {
+    async getConfig(id: number, scope: OrgBranchScope): Promise<TestConfigDto> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
@@ -860,8 +888,13 @@ export class TestService {
                 throw new NotFoundException(`Test with ID ${id} not found`);
             }
 
-            // Validate course ownership
-            await this.validateCourseAccess(test.courseId, userId);
+            // Validate course access (read operation)
+            await this.validateCourseAccess(
+                test.courseId,
+                scope.userId,
+                scope,
+                false,
+            );
 
             // Calculate question statistics
             const questions = await this.questionRepository.find({
@@ -905,10 +938,13 @@ export class TestService {
     async validateCourseAccess(
         courseId: number,
         userId: string,
+        scope?: OrgBranchScope,
+        isWriteOperation: boolean = false,
     ): Promise<void> {
         return this.retryService.executeDatabase(async () => {
             const course = await this.courseRepository.findOne({
                 where: { courseId },
+                relations: ['orgId', 'branchId'],
             });
 
             if (!course) {
@@ -917,11 +953,65 @@ export class TestService {
                 );
             }
 
-            if (course.createdBy !== userId) {
+            // If user is the creator, they always have access
+            if (course.createdBy === userId) {
+                return;
+            }
+
+            // For write operations (create, edit, delete), require ownership or elevated permissions
+            if (isWriteOperation) {
+                // Check if user has elevated permissions (admin or brandon) within the same organization
+                if (scope?.userRole && scope?.orgId) {
+                    const hasElevatedPermissions =
+                        scope.userRole === 'brandon' ||
+                        scope.userRole === 'admin' ||
+                        scope.userRole === 'owner';
+
+                    if (hasElevatedPermissions) {
+                        // For elevated users, check if the course belongs to their organization
+                        const courseOrgId = course.orgId?.id;
+
+                        // Brandon users can edit across organizations
+                        if (scope.userRole === 'brandon') {
+                            return;
+                        }
+
+                        // Admin and owner users can edit within their organization
+                        if (courseOrgId === scope.orgId) {
+                            return;
+                        }
+                    }
+                }
+
                 throw new ForbiddenException(
-                    'You do not have permission to access this course',
+                    'You are not authorized to modify this course',
                 );
             }
+
+            // For read operations, allow access within the same org/branch scope
+            if (scope?.orgId || scope?.branchId) {
+                // Validate organization access if orgId provided
+                if (scope.orgId && course.orgId?.id !== scope.orgId) {
+                    throw new ForbiddenException(
+                        'Access denied: Course belongs to different organization',
+                    );
+                }
+
+                // Validate branch access if branchId provided
+                if (scope.branchId && course.branchId?.id !== scope.branchId) {
+                    throw new ForbiddenException(
+                        'Access denied: Course belongs to different branch',
+                    );
+                }
+
+                // If we reach here, user has proper org/branch access
+                return;
+            }
+
+            // If no scope provided or doesn't match, deny access
+            throw new ForbiddenException(
+                'You do not have permission to access this course',
+            );
         });
     }
 

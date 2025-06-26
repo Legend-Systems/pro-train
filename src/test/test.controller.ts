@@ -531,7 +531,7 @@ export class TestController {
         try {
             this.logger.log(`Getting test ${id} for user: ${scope.userId}`);
 
-            const test = await this.testService.findOne(id, scope.userId);
+            const test = await this.testService.findOne(id, scope);
 
             if (!test) {
                 throw new NotFoundException(`Test with ID ${id} not found`);
@@ -888,7 +888,7 @@ export class TestController {
                 `Getting stats for test ${id} by user: ${scope.userId}`,
             );
 
-            const stats = await this.testService.getStats(id, scope.userId);
+            const stats = await this.testService.getStats(id, scope);
 
             this.logger.log(`Stats retrieved for test ${id}`);
 
@@ -968,7 +968,7 @@ export class TestController {
                 `Getting config for test ${id} by user: ${scope.userId}`,
             );
 
-            const config = await this.testService.getConfig(id, scope.userId);
+            const config = await this.testService.getConfig(id, scope);
 
             this.logger.log(`Config retrieved for test ${id}`);
 
