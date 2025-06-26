@@ -7,6 +7,7 @@ import { Result } from '../../results/entities/result.entity';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
 import { Test } from '../../test/entities/test.entity';
 import { Course } from '../../course/entities/course.entity';
+import { Branch } from '../../branch/entities/branch.entity';
 import {
     ResultsAnalyticsReportDto,
     ResultsStatsReportDto,
@@ -15,6 +16,9 @@ import {
     GlobalResultsStatsReportDto,
     ScoreDistributionReportDto,
     PerformanceTrendReportDto,
+    EnhancedPerformanceTrendReportDto,
+    TrendFilterDto,
+    BranchPerformanceComparisonDto,
 } from '../dto/results-analytics.dto';
 
 @Injectable()
@@ -265,6 +269,269 @@ export class ResultsReportsService {
         await this.cacheManager.set(cacheKey, trendsData, 7200);
 
         return trendsData;
+    }
+
+    /**
+     * Enhanced Performance Trends with multi-dimensional filtering
+     * Supports: branch, monthly/weekly/daily aggregation, user, test, course
+     */
+    async getEnhancedPerformanceTrends(
+        filters: TrendFilterDto,
+    ): Promise<EnhancedPerformanceTrendReportDto[]> {
+        const {
+            startDate,
+            endDate,
+            groupBy = 'monthly',
+            branchId,
+            userId,
+            testId,
+            courseId,
+            includeImprovement = false,
+            includeTimingMetrics = false,
+        } = filters;
+
+        // Build cache key based on all filters
+        const cacheKey = `enhanced_trends_${JSON.stringify(filters)}`;
+        
+        // Try to get from cache first
+        const cachedData = await this.cacheManager.get<EnhancedPerformanceTrendReportDto[]>(cacheKey);
+        if (cachedData) {
+            return cachedData;
+        }
+
+        // Set default date range if not provided
+        const defaultEndDate = endDate ? new Date(endDate) : new Date();
+        const defaultStartDate = startDate 
+            ? new Date(startDate) 
+            : new Date(defaultEndDate.getTime() - (365 * 24 * 60 * 60 * 1000)); // 1 year ago
+
+        // Build the main query with proper joins and scoping
+        let query = this.resultRepository
+            .createQueryBuilder('r')
+            .innerJoin('r.attempt', 'ta')
+            .leftJoinAndSelect('r.orgId', 'orgId')
+            .leftJoinAndSelect('r.branchId', 'branchId')
+            .leftJoinAndSelect('r.test', 'test')
+            .leftJoinAndSelect('test.course', 'course')
+            .where('ta.submitTime >= :startDate', { startDate: defaultStartDate })
+            .andWhere('ta.submitTime <= :endDate', { endDate: defaultEndDate });
+
+        // Apply dimensional filters
+        if (branchId) {
+            query = query.andWhere('branchId.id = :branchId', { branchId });
+        }
+        if (userId) {
+            query = query.andWhere('r.userId = :userId', { userId });
+        }
+        if (testId) {
+            query = query.andWhere('r.testId = :testId', { testId });
+        }
+        if (courseId) {
+            query = query.andWhere('r.courseId = :courseId', { courseId });
+        }
+
+        // Determine grouping format based on aggregation type
+        let dateFormat: string;
+        let orderByFormat: string;
+        
+        switch (groupBy) {
+            case 'daily':
+                dateFormat = 'DATE(ta.submitTime)';
+                orderByFormat = 'DATE(ta.submitTime)';
+                break;
+            case 'weekly':
+                dateFormat = 'YEARWEEK(ta.submitTime, 1)';
+                orderByFormat = 'YEARWEEK(ta.submitTime, 1)';
+                break;
+            case 'monthly':
+            default:
+                dateFormat = 'DATE_FORMAT(ta.submitTime, "%Y-%m")';
+                orderByFormat = 'DATE_FORMAT(ta.submitTime, "%Y-%m")';
+                break;
+        }
+
+        // Build select clauses
+        const selectClauses = [
+            `${dateFormat} as period`,
+            'AVG(r.score) as averageScore',
+            'COUNT(r.resultId) as totalResults',
+            'COUNT(CASE WHEN r.passed = true THEN 1 END) as passedResults',
+            'COUNT(CASE WHEN r.passed = false THEN 1 END) as failedResults',
+            'COUNT(DISTINCT r.userId) as uniqueUsers',
+        ];
+
+        // Add timing metrics if requested
+        if (includeTimingMetrics) {
+            selectClauses.push(
+                'AVG(TIMESTAMPDIFF(MINUTE, ta.startTime, ta.submitTime)) as averageCompletionTime'
+            );
+        }
+
+        // Add branch/test/course context info
+        if (branchId) {
+            selectClauses.push('branchId.id as branchId', 'branchId.name as branchName');
+        }
+        if (testId) {
+            selectClauses.push('test.testId as testId', 'test.title as testTitle');
+        }
+        if (courseId) {
+            selectClauses.push('course.courseId as courseId', 'course.title as courseTitle');
+        }
+
+        // Apply selections and grouping
+        query = query
+            .select(selectClauses)
+            .groupBy(dateFormat);
+
+        // Add additional grouping for context
+        if (branchId) {
+            query = query.addGroupBy('branchId.id, branchId.name');
+        }
+        if (testId) {
+            query = query.addGroupBy('test.testId, test.title');
+        }
+        if (courseId) {
+            query = query.addGroupBy('course.courseId, course.title');
+        }
+
+        query = query.orderBy(orderByFormat, 'ASC');
+
+        const rawResults = await query.getRawMany();
+
+        // Process and calculate metrics
+        const trendsData: EnhancedPerformanceTrendReportDto[] = [];
+        
+        for (let i = 0; i < rawResults.length; i++) {
+            const current = rawResults[i];
+            const previous = i > 0 ? rawResults[i - 1] : null;
+
+            // Calculate basic metrics
+            const totalResults = Number(current.totalResults) || 0;
+            const passedResults = Number(current.passedResults) || 0;
+            const failedResults = Number(current.failedResults) || 0;
+            const averageScore = Math.round((Number(current.averageScore) || 0) * 100) / 100;
+            const passRate = totalResults > 0 ? Math.round((passedResults / totalResults) * 100 * 100) / 100 : 0;
+
+            // Calculate improvements if requested
+            let scoreImprovement = 0;
+            let passRateImprovement = 0;
+            
+            if (includeImprovement && previous) {
+                const prevAvgScore = Number(previous.averageScore) || 0;
+                const prevPassRate = Number(previous.totalResults) > 0 
+                    ? (Number(previous.passedResults) / Number(previous.totalResults)) * 100 
+                    : 0;
+                
+                scoreImprovement = Math.round((averageScore - prevAvgScore) * 100) / 100;
+                passRateImprovement = Math.round((passRate - prevPassRate) * 100) / 100;
+            }
+
+            const trendItem: EnhancedPerformanceTrendReportDto = {
+                period: current.period,
+                aggregationType: groupBy,
+                averageScore,
+                medianScore: averageScore, // For now, using avg as median approximation
+                totalResults,
+                passedResults,
+                failedResults,
+                passRate,
+                uniqueUsers: Number(current.uniqueUsers) || 0,
+                totalAttempts: totalResults, // Each result represents one attempt
+                scoreImprovement,
+                passRateImprovement,
+                averageCompletionTime: includeTimingMetrics 
+                    ? Math.round((Number(current.averageCompletionTime) || 0) * 100) / 100 
+                    : 0,
+            };
+
+            // Add contextual information
+            if (branchId) {
+                trendItem.branchId = current.branchId;
+                trendItem.branchName = current.branchName;
+            }
+            if (testId) {
+                trendItem.testId = Number(current.testId);
+                trendItem.testTitle = current.testTitle;
+            }
+            if (courseId) {
+                trendItem.courseId = Number(current.courseId);
+                trendItem.courseTitle = current.courseTitle;
+            }
+            if (userId) {
+                trendItem.userId = userId;
+            }
+
+            trendsData.push(trendItem);
+        }
+
+        // Cache the result for 2 hours (7200 seconds)
+        await this.cacheManager.set(cacheKey, trendsData, 7200);
+
+        return trendsData;
+    }
+
+    /**
+     * Get branch performance comparison trends
+     */
+    async getBranchPerformanceComparison(
+        filters: Omit<TrendFilterDto, 'branchId'>
+    ): Promise<BranchPerformanceComparisonDto> {
+        const cacheKey = `branch_comparison_trends_${JSON.stringify(filters)}`;
+        
+        // Try to get from cache first
+        const cachedData = await this.cacheManager.get<BranchPerformanceComparisonDto>(cacheKey);
+        if (cachedData) {
+            return cachedData;
+        }
+
+        // Get all active branches first
+        const branches = await this.resultRepository
+            .createQueryBuilder('r')
+            .innerJoin('r.branchId', 'branch')
+            .select('DISTINCT branch.id', 'branchId')
+            .addSelect('branch.name', 'branchName')
+            .where('branch.isActive = true')
+            .getRawMany();
+
+        // Get trends for each branch
+        const branchTrends: EnhancedPerformanceTrendReportDto[] = [];
+        const branchAverages: { [branchName: string]: number } = {};
+
+        for (const branch of branches) {
+            const branchFilters: TrendFilterDto = {
+                ...filters,
+                branchId: branch.branchId,
+            };
+
+            const trends = await this.getEnhancedPerformanceTrends(branchFilters);
+            branchTrends.push(...trends);
+
+            // Calculate branch average score
+            if (trends.length > 0) {
+                const totalScore = trends.reduce((sum, trend) => sum + trend.averageScore, 0);
+                branchAverages[branch.branchName] = totalScore / trends.length;
+            }
+        }
+
+        // Rank branches by performance
+        const sortedBranches = Object.entries(branchAverages)
+            .sort(([,a], [,b]) => b - a);
+
+        const branchRankings: { [branchName: string]: number } = {};
+        sortedBranches.forEach(([branchName], index) => {
+            branchRankings[branchName] = index + 1;
+        });
+
+        const result: BranchPerformanceComparisonDto = {
+            branchTrends,
+            topBranch: sortedBranches[0]?.[0] || 'No data',
+            branchRankings,
+        };
+
+        // Cache the result for 2 hours (7200 seconds)
+        await this.cacheManager.set(cacheKey, result, 7200);
+
+        return result;
     }
 
     private async getResultsStats(

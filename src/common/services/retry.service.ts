@@ -13,16 +13,32 @@ export class RetryService {
     private readonly logger = new Logger(RetryService.name);
 
     private readonly defaultShouldRetry = (error: Error): boolean => {
-        // Default retry logic for common connection/timeout errors
-        return (
-            error.message.includes('ECONNRESET') ||
-            error.message.includes('Connection lost') ||
-            error.message.includes('connect ETIMEDOUT') ||
-            error.message.includes('ENOTFOUND') ||
-            error.message.includes('ECONNREFUSED') ||
-            error.message.includes('timeout') ||
-            error.message.includes('ESOCKETTIMEDOUT')
-        );
+        // Enhanced retry logic for connection/timeout errors
+        const errorMessage = error.message.toLowerCase();
+        const isConnectionError =
+            errorMessage.includes('econnreset') ||
+            errorMessage.includes('connection lost') ||
+            errorMessage.includes('connect etimedout') ||
+            errorMessage.includes('enotfound') ||
+            errorMessage.includes('econnrefused') ||
+            errorMessage.includes('timeout') ||
+            errorMessage.includes('esockettimedout') ||
+            errorMessage.includes('connection terminated') ||
+            errorMessage.includes('server has gone away') ||
+            errorMessage.includes('connection was killed') ||
+            errorMessage.includes('read econnreset') ||
+            errorMessage.includes('write econnreset') ||
+            errorMessage.includes('socket hang up') ||
+            errorMessage.includes('network error');
+
+        // Don't retry for authentication/authorization errors
+        const isAuthError =
+            errorMessage.includes('forbidden') ||
+            errorMessage.includes('unauthorized') ||
+            errorMessage.includes('access denied') ||
+            errorMessage.includes('permission');
+
+        return isConnectionError && !isAuthError;
     };
 
     /**
@@ -36,8 +52,8 @@ export class RetryService {
         options: RetryOptions = {},
     ): Promise<T> {
         const {
-            maxRetries = 3,
-            initialDelay = 1000,
+            maxRetries = 5,
+            initialDelay = 2000,
             exponentialBackoff = true,
             shouldRetry = this.defaultShouldRetry,
             onRetry,
@@ -52,7 +68,7 @@ export class RetryService {
             } catch (error) {
                 lastError = error as Error;
 
-                // Log the error
+                // Log the error with more context
                 this.logger.warn(
                     `Operation failed on attempt ${attempt}/${maxRetries}: ${lastError.message}`,
                 );
@@ -78,15 +94,18 @@ export class RetryService {
                     onRetry(attempt, lastError);
                 }
 
-                // Wait before retrying
+                // Log retry attempt with more context
                 this.logger.debug(
-                    `Waiting ${delay}ms before retry attempt ${attempt + 1}`,
+                    `Waiting ${delay}ms before retry attempt ${attempt + 1}. Error: ${lastError.name}`,
                 );
                 await new Promise(resolve => setTimeout(resolve, delay));
 
-                // Apply exponential backoff if enabled
+                // Apply exponential backoff with jitter to prevent thundering herd
                 if (exponentialBackoff) {
-                    delay *= 2;
+                    delay = Math.min(delay * 2, 30000); // Cap at 30 seconds
+                    // Add jitter (±20% randomness)
+                    const jitter = delay * 0.2 * (Math.random() - 0.5);
+                    delay = Math.round(delay + jitter);
                 }
             }
         }
@@ -96,12 +115,12 @@ export class RetryService {
     }
 
     /**
-     * Convenience method for database operations with common retry settings
+     * Convenience method for database operations with enhanced retry settings for connection issues
      */
     async executeDatabase<T>(operation: () => Promise<T>): Promise<T> {
         return this.execute(operation, {
-            maxRetries: 3,
-            initialDelay: 1000,
+            maxRetries: 5,
+            initialDelay: 3000,
             exponentialBackoff: true,
             shouldRetry: this.defaultShouldRetry,
         });

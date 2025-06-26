@@ -100,19 +100,50 @@ import { CommonModule } from './common/common.module';
                 synchronize: true,
                 logging: false,
                 autoLoadEntities: true,
-                // Connection pool configuration
+                // Enhanced connection pool configuration
                 extra: {
-                    connectionLimit: 20,
-                    idleTimeout: 30000,
+                    // Connection Pool Settings
+                    connectionLimit: 50, // Increased from 20
+                    acquireTimeout: 60000, // 60 seconds to acquire connection
+                    timeout: 60000, // 60 seconds query timeout
+                    idleTimeout: 300000, // 5 minutes idle timeout (increased from 30s)
+
+                    // Connection Management
+                    reconnect: true,
+                    maxReconnects: 10,
+
+                    // Character set
                     charset: 'utf8mb4',
+
+                    // SSL settings (uncomment if using SSL)
+                    // ssl: {
+                    //     rejectUnauthorized: false
+                    // },
+
+                    // Additional MySQL settings for stability
+                    supportBigNumbers: true,
+                    bigNumberStrings: true,
+                    dateStrings: false,
+                    debug: false,
+
+                    // Handle connection errors
+                    handleDisconnects: true,
                 },
-                // Retry configuration
-                retryAttempts: 3,
-                retryDelay: 3000,
-                // Connection timeout
-                connectTimeout: 30000,
-                // Keep alive
+                // Enhanced retry configuration
+                retryAttempts: 5, // Increased from 3
+                retryDelay: 5000, // Increased from 3000
+
+                // Connection timeout settings
+                connectTimeout: 60000, // Increased from 30000 (60 seconds)
+
+                // Keep connections alive
                 keepConnectionAlive: true,
+
+                // Additional TypeORM settings for stability
+                maxQueryExecutionTime: 30000, // 30 seconds max query time
+
+                // Pool settings
+                poolSize: 30, // Maximum pool size
             }),
             inject: [ConfigService],
         }),

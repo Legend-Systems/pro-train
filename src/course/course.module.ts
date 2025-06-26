@@ -9,6 +9,7 @@ import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
 import { UserModule } from '../user/user.module';
 import { AuthModule } from '../auth/auth.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
     imports: [
@@ -19,6 +20,7 @@ import { AuthModule } from '../auth/auth.module';
         }),
         UserModule,
         AuthModule,
+        CommonModule,
     ],
     controllers: [CourseController],
     providers: [CourseService],

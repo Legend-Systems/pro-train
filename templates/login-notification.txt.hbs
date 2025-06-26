@@ -1,8 +1,11 @@
-SECURITY ALERT: New Sign-In to Your {{companyName}} Account
+🔐 SECURITY ALERT: New Sign-In Detected
 
 Hello {{recipientName}},
 
-We detected a new sign-in to your {{companyName}} account. If this was you, you can safely ignore this email. If you don't recognize this activity, please secure your account immediately.
+We detected a new sign-in to your {{companyName}} account. If this was you, you can safely ignore this email. If you don't recognize this activity, please secure your account immediately by reviewing your security settings and changing your password.
+
+⚠️ ACCOUNT ACCESS ALERT
+A new sign-in was detected on your account. Please verify that this activity was authorized by you. If you did not sign in, take immediate action to secure your account.
 
 SIGN-IN DETAILS:
 ================
@@ -17,17 +20,28 @@ QUICK ACTIONS:
 - Go to Dashboard: {{dashboardUrl}}
 - Review Security Settings: {{securityUrl}}
 
-SECURITY TIPS:
-==============
-- Always log out from shared or public computers
-- Use strong, unique passwords for your account  
-- Enable two-factor authentication if available
-- Regularly review your account activity
+🛡️ SECURITY BEST PRACTICES:
+============================
+• Always log out from shared or public computers
+• Use strong, unique passwords for your account  
+• Enable two-factor authentication if available
+• Regularly review your account activity and sessions
+• Never share your login credentials with anyone
+• Keep your browser and devices updated
 
+DIDN'T RECOGNIZE THIS SIGN-IN?
+If you did not authorize this sign-in, please secure your account immediately by changing your password and reviewing your security settings. Contact our support team if you need assistance or have concerns about unauthorized access.
+
+ACCOUNT SECURITY:
+We take your security seriously and monitor all account activity. This notification is sent as a precaution to ensure your account remains protected. Thank you for helping us keep your account secure.
+
+---
 This sign-in notification was sent to {{recipientEmail}} for security purposes.
 
 If you have concerns about this activity, please contact our support team at {{supportEmail}}
 
-© {{companyName}}. All rights reserved.
+{{companyName}} Security Team
 
-To unsubscribe from notifications: {{unsubscribeUrl}} 
+This is an automated security notification. Please do not reply to this email.
+
+{{#if unsubscribeUrl}}To unsubscribe from notifications: {{unsubscribeUrl}}{{/if}} 

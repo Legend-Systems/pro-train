@@ -6,6 +6,7 @@ import { QuestionsOptionsController } from './questions_options.controller';
 import { QuestionOption } from './entities/questions_option.entity';
 import { Question } from '../questions/entities/question.entity';
 import { QuestionsModule } from '../questions/questions.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
     imports: [
@@ -15,6 +16,7 @@ import { QuestionsModule } from '../questions/questions.module';
             max: 1000, // Maximum number of items in cache
         }),
         forwardRef(() => QuestionsModule),
+        CommonModule,
     ],
     controllers: [QuestionsOptionsController],
     providers: [QuestionsOptionsService],

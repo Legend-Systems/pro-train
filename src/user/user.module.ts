@@ -5,6 +5,7 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { User } from './entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
+import { CommonModule } from '../common/common.module';
 
 @Module({
     imports: [
@@ -13,6 +14,7 @@ import { MediaFile } from '../media-manager/entities/media-manager.entity';
             ttl: 300, // 5 minutes default TTL
             max: 1000, // Maximum number of items in cache
         }),
+        CommonModule,
     ],
     controllers: [UserController],
     providers: [UserService],

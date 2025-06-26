@@ -333,3 +333,231 @@ export class PerformanceTrendReportDto {
     })
     passRate: number;
 }
+
+// New Enhanced Multi-Dimensional Trend DTOs
+export class EnhancedPerformanceTrendReportDto {
+    @ApiProperty({
+        description: 'Time period (date for daily, YYYY-MM for monthly)',
+        type: 'string',
+        example: '2025-01',
+    })
+    period: string;
+
+    @ApiProperty({
+        description: 'Aggregation type (daily, weekly, monthly)',
+        example: 'monthly',
+        enum: ['daily', 'weekly', 'monthly'],
+    })
+    aggregationType: string;
+
+    @ApiProperty({
+        description: 'Branch ID (if branch-specific)',
+        example: 'branch-uuid-123',
+        required: false,
+    })
+    branchId?: string;
+
+    @ApiProperty({
+        description: 'Branch name (if branch-specific)',
+        example: 'Downtown Branch',
+        required: false,
+    })
+    branchName?: string;
+
+    @ApiProperty({
+        description: 'User ID (if user-specific)',
+        example: 'user-uuid-456',
+        required: false,
+    })
+    userId?: string;
+
+    @ApiProperty({
+        description: 'Test ID (if test-specific)',
+        example: 123,
+        required: false,
+    })
+    testId?: number;
+
+    @ApiProperty({
+        description: 'Test title (if test-specific)',
+        example: 'JavaScript Fundamentals Quiz',
+        required: false,
+    })
+    testTitle?: string;
+
+    @ApiProperty({
+        description: 'Course ID (if course-specific)',
+        example: 456,
+        required: false,
+    })
+    courseId?: number;
+
+    @ApiProperty({
+        description: 'Course title (if course-specific)',
+        example: 'Web Development Bootcamp',
+        required: false,
+    })
+    courseTitle?: string;
+
+    @ApiProperty({
+        description: 'Average score for the period',
+        example: 78.5,
+    })
+    averageScore: number;
+
+    @ApiProperty({
+        description: 'Median score for the period',
+        example: 80.0,
+    })
+    medianScore: number;
+
+    @ApiProperty({
+        description: 'Total number of results for the period',
+        example: 145,
+    })
+    totalResults: number;
+
+    @ApiProperty({
+        description: 'Number of passed results for the period',
+        example: 112,
+    })
+    passedResults: number;
+
+    @ApiProperty({
+        description: 'Number of failed results for the period',
+        example: 33,
+    })
+    failedResults: number;
+
+    @ApiProperty({
+        description: 'Pass rate percentage for the period',
+        example: 77.2,
+    })
+    passRate: number;
+
+    @ApiProperty({
+        description: 'Average completion time in minutes',
+        example: 45.3,
+    })
+    averageCompletionTime: number;
+
+    @ApiProperty({
+        description: 'Total unique users who took tests in this period',
+        example: 89,
+    })
+    uniqueUsers: number;
+
+    @ApiProperty({
+        description: 'Total test attempts in this period',
+        example: 178,
+    })
+    totalAttempts: number;
+
+    @ApiProperty({
+        description: 'Score improvement from previous period',
+        example: 2.5,
+    })
+    scoreImprovement: number;
+
+    @ApiProperty({
+        description: 'Pass rate improvement from previous period',
+        example: 1.8,
+    })
+    passRateImprovement: number;
+}
+
+export class TrendFilterDto {
+    @ApiProperty({
+        description: 'Start date for trend analysis',
+        type: 'string',
+        format: 'date',
+        example: '2024-01-01',
+        required: false,
+    })
+    startDate?: string;
+
+    @ApiProperty({
+        description: 'End date for trend analysis',
+        type: 'string',
+        format: 'date',
+        example: '2025-01-31',
+        required: false,
+    })
+    endDate?: string;
+
+    @ApiProperty({
+        description: 'Aggregation type',
+        example: 'monthly',
+        enum: ['daily', 'weekly', 'monthly'],
+        required: false,
+    })
+    groupBy?: 'daily' | 'weekly' | 'monthly';
+
+    @ApiProperty({
+        description: 'Branch ID for branch-specific trends',
+        example: 'branch-uuid-123',
+        required: false,
+    })
+    branchId?: string;
+
+    @ApiProperty({
+        description: 'User ID for user-specific trends',
+        example: 'user-uuid-456',
+        required: false,
+    })
+    userId?: string;
+
+    @ApiProperty({
+        description: 'Test ID for test-specific trends',
+        example: 123,
+        required: false,
+    })
+    testId?: number;
+
+    @ApiProperty({
+        description: 'Course ID for course-specific trends',
+        example: 456,
+        required: false,
+    })
+    courseId?: number;
+
+    @ApiProperty({
+        description: 'Include improvement calculations',
+        example: true,
+        required: false,
+    })
+    includeImprovement?: boolean;
+
+    @ApiProperty({
+        description: 'Include completion time metrics',
+        example: true,
+        required: false,
+    })
+    includeTimingMetrics?: boolean;
+}
+
+export class BranchPerformanceComparisonDto {
+    @ApiProperty({
+        description: 'Branch performance trends comparison',
+        type: [EnhancedPerformanceTrendReportDto],
+    })
+    branchTrends: EnhancedPerformanceTrendReportDto[];
+
+    @ApiProperty({
+        description: 'Best performing branch',
+        example: 'Downtown Branch',
+    })
+    topBranch: string;
+
+    @ApiProperty({
+        description: 'Branch rankings by average score',
+        type: 'object',
+        additionalProperties: { type: 'number' },
+        example: {
+            'Downtown Branch': 1,
+            'Uptown Branch': 2,
+            'Suburban Branch': 3,
+        },
+    })
+    branchRankings: { [branchName: string]: number };
+}

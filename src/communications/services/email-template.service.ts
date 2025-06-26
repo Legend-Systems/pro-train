@@ -234,6 +234,24 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'email-verification',
+                    type: EmailType.EMAIL_VERIFICATION,
+                    htmlFile: 'email-verification.hbs',
+                    textFile: 'email-verification.txt.hbs',
+                    metadata: {
+                        name: 'Email Verification',
+                        type: EmailType.EMAIL_VERIFICATION,
+                        version: '1.0.0',
+                        description: 'Email address verification for new accounts',
+                        requiredData: [
+                            'recipientName',
+                            'verificationUrl',
+                            'expiryTime',
+                        ],
+                        optionalData: ['verificationToken'],
+                    },
+                },
+                {
                     name: 'login-notification',
                     type: EmailType.LOGIN_NOTIFICATION,
                     htmlFile: 'login-notification.hbs',
@@ -582,6 +600,7 @@ export class EmailTemplateService {
                 'Welcome {{firstName}}! Your {{companyName}} Account is Ready',
             'password-reset': 'Password Reset Request',
             'password-changed': 'Password Changed Successfully',
+            'email-verification': 'Verify Your {{companyName}} Account',
             'login-notification': 'Security Alert: New Sign-In to Your {{companyName}} Account',
             'test-notification': 'New Test Available: {{testTitle}}',
             'results-summary': 'Test Results: {{testTitle}}',

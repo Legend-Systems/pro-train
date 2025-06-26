@@ -43,6 +43,9 @@ import {
     ResultsAnalyticsReportDto,
     GlobalResultsStatsReportDto,
     PerformanceTrendReportDto,
+    EnhancedPerformanceTrendReportDto,
+    TrendFilterDto,
+    BranchPerformanceComparisonDto,
 } from './dto/results-analytics.dto';
 import {
     LeaderboardAnalyticsReportDto,
@@ -1811,6 +1814,285 @@ export class ReportsController {
             };
         } catch (error) {
             this.logger.error('Error retrieving performance trends:', error);
+            throw error;
+        }
+    }
+
+    @Get('results/enhanced-performance-trends')
+    @ApiOperation({
+        summary: '🚀 Enhanced Multi-Dimensional Performance Trends',
+        description: `
+        **Advanced performance trends with comprehensive filtering and analytics**
+        
+        This enhanced endpoint provides multi-dimensional performance analysis with:
+        - **Branch-level filtering** for organizational insights
+        - **Monthly/weekly/daily aggregation** for flexible time analysis
+        - **User, test, and course specific trends** for targeted insights
+        - **Period-over-period improvements** for growth tracking
+        - **Completion time metrics** for efficiency analysis
+        - **Flexible date ranges** with intelligent defaults
+        
+        **Key Features:**
+        - Branch performance comparison and ranking
+        - Score improvement calculations between periods
+        - Engagement metrics (unique users, total attempts)
+        - Median score calculations for robust statistics
+        - Comprehensive caching for performance optimization
+        
+        **Use Cases:**
+        - Branch manager dashboards for performance monitoring
+        - Student progress tracking with monthly/weekly views
+        - Test effectiveness analysis over time
+        - Course performance evaluation with trend analysis
+        - Organizational KPI reporting and analytics
+        `,
+        operationId: 'getEnhancedPerformanceTrends',
+    })
+    @ApiQuery({
+        name: 'branchId',
+        type: String,
+        description: 'Filter trends for a specific branch',
+        required: false,
+        example: 'branch-uuid-123',
+    })
+    @ApiQuery({
+        name: 'userId',
+        type: String,
+        description: 'Filter trends for a specific user',
+        required: false,
+        example: 'user-uuid-456',
+    })
+    @ApiQuery({
+        name: 'testId',
+        type: Number,
+        description: 'Filter trends for a specific test',
+        required: false,
+        example: 123,
+    })
+    @ApiQuery({
+        name: 'courseId',
+        type: Number,
+        description: 'Filter trends for a specific course',
+        required: false,
+        example: 456,
+    })
+    @ApiQuery({
+        name: 'groupBy',
+        enum: ['daily', 'weekly', 'monthly'],
+        description: 'Time aggregation level',
+        required: false,
+        example: 'monthly',
+    })
+    @ApiQuery({
+        name: 'startDate',
+        type: String,
+        description: 'Start date for analysis (YYYY-MM-DD)',
+        required: false,
+        example: '2024-01-01',
+    })
+    @ApiQuery({
+        name: 'endDate',
+        type: String,
+        description: 'End date for analysis (YYYY-MM-DD)',
+        required: false,
+        example: '2025-01-31',
+    })
+    @ApiQuery({
+        name: 'includeImprovement',
+        type: Boolean,
+        description: 'Include period-over-period improvement calculations',
+        required: false,
+        example: true,
+    })
+    @ApiQuery({
+        name: 'includeTimingMetrics',
+        type: Boolean,
+        description: 'Include completion time metrics',
+        required: false,
+        example: true,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Enhanced performance trends retrieved successfully',
+        type: [EnhancedPerformanceTrendReportDto],
+    })
+    async getEnhancedPerformanceTrends(
+        @Query('branchId') branchId?: string,
+        @Query('userId') userId?: string,
+        @Query('testId') testId?: number,
+        @Query('courseId') courseId?: number,
+        @Query('groupBy') groupBy?: 'daily' | 'weekly' | 'monthly',
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('includeImprovement') includeImprovement?: boolean,
+        @Query('includeTimingMetrics') includeTimingMetrics?: boolean,
+    ): Promise<StandardApiResponse<EnhancedPerformanceTrendReportDto[]>> {
+        try {
+            this.logger.log(
+                'Retrieving enhanced performance trends with filters:',
+                {
+                    branchId,
+                    userId,
+                    testId,
+                    courseId,
+                    groupBy,
+                    startDate,
+                    endDate,
+                    includeImprovement,
+                    includeTimingMetrics,
+                },
+            );
+
+            const filters: TrendFilterDto = {
+                branchId,
+                userId,
+                testId,
+                courseId,
+                groupBy,
+                startDate,
+                endDate,
+                includeImprovement,
+                includeTimingMetrics,
+            };
+
+            const trends =
+                await this.resultsReportsService.getEnhancedPerformanceTrends(
+                    filters,
+                );
+
+            this.logger.log(
+                `Enhanced performance trends retrieved: ${trends.length} data points`,
+            );
+
+            return {
+                success: true,
+                message: 'Enhanced performance trends retrieved successfully',
+                data: trends,
+            };
+        } catch (error) {
+            this.logger.error(
+                'Error retrieving enhanced performance trends:',
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('results/branch-performance-comparison')
+    @ApiOperation({
+        summary: '🏢 Branch Performance Comparison Dashboard',
+        description: `
+        **Comprehensive branch-to-branch performance comparison and ranking**
+        
+        This endpoint provides organizational insights through:
+        - **Cross-branch performance analysis** with ranking system
+        - **Comparative trend visualization** for all active branches
+        - **Top performer identification** for best practice sharing
+        - **Performance gap analysis** for improvement opportunities
+        - **Aggregated metrics** across all organizational branches
+        
+        **Key Analytics:**
+        - Branch ranking by average performance scores
+        - Trend comparison across multiple branches
+        - Performance distribution analysis
+        - Growth rate comparisons between branches
+        - Engagement metrics by branch location
+        
+        **Management Applications:**
+        - Regional performance monitoring
+        - Resource allocation optimization
+        - Best practice identification and sharing
+        - Performance improvement targeting
+        - Organizational benchmarking and KPIs
+        `,
+        operationId: 'getBranchPerformanceComparison',
+    })
+    @ApiQuery({
+        name: 'groupBy',
+        enum: ['daily', 'weekly', 'monthly'],
+        description: 'Time aggregation level for comparison',
+        required: false,
+        example: 'monthly',
+    })
+    @ApiQuery({
+        name: 'startDate',
+        type: String,
+        description: 'Start date for comparison analysis (YYYY-MM-DD)',
+        required: false,
+        example: '2024-01-01',
+    })
+    @ApiQuery({
+        name: 'endDate',
+        type: String,
+        description: 'End date for comparison analysis (YYYY-MM-DD)',
+        required: false,
+        example: '2025-01-31',
+    })
+    @ApiQuery({
+        name: 'includeImprovement',
+        type: Boolean,
+        description: 'Include improvement calculations for branches',
+        required: false,
+        example: true,
+    })
+    @ApiQuery({
+        name: 'includeTimingMetrics',
+        type: Boolean,
+        description: 'Include completion time metrics for branches',
+        required: false,
+        example: true,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Branch performance comparison retrieved successfully',
+        type: BranchPerformanceComparisonDto,
+    })
+    async getBranchPerformanceComparison(
+        @Query('groupBy') groupBy?: 'daily' | 'weekly' | 'monthly',
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('includeImprovement') includeImprovement?: boolean,
+        @Query('includeTimingMetrics') includeTimingMetrics?: boolean,
+    ): Promise<StandardApiResponse<BranchPerformanceComparisonDto>> {
+        try {
+            this.logger.log(
+                'Retrieving branch performance comparison with filters:',
+                {
+                    groupBy,
+                    startDate,
+                    endDate,
+                    includeImprovement,
+                    includeTimingMetrics,
+                },
+            );
+
+            const filters: Omit<TrendFilterDto, 'branchId'> = {
+                groupBy,
+                startDate,
+                endDate,
+                includeImprovement,
+                includeTimingMetrics,
+            };
+
+            const comparison =
+                await this.resultsReportsService.getBranchPerformanceComparison(
+                    filters,
+                );
+
+            this.logger.log(
+                `Branch performance comparison retrieved: ${comparison.branchTrends.length} data points across branches`,
+            );
+
+            return {
+                success: true,
+                message: 'Branch performance comparison retrieved successfully',
+                data: comparison,
+            };
+        } catch (error) {
+            this.logger.error(
+                'Error retrieving branch performance comparison:',
+                error,
+            );
             throw error;
         }
     }

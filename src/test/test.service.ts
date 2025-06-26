@@ -948,13 +948,27 @@ export class TestService {
             });
 
             if (!course) {
+                this.logger.warn(
+                    `Course validation failed - Course ${courseId} not found for user ${userId}`,
+                );
                 throw new NotFoundException(
                     `Course with ID ${courseId} not found`,
                 );
             }
 
+            this.logger.debug(
+                `Validating course access: courseId=${courseId}, userId=${userId}, ` +
+                `courseCreatedBy=${course.createdBy}, courseOrgId=${course.orgId?.id}, ` +
+                `courseBranchId=${course.branchId?.id}, userOrgId=${scope?.orgId}, ` +
+                `userBranchId=${scope?.branchId}, userRole=${scope?.userRole}, ` +
+                `isWriteOperation=${isWriteOperation}`,
+            );
+
             // If user is the creator, they always have access
             if (course.createdBy === userId) {
+                this.logger.debug(
+                    `Access granted - User ${userId} is creator of course ${courseId}`,
+                );
                 return;
             }
 
@@ -973,14 +987,33 @@ export class TestService {
 
                         // Brandon users can edit across organizations
                         if (scope.userRole === 'brandon') {
+                            this.logger.debug(
+                                `Write access granted - User ${userId} has brandon role`,
+                            );
                             return;
                         }
 
                         // Admin and owner users can edit within their organization
                         if (courseOrgId === scope.orgId) {
+                            this.logger.debug(
+                                `Write access granted - User ${userId} has ${scope.userRole} role in same organization ${scope.orgId}`,
+                            );
                             return;
                         }
+
+                        this.logger.warn(
+                            `Write access denied - User ${userId} with role ${scope.userRole} ` +
+                            `in org ${scope.orgId} attempted to modify course ${courseId} in org ${courseOrgId}`,
+                        );
+                    } else {
+                        this.logger.warn(
+                            `Write access denied - User ${userId} has insufficient role ${scope.userRole}`,
+                        );
                     }
+                } else {
+                    this.logger.warn(
+                        `Write access denied - User ${userId} missing role or organization scope`,
+                    );
                 }
 
                 throw new ForbiddenException(
@@ -992,6 +1025,10 @@ export class TestService {
             if (scope?.orgId || scope?.branchId) {
                 // Validate organization access if orgId provided
                 if (scope.orgId && course.orgId?.id !== scope.orgId) {
+                    this.logger.warn(
+                        `Read access denied - User ${userId} in org ${scope.orgId} ` +
+                        `attempted to access course ${courseId} in org ${course.orgId?.id}`,
+                    );
                     throw new ForbiddenException(
                         'Access denied: Course belongs to different organization',
                     );
@@ -999,16 +1036,27 @@ export class TestService {
 
                 // Validate branch access if branchId provided
                 if (scope.branchId && course.branchId?.id !== scope.branchId) {
+                    this.logger.warn(
+                        `Read access denied - User ${userId} in branch ${scope.branchId} ` +
+                        `attempted to access course ${courseId} in branch ${course.branchId?.id}`,
+                    );
                     throw new ForbiddenException(
                         'Access denied: Course belongs to different branch',
                     );
                 }
 
                 // If we reach here, user has proper org/branch access
+                this.logger.debug(
+                    `Read access granted - User ${userId} has proper org/branch scope for course ${courseId}`,
+                );
                 return;
             }
 
             // If no scope provided or doesn't match, deny access
+            this.logger.warn(
+                `Access denied - User ${userId} has no valid scope to access course ${courseId}. ` +
+                `User scope: orgId=${scope?.orgId}, branchId=${scope?.branchId}`,
+            );
             throw new ForbiddenException(
                 'You do not have permission to access this course',
             );

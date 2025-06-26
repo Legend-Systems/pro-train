@@ -9,6 +9,7 @@ import { TestModule } from '../test/test.module';
 import { AnswersModule } from '../answers/answers.module';
 import { QuestionsOptionsModule } from '../questions_options/questions_options.module';
 import { MediaManagerModule } from '../media-manager/media-manager.module';
+import { CommonModule } from '../common/common.module';
 
 @Module({
     imports: [
@@ -21,6 +22,7 @@ import { MediaManagerModule } from '../media-manager/media-manager.module';
         AnswersModule,
         forwardRef(() => QuestionsOptionsModule),
         MediaManagerModule,
+        CommonModule,
     ],
     controllers: [QuestionsController],
     providers: [QuestionsService],
