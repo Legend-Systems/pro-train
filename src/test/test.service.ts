@@ -300,8 +300,13 @@ export class TestService {
 
             const query = this.testRepository.createQueryBuilder('test');
             query.leftJoinAndSelect('test.course', 'course');
+            query.leftJoinAndSelect('course.creator', 'courseCreator');
+            query.leftJoinAndSelect('course.orgId', 'courseOrg');
+            query.leftJoinAndSelect('course.branchId', 'courseBranch');
             query.leftJoinAndSelect('test.orgId', 'org');
             query.leftJoinAndSelect('test.branchId', 'branch');
+            query.leftJoinAndSelect('test.questions', 'questions');
+            query.leftJoinAndSelect('questions.options', 'questionOptions');
 
             // Apply org/branch scoping
             if (scope.orgId) {
@@ -416,12 +421,34 @@ export class TestService {
                                   courseId: test.course.courseId,
                                   title: test.course.title,
                                   description: test.course.description,
+                                  creator: test.course.creator ? {
+                                      id: test.course.creator.id,
+                                      firstName: test.course.creator.firstName,
+                                      lastName: test.course.creator.lastName,
+                                      email: test.course.creator.email,
+                                  } : undefined,
+                                  orgId: test.course.orgId?.id,
+                                  branchId: test.course.branchId?.id,
                               }
                             : undefined,
                         questionCount,
                         attemptCount,
                         userAttemptData,
                         statistics,
+                        questions: test.questions?.map(q => ({
+                            questionId: q.questionId,
+                            questionText: q.questionText,
+                            questionType: q.questionType,
+                            points: q.points,
+                            orderIndex: q.orderIndex,
+                            difficulty: q.difficulty,
+                            options: q.options?.map(option => ({
+                                optionId: option.optionId,
+                                optionText: option.optionText,
+                                isCorrect: option.isCorrect,
+                                orderIndex: option.orderIndex,
+                            })) || [],
+                        })) || [],
                     };
                 }),
             );
@@ -593,10 +620,18 @@ export class TestService {
                 where: { testId: id },
                 relations: [
                     'course',
+                    'course.creator',
                     'course.orgId',
                     'course.branchId',
                     'orgId',
                     'branchId',
+                    'questions',
+                    'questions.options',
+                    'questions.mediaFile',
+                    'testAttempts',
+                    'testAttempts.user',
+                    'results',
+                    'results.user',
                 ],
             });
 
@@ -617,12 +652,14 @@ export class TestService {
             // Calculate comprehensive statistics
             const statistics = await this.calculateTestStatistics(id);
 
-            // Get questions for this test
-            const questions = await this.questionRepository.find({
-                where: { testId: id },
-                relations: ['options'],
-                order: { createdAt: 'ASC' },
-            });
+            // Get questions with proper ordering if not already loaded
+            const questions = test.questions?.length 
+                ? test.questions.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+                : await this.questionRepository.find({
+                    where: { testId: id },
+                    relations: ['options', 'mediaFile'],
+                    order: { orderIndex: 'ASC', createdAt: 'ASC' },
+                });
 
             return {
                 ...test,
@@ -631,6 +668,12 @@ export class TestService {
                           courseId: test.course.courseId,
                           title: test.course.title,
                           description: test.course.description,
+                          creator: test.course.creator ? {
+                              id: test.course.creator.id,
+                              firstName: test.course.creator.firstName,
+                              lastName: test.course.creator.lastName,
+                              email: test.course.creator.email,
+                          } : undefined,
                           organization: test.course.orgId,
                           branch: test.course.branchId,
                       }
@@ -648,6 +691,14 @@ export class TestService {
                     hint: q.hint,
                     difficulty: q.difficulty,
                     tags: q.tags,
+                    mediaFile: q.mediaFile ? {
+                        id: q.mediaFile.id,
+                        originalName: q.mediaFile.originalName,
+                        url: q.mediaFile.url,
+                        type: q.mediaFile.type,
+                        mimeType: q.mediaFile.mimeType,
+                        size: q.mediaFile.size,
+                    } : undefined,
                     options:
                         q.options?.map(option => ({
                             optionId: option.optionId,
@@ -656,6 +707,37 @@ export class TestService {
                             orderIndex: option.orderIndex,
                         })) || [],
                 })),
+                testAttempts: test.testAttempts?.map(attempt => ({
+                    attemptId: attempt.attemptId,
+                    userId: attempt.userId,
+                    attemptNumber: attempt.attemptNumber,
+                    status: attempt.status,
+                    startTime: attempt.startTime,
+                    submitTime: attempt.submitTime,
+                    progressPercentage: attempt.progressPercentage,
+                    user: attempt.user ? {
+                        id: attempt.user.id,
+                        firstName: attempt.user.firstName,
+                        lastName: attempt.user.lastName,
+                        email: attempt.user.email,
+                    } : undefined,
+                })) || [],
+                results: test.results?.map(result => ({
+                    resultId: result.resultId,
+                    attemptId: result.attemptId,
+                    userId: result.userId,
+                    score: result.score,
+                    percentage: result.percentage,
+                    passed: result.passed,
+                    maxScore: result.maxScore,
+                    calculatedAt: result.calculatedAt,
+                    user: result.user ? {
+                        id: result.user.id,
+                        firstName: result.user.firstName,
+                        lastName: result.user.lastName,
+                        email: result.user.email,
+                    } : undefined,
+                })) || [],
             };
         });
     }

@@ -33,6 +33,7 @@ export class LeaderboardService {
             const [leaderboardEntries, total] = await this.leaderboardRepository
                 .createQueryBuilder('leaderboard')
                 .leftJoinAndSelect('leaderboard.user', 'user')
+                .leftJoinAndSelect('user.avatar', 'avatar')
                 .leftJoinAndSelect('leaderboard.course', 'course')
                 .leftJoinAndSelect('course.orgId', 'courseOrg')
                 .leftJoinAndSelect('course.branchId', 'courseBranch')
@@ -47,7 +48,7 @@ export class LeaderboardService {
 
             // Enhance each entry with comprehensive data
             const enhancedLeaderboard = await Promise.all(
-                leaderboardEntries.map(async (entry) => {
+                leaderboardEntries.map(async entry => {
                     const enhancedEntry = await this.enhanceLeaderboardEntry(
                         entry,
                         classStats,
@@ -56,7 +57,7 @@ export class LeaderboardService {
                 }),
             );
 
-            const responseLeaderboard = enhancedLeaderboard.map((entry) =>
+            const responseLeaderboard = enhancedLeaderboard.map(entry =>
                 plainToClass(LeaderboardResponseDto, entry, {
                     excludeExtraneousValues: true,
                 }),
@@ -83,6 +84,7 @@ export class LeaderboardService {
             const leaderboardEntry = await this.leaderboardRepository
                 .createQueryBuilder('leaderboard')
                 .leftJoinAndSelect('leaderboard.user', 'user')
+                .leftJoinAndSelect('user.avatar', 'avatar')
                 .leftJoinAndSelect('leaderboard.course', 'course')
                 .leftJoinAndSelect('course.orgId', 'courseOrg')
                 .leftJoinAndSelect('course.branchId', 'courseBranch')
@@ -137,11 +139,14 @@ export class LeaderboardService {
             };
         }
 
-        const scores = entries.map((entry) => Number(entry.averageScore));
-        const totalTests = Math.max(...entries.map((entry) => entry.testsCompleted));
+        const scores = entries.map(entry => Number(entry.averageScore));
+        const totalTests = Math.max(
+            ...entries.map(entry => entry.testsCompleted),
+        );
 
         return {
-            classAverageScore: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+            classAverageScore:
+                scores.reduce((sum, score) => sum + score, 0) / scores.length,
             totalStudents: entries.length,
             totalTests,
             highestScore: Math.max(...scores),
@@ -170,7 +175,10 @@ export class LeaderboardService {
         },
     ): Promise<any> {
         // Get user's previous rank for rank change calculation
-        const previousRank = await this.getPreviousRank(entry.userId, entry.courseId);
+        const previousRank = await this.getPreviousRank(
+            entry.userId,
+            entry.courseId,
+        );
 
         // Calculate performance analytics
         const performanceAnalytics = await this.calculatePerformanceAnalytics(
@@ -186,23 +194,46 @@ export class LeaderboardService {
         const courseStats = await this.getCourseStatistics(entry.courseId);
 
         // Calculate estimated days to next rank
-        const estimatedDaysToNextRank = await this.calculateDaysToNextRank(entry);
+        const estimatedDaysToNextRank =
+            await this.calculateDaysToNextRank(entry);
 
         // Determine competition status
         const competitionStatus = this.determineCompetitionStatus(entry);
 
         return {
             ...entry,
-            // Enhanced user info (already in base entity relations)
+            // Use correct property name for leaderboard ID
+            leaderboardId: entry.leaderboardId,
+            // Enhanced user info with proper property mapping
             user: {
-                ...entry.user,
-                achievementLevel: this.getAchievementLevel(Number(entry.averageScore)),
+                id: entry.user?.id || '',
+                username: entry.user?.email?.split('@')[0] || 'unknown_user', // Generate username from email
+                firstName: entry.user?.firstName || '',
+                lastName: entry.user?.lastName || '',
+                email: entry.user?.email || '',
+                role: entry.user?.role || 'user',
+                status: entry.user?.status || 'active',
+                profilePicture: entry.user?.avatar?.url || null, // Map avatar to profilePicture
+                phoneNumber: null, // User entity doesn't have phoneNumber
+                createdAt: entry.user?.createdAt || new Date(),
+                achievementLevel: this.getAchievementLevel(
+                    Number(entry.averageScore),
+                ),
             },
-            // Enhanced course info
+            // Enhanced course info with proper property mapping
             course: {
-                ...entry.course,
+                courseId: entry.course?.courseId || 0,
+                title: entry.course?.title || 'Unknown Course',
+                description: entry.course?.description || '',
+                courseCode: `COURSE-${entry.course?.courseId || 0}`, // Generate courseCode from courseId
+                category: 'General', // Course entity doesn't have category
+                durationHours: 0, // Course entity doesn't have durationHours
+                difficultyLevel: 'beginner', // Course entity doesn't have difficultyLevel
+                status: entry.course?.status || 'active',
+                thumbnailUrl: null, // Course entity doesn't have thumbnailUrl
                 enrolledStudents: classStats.totalStudents,
                 totalTests: classStats.totalTests,
+                createdAt: entry.course?.createdAt || new Date(),
             },
             // Performance analytics
             performanceAnalytics: {
@@ -214,7 +245,8 @@ export class LeaderboardService {
             achievements,
             // Additional calculated fields
             letterGrade: this.calculateLetterGrade(Number(entry.averageScore)),
-            aboveAverage: Number(entry.averageScore) > classStats.classAverageScore,
+            aboveAverage:
+                Number(entry.averageScore) > classStats.classAverageScore,
             estimatedDaysToNextRank,
             competitionStatus,
             // Pass through data for transforms
@@ -223,15 +255,18 @@ export class LeaderboardService {
         };
     }
 
-    private async getPreviousRank(userId: string, courseId: number): Promise<number | null> {
+    private async getPreviousRank(
+        userId: string,
+        courseId: number,
+    ): Promise<number | null> {
         // This would typically come from a rank history table
         // For now, we'll simulate by adding some variance
         const currentEntry = await this.leaderboardRepository.findOne({
             where: { userId, courseId },
         });
-        
+
         if (!currentEntry) return null;
-        
+
         // Simulate previous rank (in a real implementation, store rank history)
         const variance = Math.floor(Math.random() * 5) - 2; // -2 to +2
         return Math.max(1, currentEntry.rank + variance);
@@ -243,21 +278,27 @@ export class LeaderboardService {
         previousRank: number | null,
     ): Promise<any> {
         const rankChange = previousRank ? previousRank - entry.rank : 0;
-        
+
         // Calculate percentile rank
         const percentileRank = Math.round(
-            ((classStats.totalStudents - entry.rank + 1) / classStats.totalStudents) * 100,
+            ((classStats.totalStudents - entry.rank + 1) /
+                classStats.totalStudents) *
+                100,
         );
 
         // Calculate consistency rating (1-5)
-        const consistencyRating = await this.calculateConsistencyRating(entry.userId, entry.courseId);
+        const consistencyRating = await this.calculateConsistencyRating(
+            entry.userId,
+            entry.courseId,
+        );
 
         // Determine trend
         const trend = this.determineTrend(rankChange, entry);
 
         // Calculate days since last activity
         const daysSinceLastActivity = Math.floor(
-            (new Date().getTime() - new Date(entry.lastUpdated).getTime()) / (1000 * 60 * 60 * 24),
+            (new Date().getTime() - new Date(entry.lastUpdated).getTime()) /
+                (1000 * 60 * 60 * 24),
         );
 
         // Calculate points to next rank
@@ -274,7 +315,10 @@ export class LeaderboardService {
         };
     }
 
-    private async calculateConsistencyRating(userId: string, courseId: number): Promise<number> {
+    private async calculateConsistencyRating(
+        userId: string,
+        courseId: number,
+    ): Promise<number> {
         // Get user's test results for variance calculation
         const results = await this.resultRepository.find({
             where: { userId, courseId },
@@ -284,9 +328,12 @@ export class LeaderboardService {
 
         if (results.length < 2) return 3; // Default rating
 
-        const scores = results.map((result) => Number(result.percentage));
-        const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-        const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
+        const scores = results.map(result => Number(result.percentage));
+        const mean =
+            scores.reduce((sum, score) => sum + score, 0) / scores.length;
+        const variance =
+            scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) /
+            scores.length;
         const standardDeviation = Math.sqrt(variance);
 
         // Convert to 1-5 scale (lower deviation = higher consistency)
@@ -300,7 +347,7 @@ export class LeaderboardService {
     private determineTrend(rankChange: number, entry: Leaderboard): string {
         if (rankChange > 0) return 'improving';
         if (rankChange < 0) return 'declining';
-        
+
         // If no rank change, check recent performance
         const recentScore = Number(entry.averageScore);
         if (recentScore >= 85) return 'stable';
@@ -308,7 +355,9 @@ export class LeaderboardService {
         return 'stable';
     }
 
-    private async calculatePointsToNextRank(entry: Leaderboard): Promise<number | undefined> {
+    private async calculatePointsToNextRank(
+        entry: Leaderboard,
+    ): Promise<number | undefined> {
         if (entry.rank === 1) return undefined; // Already first place
 
         const nextRankEntry = await this.leaderboardRepository.findOne({
@@ -317,7 +366,10 @@ export class LeaderboardService {
 
         if (!nextRankEntry) return undefined;
 
-        return Math.max(0, Number(nextRankEntry.totalPoints) - Number(entry.totalPoints) + 1);
+        return Math.max(
+            0,
+            Number(nextRankEntry.totalPoints) - Number(entry.totalPoints) + 1,
+        );
     }
 
     private calculateAchievements(entry: Leaderboard, classStats: any): any {
@@ -338,9 +390,12 @@ export class LeaderboardService {
 
         // Recognitions
         if (rank === 1) recognitions.push('First Place');
-        if (rank <= Math.ceil(classStats.totalStudents * 0.1)) recognitions.push('Top 10%');
-        if (rank <= Math.ceil(classStats.totalStudents * 0.25)) recognitions.push('Top 25%');
-        if (score > classStats.classAverageScore + 10) recognitions.push('Above Average');
+        if (rank <= Math.ceil(classStats.totalStudents * 0.1))
+            recognitions.push('Top 10%');
+        if (rank <= Math.ceil(classStats.totalStudents * 0.25))
+            recognitions.push('Top 25%');
+        if (score > classStats.classAverageScore + 10)
+            recognitions.push('Above Average');
 
         // Milestones
         if (testsCompleted >= 1) milestones.push('First Test Completed');
@@ -366,21 +421,24 @@ export class LeaderboardService {
         };
     }
 
-    private async calculateDaysToNextRank(entry: Leaderboard): Promise<number | undefined> {
+    private async calculateDaysToNextRank(
+        entry: Leaderboard,
+    ): Promise<number | undefined> {
         if (entry.rank === 1) return undefined;
 
         // Simple estimation based on current progress
         // In a real implementation, use historical data and trends
         const baseEstimate = 7; // Base 7 days
         const rankDifference = entry.rank - 1;
-        const scoreGap = await this.calculatePointsToNextRank(entry) || 0;
+        const scoreGap = (await this.calculatePointsToNextRank(entry)) || 0;
 
-        return Math.ceil(baseEstimate + (rankDifference * 0.5) + (scoreGap * 0.1));
+        return Math.ceil(baseEstimate + rankDifference * 0.5 + scoreGap * 0.1);
     }
 
     private determineCompetitionStatus(entry: Leaderboard): string {
         const daysSinceUpdate = Math.floor(
-            (new Date().getTime() - new Date(entry.lastUpdated).getTime()) / (1000 * 60 * 60 * 24),
+            (new Date().getTime() - new Date(entry.lastUpdated).getTime()) /
+                (1000 * 60 * 60 * 24),
         );
 
         if (daysSinceUpdate <= 7) return 'active';
@@ -549,14 +607,14 @@ export class LeaderboardService {
             } else {
                 await this.leaderboardRepository.save(
                     this.leaderboardRepository.create({
-                    courseId,
-                    userId,
+                        courseId,
+                        userId,
                         rank: 1, // Temporary rank, will be recalculated
-                    averageScore: Math.round(averageScore * 100) / 100,
-                    testsCompleted,
-                    totalPoints: Math.round(totalPoints * 100) / 100,
-                    orgId: orgEntity,
-                    branchId: branchEntity,
+                        averageScore: Math.round(averageScore * 100) / 100,
+                        testsCompleted,
+                        totalPoints: Math.round(totalPoints * 100) / 100,
+                        orgId: orgEntity,
+                        branchId: branchEntity,
                     }),
                 );
             }
@@ -596,6 +654,7 @@ export class LeaderboardService {
             const userEntries = await this.leaderboardRepository
                 .createQueryBuilder('leaderboard')
                 .leftJoinAndSelect('leaderboard.user', 'user')
+                .leftJoinAndSelect('user.avatar', 'avatar')
                 .leftJoinAndSelect('leaderboard.course', 'course')
                 .where('leaderboard.userId = :userId', { userId })
                 .orderBy('leaderboard.lastUpdated', 'DESC')
@@ -620,24 +679,35 @@ export class LeaderboardService {
                 (sum, entry) => sum + entry.testsCompleted,
                 0,
             );
-            const averageScore = userEntries.reduce(
-                (sum, entry) => sum + Number(entry.averageScore),
-                0,
-            ) / userEntries.length;
+            const averageScore =
+                userEntries.reduce(
+                    (sum, entry) => sum + Number(entry.averageScore),
+                    0,
+                ) / userEntries.length;
             const bestRank = Math.min(...userEntries.map(entry => entry.rank));
 
             // Get recent activity (last 5 courses)
             const recentEntries = userEntries.slice(0, 5);
-            const classStats = { classAverageScore: 75, totalStudents: 25, totalTests: 8, highestScore: 100, lowestScore: 50, medianScore: 75 }; // Default stats
+            const classStats = {
+                classAverageScore: 75,
+                totalStudents: 25,
+                totalTests: 8,
+                highestScore: 100,
+                lowestScore: 50,
+                medianScore: 75,
+            }; // Default stats
 
             const recentActivity = await Promise.all(
-                recentEntries.map(async (entry) => {
-                    const enhanced = await this.enhanceLeaderboardEntry(entry, classStats);
+                recentEntries.map(async entry => {
+                    const enhanced = await this.enhanceLeaderboardEntry(
+                        entry,
+                        classStats,
+                    );
                     return plainToClass(LeaderboardResponseDto, enhanced, {
                         excludeExtraneousValues: true,
                     });
-                    }),
-                );
+                }),
+            );
 
             return {
                 totalPoints: Math.round(totalPoints * 100) / 100,

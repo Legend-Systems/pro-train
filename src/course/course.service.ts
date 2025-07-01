@@ -475,7 +475,16 @@ export class CourseService {
                 'courseMaterials.creator',
                 'materialCreator',
             );
-            // Note: Tests will be loaded separately to avoid complex joins
+            // Enhanced relations for comprehensive course details
+            query.leftJoinAndSelect('courseMaterials.updater', 'materialUpdater');
+            query.leftJoinAndSelect('course.tests', 'tests');
+            query.leftJoinAndSelect('tests.questions', 'testQuestions');
+            query.leftJoinAndSelect('course.results', 'results');
+            query.leftJoinAndSelect('results.user', 'resultUser');
+            query.leftJoinAndSelect('course.leaderboards', 'leaderboards');
+            query.leftJoinAndSelect('leaderboards.user', 'leaderboardUser');
+            query.leftJoinAndSelect('course.trainingProgress', 'trainingProgress');
+            query.leftJoinAndSelect('trainingProgress.user', 'progressUser');
             query.where('course.courseId = :id', { id });
 
             // Filter by status - only show active courses by default
@@ -519,20 +528,33 @@ export class CourseService {
                 branchId: course.branchId?.id,
             });
 
-            // Get tests for this course separately
-            const tests = await this.testRepository.find({
-                where: { courseId: id, isActive: true },
-                order: { createdAt: 'ASC' },
-            });
-
             // Get statistics with caching
             const stats = await this.getStats(id);
 
             const result: CourseDetailDto = {
                 ...course,
                 creator: course.creator,
-                courseMaterials: course.courseMaterials || [],
-                tests: tests || [],
+                courseMaterials: (course.courseMaterials || []).map(material => ({
+                    ...material,
+                    creator: material.creator,
+                    updater: material.updater,
+                    mediaFile: material.mediaFile,
+                })),
+                tests: (course.tests || [])
+                    .filter(test => test.isActive)
+                    .map(test => ({
+                        ...test,
+                        questionCount: test.questions?.length || 0,
+                        questions: test.questions?.map(q => ({
+                            questionId: q.questionId,
+                            questionText: q.questionText,
+                            questionType: q.questionType,
+                            points: q.points,
+                            orderIndex: q.orderIndex,
+                            difficulty: q.difficulty,
+                        })) || [],
+                    })),
+
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
                 isActive: course.status === CourseStatus.ACTIVE,

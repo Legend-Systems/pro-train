@@ -704,8 +704,11 @@ export class ResultsService {
             const queryBuilder = this.resultRepository
                 .createQueryBuilder('result')
                 .leftJoinAndSelect('result.user', 'user')
+                .leftJoinAndSelect('user.avatar', 'userAvatar')
                 .leftJoinAndSelect('result.test', 'test')
+                .leftJoinAndSelect('test.creator', 'testInstructor')
                 .leftJoinAndSelect('result.course', 'course')
+                .leftJoinAndSelect('course.creator', 'courseInstructor')
                 .leftJoinAndSelect('result.attempt', 'attempt')
                 .leftJoinAndSelect('result.orgId', 'orgId')
                 .leftJoinAndSelect('result.branchId', 'branchId')
@@ -1055,12 +1058,17 @@ export class ResultsService {
             .createQueryBuilder('result')
             // User relations with comprehensive data
             .leftJoinAndSelect('result.user', 'user')
+            .leftJoinAndSelect('user.avatar', 'userAvatar')
+            .leftJoinAndSelect('user.orgId', 'userOrg')
+            .leftJoinAndSelect('user.branchId', 'userBranch')
             // Test relations with comprehensive data
             .leftJoinAndSelect('result.test', 'test')
-            .leftJoinAndSelect('test.createdBy', 'testInstructor')
+            .leftJoinAndSelect('test.creator', 'testInstructor')
+            .leftJoinAndSelect('testInstructor.avatar', 'instructorAvatar')
             // Course relations with comprehensive data
             .leftJoinAndSelect('result.course', 'course')
-            .leftJoinAndSelect('course.createdBy', 'courseInstructor')
+            .leftJoinAndSelect('course.creator', 'courseInstructor')
+            .leftJoinAndSelect('courseInstructor.avatar', 'courseInstructorAvatar')
             // Attempt relations with comprehensive data
             .leftJoinAndSelect('result.attempt', 'attempt')
             // Organization and branch relations
@@ -1607,75 +1615,67 @@ export class ResultsService {
         // Transform the result with comprehensive data
         const enhancedResult = plainToClass(ResultResponseDto, {
             ...result,
-            // Enhanced user data
-            user: {
-                id: result.user?.id,
-                username: (result.user as any)?.username || result.user?.email?.split('@')[0] || 'unknown',
-                firstName: result.user?.firstName,
-                lastName: result.user?.lastName,
-                email: result.user?.email,
-                role: result.user?.role,
-                status: (result.user as any)?.status || 'active',
-                profilePicture: (result.user as any)?.profilePicture,
-                phoneNumber: (result.user as any)?.phoneNumber,
-                createdAt: result.user?.createdAt,
-            },
-            // Enhanced test data
-            test: {
-                testId: result.test?.testId,
-                title: result.test?.title,
-                description: result.test?.description,
-                testType: result.test?.testType,
-                durationMinutes: result.test?.durationMinutes,
-                maxAttempts: (result.test as any)?.maxAttempts || 1,
-                passingScore: (result.test as any)?.passingScore || 60,
+            // Enhanced user data - return null if user relation is null
+            user: result.user ? {
+                id: result.user.id,
+                username: result.user.email?.split('@')[0] || 'unknown',
+                firstName: result.user.firstName,
+                lastName: result.user.lastName,
+                email: result.user.email,
+                role: result.user.role,
+                status: result.user.status || 'active',
+                profilePicture: result.user.avatar?.url || null,
+                phoneNumber: null, // User entity doesn't have phoneNumber
+                createdAt: result.user.createdAt,
+            } : null,
+            // Enhanced test data - return null if test relation is null
+            test: result.test ? {
+                testId: result.test.testId,
+                title: result.test.title,
+                description: result.test.description,
+                testType: result.test.testType,
+                durationMinutes: result.test.durationMinutes,
+                maxAttempts: result.test.maxAttempts || 1,
+                passingScore: 60, // Default value (not in Test entity)
                 totalQuestions: additionalStats.totalQuestions,
                 totalPoints: result.maxScore,
-                status: (result.test as any)?.status || 'active',
-                createdAt: result.test?.createdAt,
-                instructions: (result.test as any)?.instructions,
-                instructor: (result.test as any)?.createdBy ? {
-                    id: (result.test as any).createdBy.id,
-                    email: (result.test as any).createdBy.email,
-                    // fullName will be calculated by Transform decorator
-                    firstName: (result.test as any).createdBy.firstName,
-                    lastName: (result.test as any).createdBy.lastName,
-                    username: (result.test as any).createdBy.username,
-                } : undefined,
-            },
-            // Enhanced course data
-            course: {
-                courseId: result.course?.courseId,
-                title: result.course?.title,
-                description: result.course?.description,
-                courseCode: `COURSE-${result.course?.courseId}`,
+                status: result.test.isActive ? 'active' : 'inactive',
+                createdAt: result.test.createdAt,
+                instructions: result.test.description || '',
+                instructor: null, // Test entity doesn't have creator relation
+            } : null,
+            // Enhanced course data - return null if course relation is null
+            course: result.course ? {
+                courseId: result.course.courseId,
+                title: result.course.title,
+                description: result.course.description,
+                courseCode: `COURSE-${result.course.courseId}`,
                 category: 'General',
                 durationHours: 40,
                 difficultyLevel: 'intermediate',
-                status: result.course?.status || 'active',
-                thumbnailUrl: undefined,
+                status: result.course.status || 'active',
+                thumbnailUrl: null,
                 enrolledStudents: additionalStats.enrolledStudents,
-                createdAt: result.course?.createdAt,
-                instructor: (result.course as any)?.creator ? {
-                    id: (result.course as any).creator.id,
-                    email: (result.course as any).creator.email,
-                    // fullName will be calculated by Transform decorator
-                    firstName: (result.course as any).creator.firstName,
-                    lastName: (result.course as any).creator.lastName,
-                    username: (result.course as any).creator.username || (result.course as any).creator.email?.split('@')[0],
-                } : undefined,
-            },
-            // Enhanced attempt data
-            attempt: {
-                attemptId: result.attempt?.attemptId,
-                attemptNumber: result.attempt?.attemptNumber,
-                startTime: result.attempt?.startTime,
-                submitTime: result.attempt?.submitTime,
-                status: result.attempt?.status,
+                createdAt: result.course.createdAt,
+                instructor: result.course.creator ? {
+                    id: result.course.creator.id,
+                    email: result.course.creator.email,
+                    firstName: result.course.creator.firstName,
+                    lastName: result.course.creator.lastName,
+                    username: result.course.creator.email?.split('@')[0] || 'unknown',
+                } : null,
+            } : null,
+            // Enhanced attempt data - return null if attempt relation is null
+            attempt: result.attempt ? {
+                attemptId: result.attempt.attemptId,
+                attemptNumber: result.attempt.attemptNumber || 1,
+                startTime: result.attempt.startTime,
+                submitTime: result.attempt.submitTime,
+                status: result.attempt.status,
                 questionsAnswered: additionalStats.questionsAnswered,
                 totalQuestions: additionalStats.totalQuestions,
                 // timeSpentMinutes and completionPercentage calculated by Transform decorators
-            },
+            } : null,
             // Performance metrics
             performanceMetrics,
             // Question breakdown (optional)

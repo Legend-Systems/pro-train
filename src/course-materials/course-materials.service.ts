@@ -423,8 +423,15 @@ export class CourseMaterialsService {
             const queryBuilder = this.courseMaterialRepository
                 .createQueryBuilder('material')
                 .leftJoinAndSelect('material.course', 'course')
+                .leftJoinAndSelect('course.creator', 'courseCreator')
+                .leftJoinAndSelect('course.orgId', 'courseOrg')
+                .leftJoinAndSelect('course.branchId', 'courseBranch')
                 .leftJoinAndSelect('material.creator', 'creator')
+                .leftJoinAndSelect('material.updater', 'updater')
                 .leftJoinAndSelect('material.mediaFile', 'mediaFile')
+                .leftJoinAndSelect('mediaFile.uploader', 'mediaUploader')
+                .leftJoinAndSelect('material.orgId', 'materialOrg')
+                .leftJoinAndSelect('material.branchId', 'materialBranch')
                 .where('material.courseId = :courseId', { courseId });
 
             // Filter by status - only show active materials by default
@@ -531,10 +538,15 @@ export class CourseMaterialsService {
                 where: { materialId: id, status: MaterialStatus.ACTIVE },
                 relations: [
                     'course',
+                    'course.creator',
                     'course.orgId',
                     'course.branchId',
                     'creator',
+                    'updater',
                     'mediaFile',
+                    'mediaFile.uploader',
+                    'orgId',
+                    'branchId',
                 ],
             });
 
