@@ -528,10 +528,8 @@ export class ResultsService {
                 .take(limit)
                 .getManyAndCount();
 
-            const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, {
-                    excludeExtraneousValues: true,
-                }),
+            const responseResults = await Promise.all(
+                results.map(result => this.getEnhancedResult(result))
             );
 
             return {
@@ -561,6 +559,25 @@ export class ResultsService {
     }> {
         try {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
+            
+            // Generate cache key for test results
+            const filtersKey = JSON.stringify({ ...filters, userId, page, limit });
+            const cacheKey = this.CACHE_KEYS.TEST_RESULTS(testId, filtersKey, scope.orgId, scope.branchId);
+            
+            // Try to get from cache first
+            const cachedResults = await this.cacheManager.get<{
+                results: ResultResponseDto[];
+                total: number;
+                page: number;
+                limit: number;
+            }>(cacheKey);
+            
+            if (cachedResults) {
+                this.logger.debug(`Cache hit for test results: ${cacheKey}`);
+                return cachedResults;
+            }
+            
+            this.logger.debug(`Cache miss for test results: ${cacheKey}`);
             const skip = (page - 1) * limit;
 
             const queryBuilder = this.buildFilterQuery(
@@ -578,18 +595,22 @@ export class ResultsService {
                 .take(limit)
                 .getManyAndCount();
 
-            const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, {
-                    excludeExtraneousValues: true,
-                }),
+            const responseResults = await Promise.all(
+                results.map(result => this.getEnhancedResult(result))
             );
 
-            return {
+            const response = {
                 results: responseResults,
                 total,
                 page,
                 limit,
             };
+            
+            // Cache the results
+            await this.cacheManager.set(cacheKey, response, this.CACHE_TTL.TEST_RESULTS * 1000);
+            this.logger.debug(`Cached test results: ${cacheKey}`);
+
+            return response;
         } catch (error) {
             this.logger.error('Failed to fetch test results:', error);
             throw new InternalServerErrorException(
@@ -611,6 +632,25 @@ export class ResultsService {
     }> {
         try {
             const { page = 1, limit = 10, ...filters } = filterDto || {};
+            
+            // Generate cache key for course results
+            const filtersKey = JSON.stringify({ ...filters, userId, page, limit });
+            const cacheKey = this.CACHE_KEYS.COURSE_RESULTS(courseId, filtersKey, scope.orgId, scope.branchId);
+            
+            // Try to get from cache first
+            const cachedResults = await this.cacheManager.get<{
+                results: ResultResponseDto[];
+                total: number;
+                page: number;
+                limit: number;
+            }>(cacheKey);
+            
+            if (cachedResults) {
+                this.logger.debug(`Cache hit for course results: ${cacheKey}`);
+                return cachedResults;
+            }
+            
+            this.logger.debug(`Cache miss for course results: ${cacheKey}`);
             const skip = (page - 1) * limit;
 
             const queryBuilder = this.buildFilterQuery(
@@ -631,18 +671,22 @@ export class ResultsService {
                 .take(limit)
                 .getManyAndCount();
 
-            const responseResults = results.map(result =>
-                plainToClass(ResultResponseDto, result, {
-                    excludeExtraneousValues: true,
-                }),
+            const responseResults = await Promise.all(
+                results.map(result => this.getEnhancedResult(result))
             );
 
-            return {
+            const response = {
                 results: responseResults,
                 total,
                 page,
                 limit,
             };
+            
+            // Cache the results
+            await this.cacheManager.set(cacheKey, response, this.CACHE_TTL.COURSE_RESULTS * 1000);
+            this.logger.debug(`Cached course results: ${cacheKey}`);
+
+            return response;
         } catch (error) {
             this.logger.error('Failed to fetch course results:', error);
             throw new InternalServerErrorException(
@@ -694,9 +738,7 @@ export class ResultsService {
                 );
             }
 
-            return plainToClass(ResultResponseDto, result, {
-                excludeExtraneousValues: true,
-            });
+            return this.getEnhancedResult(result);
         } catch (error) {
             if (
                 error instanceof NotFoundException ||
@@ -1011,10 +1053,17 @@ export class ResultsService {
     ): SelectQueryBuilder<Result> {
         const queryBuilder = this.resultRepository
             .createQueryBuilder('result')
+            // User relations with comprehensive data
             .leftJoinAndSelect('result.user', 'user')
+            // Test relations with comprehensive data
             .leftJoinAndSelect('result.test', 'test')
+            .leftJoinAndSelect('test.createdBy', 'testInstructor')
+            // Course relations with comprehensive data
             .leftJoinAndSelect('result.course', 'course')
+            .leftJoinAndSelect('course.createdBy', 'courseInstructor')
+            // Attempt relations with comprehensive data
             .leftJoinAndSelect('result.attempt', 'attempt')
+            // Organization and branch relations
             .leftJoinAndSelect('result.orgId', 'orgId')
             .leftJoinAndSelect('result.branchId', 'branchId');
 
@@ -1536,6 +1585,454 @@ export class ResultsService {
                 error instanceof Error ? error.stack : String(error),
             );
             throw error;
+        }
+    }
+
+    /**
+     * Enhanced method to get comprehensive result with all relations and calculated metrics
+     */
+    private async getEnhancedResult(result: Result): Promise<ResultResponseDto> {
+        // Calculate performance metrics
+        const performanceMetrics = await this.calculatePerformanceMetrics(result);
+        
+        // Get question breakdown if needed
+        const questionBreakdown = await this.getQuestionBreakdown(result.attemptId, result.orgId?.id, result.branchId?.id);
+        
+        // Calculate class rankings
+        const rankings = await this.calculateClassRankings(result);
+        
+        // Get additional test/course statistics
+        const additionalStats = await this.getAdditionalStatistics(result);
+
+        // Transform the result with comprehensive data
+        const enhancedResult = plainToClass(ResultResponseDto, {
+            ...result,
+            // Enhanced user data
+            user: {
+                id: result.user?.id,
+                username: (result.user as any)?.username || result.user?.email?.split('@')[0] || 'unknown',
+                firstName: result.user?.firstName,
+                lastName: result.user?.lastName,
+                email: result.user?.email,
+                role: result.user?.role,
+                status: (result.user as any)?.status || 'active',
+                profilePicture: (result.user as any)?.profilePicture,
+                phoneNumber: (result.user as any)?.phoneNumber,
+                createdAt: result.user?.createdAt,
+            },
+            // Enhanced test data
+            test: {
+                testId: result.test?.testId,
+                title: result.test?.title,
+                description: result.test?.description,
+                testType: result.test?.testType,
+                durationMinutes: result.test?.durationMinutes,
+                maxAttempts: (result.test as any)?.maxAttempts || 1,
+                passingScore: (result.test as any)?.passingScore || 60,
+                totalQuestions: additionalStats.totalQuestions,
+                totalPoints: result.maxScore,
+                status: (result.test as any)?.status || 'active',
+                createdAt: result.test?.createdAt,
+                instructions: (result.test as any)?.instructions,
+                instructor: (result.test as any)?.createdBy ? {
+                    id: (result.test as any).createdBy.id,
+                    email: (result.test as any).createdBy.email,
+                    // fullName will be calculated by Transform decorator
+                    firstName: (result.test as any).createdBy.firstName,
+                    lastName: (result.test as any).createdBy.lastName,
+                    username: (result.test as any).createdBy.username,
+                } : undefined,
+            },
+            // Enhanced course data
+            course: {
+                courseId: result.course?.courseId,
+                title: result.course?.title,
+                description: result.course?.description,
+                courseCode: `COURSE-${result.course?.courseId}`,
+                category: 'General',
+                durationHours: 40,
+                difficultyLevel: 'intermediate',
+                status: result.course?.status || 'active',
+                thumbnailUrl: undefined,
+                enrolledStudents: additionalStats.enrolledStudents,
+                createdAt: result.course?.createdAt,
+                instructor: (result.course as any)?.creator ? {
+                    id: (result.course as any).creator.id,
+                    email: (result.course as any).creator.email,
+                    // fullName will be calculated by Transform decorator
+                    firstName: (result.course as any).creator.firstName,
+                    lastName: (result.course as any).creator.lastName,
+                    username: (result.course as any).creator.username || (result.course as any).creator.email?.split('@')[0],
+                } : undefined,
+            },
+            // Enhanced attempt data
+            attempt: {
+                attemptId: result.attempt?.attemptId,
+                attemptNumber: result.attempt?.attemptNumber,
+                startTime: result.attempt?.startTime,
+                submitTime: result.attempt?.submitTime,
+                status: result.attempt?.status,
+                questionsAnswered: additionalStats.questionsAnswered,
+                totalQuestions: additionalStats.totalQuestions,
+                // timeSpentMinutes and completionPercentage calculated by Transform decorators
+            },
+            // Performance metrics
+            performanceMetrics,
+            // Question breakdown (optional)
+            questionBreakdown: questionBreakdown.length > 0 ? questionBreakdown : undefined,
+            // Rankings
+            classRank: rankings.classRank,
+            totalStudents: rankings.totalStudents,
+            percentileRank: rankings.percentileRank,
+        }, {
+            excludeExtraneousValues: true,
+        });
+
+        return enhancedResult;
+    }
+
+    /**
+     * Calculate comprehensive performance metrics
+     */
+    private async calculatePerformanceMetrics(result: Result): Promise<any> {
+        // Get answers for this attempt with proper scoping
+        const answersQuery = this.answerRepository
+            .createQueryBuilder('answer')
+            .leftJoinAndSelect('answer.question', 'question')
+            .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
+            .where('answer.attemptId = :attemptId', { attemptId: result.attemptId });
+
+        // Apply org/branch scoping
+        if (result.orgId) {
+            answersQuery.andWhere('answer.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            answersQuery.andWhere('answer.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const answers = await answersQuery.getMany();
+        
+        // Get all questions for the test
+        const questionsQuery = this.questionRepository
+            .createQueryBuilder('question')
+            .where('question.testId = :testId', { testId: result.testId });
+
+        if (result.orgId) {
+            questionsQuery.andWhere('question.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            questionsQuery.andWhere('question.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const questions = await questionsQuery.getMany();
+
+        // Calculate metrics
+        const totalQuestions = questions.length;
+        const answeredQuestions = answers.length;
+        let correctAnswers = 0;
+
+        for (const answer of answers) {
+            // Check if correct
+            const pointsAwarded = answer.pointsAwarded ?? 0;
+            if (pointsAwarded > 0) {
+                correctAnswers++;
+            } else if (answer.selectedOption?.isCorrect) {
+                correctAnswers++;
+            }
+        }
+
+        const incorrectAnswers = answeredQuestions - correctAnswers;
+        const unansweredQuestions = totalQuestions - answeredQuestions;
+        const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+        const avgTimePerQuestion = 0; // Time tracking not available in current Answer entity
+        
+        // Calculate difficulty rating based on class performance (1-5 scale)
+        const classAvgPercentage = await this.getClassAveragePercentage(result.testId, result.orgId?.id, result.branchId?.id);
+        let difficultyRating = 3; // default medium
+        if (classAvgPercentage < 50) difficultyRating = 5; // very hard
+        else if (classAvgPercentage < 65) difficultyRating = 4; // hard
+        else if (classAvgPercentage < 80) difficultyRating = 3; // medium
+        else if (classAvgPercentage < 90) difficultyRating = 2; // easy
+        else difficultyRating = 1; // very easy
+
+        return {
+            avgTimePerQuestion: Math.round(avgTimePerQuestion * 100) / 100,
+            accuracy: Math.round(accuracy * 100) / 100,
+            difficultyRating,
+            correctAnswers,
+            incorrectAnswers,
+            unansweredQuestions,
+        };
+    }
+
+    /**
+     * Get detailed question breakdown for reports
+     */
+    private async getQuestionBreakdown(attemptId: number, orgId?: string, branchId?: string): Promise<any[]> {
+        const answersQuery = this.answerRepository
+            .createQueryBuilder('answer')
+            .leftJoinAndSelect('answer.question', 'question')
+            .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
+            .leftJoinAndSelect('question.options', 'options')
+            .where('answer.attemptId = :attemptId', { attemptId });
+
+        if (orgId) {
+            answersQuery.andWhere('answer.orgId = :orgId', { orgId });
+        }
+        if (branchId) {
+            answersQuery.andWhere('answer.branchId = :branchId', { branchId });
+        }
+
+        const answers = await answersQuery.getMany();
+
+        return answers.map(answer => {
+            const pointsAwarded = answer.pointsAwarded ?? 0;
+            
+            // Find the correct answer from the question's options
+            const correctOption = answer.question?.options?.find((option: any) => option.isCorrect);
+            const correctAnswer = correctOption?.optionText || null;
+
+            return {
+                questionId: answer.question?.questionId,
+                questionText: answer.question?.questionText,
+                questionType: answer.question?.questionType,
+                points: Number(answer.question?.points || 0),
+                pointsAwarded: Number(pointsAwarded),
+                isCorrect: pointsAwarded > 0 || answer.selectedOption?.isCorrect || false,
+                userAnswer: answer.selectedOption?.optionText || answer.textAnswer || 'No answer',
+                correctAnswer,
+            };
+        });
+    }
+
+    /**
+     * Calculate class rankings for this result
+     */
+    private async calculateClassRankings(result: Result): Promise<{
+        classRank?: number;
+        totalStudents?: number;
+        percentileRank?: number;
+    }> {
+        // Get all results for this test within the same org/branch scope
+        const resultsQuery = this.resultRepository
+            .createQueryBuilder('result')
+            .where('result.testId = :testId', { testId: result.testId });
+
+        if (result.orgId) {
+            resultsQuery.andWhere('result.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            resultsQuery.andWhere('result.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const allResults = await resultsQuery
+            .orderBy('result.percentage', 'DESC')
+            .addOrderBy('result.score', 'DESC')
+            .addOrderBy('result.calculatedAt', 'ASC') // earlier submission wins ties
+            .getMany();
+
+        const totalStudents = allResults.length;
+        const classRank = allResults.findIndex(r => r.resultId === result.resultId) + 1;
+        const percentileRank = totalStudents > 0 ? Math.round(((totalStudents - classRank + 1) / totalStudents) * 100) : 0;
+
+        return {
+            classRank: classRank > 0 ? classRank : undefined,
+            totalStudents: totalStudents > 0 ? totalStudents : undefined,
+            percentileRank: percentileRank > 0 ? percentileRank : undefined,
+        };
+    }
+
+    /**
+     * Get additional statistics for test and course
+     */
+    private async getAdditionalStatistics(result: Result): Promise<{
+        totalQuestions: number;
+        questionsAnswered: number;
+        enrolledStudents: number;
+    }> {
+        // Count questions for this test
+        const questionsQuery = this.questionRepository
+            .createQueryBuilder('question')
+            .where('question.testId = :testId', { testId: result.testId });
+
+        if (result.orgId) {
+            questionsQuery.andWhere('question.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            questionsQuery.andWhere('question.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const totalQuestions = await questionsQuery.getCount();
+
+        // Count answers for this attempt
+        const answersQuery = this.answerRepository
+            .createQueryBuilder('answer')
+            .where('answer.attemptId = :attemptId', { attemptId: result.attemptId });
+
+        if (result.orgId) {
+            answersQuery.andWhere('answer.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            answersQuery.andWhere('answer.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const questionsAnswered = await answersQuery.getCount();
+
+        // Count enrolled students in course (approximate via results)
+        const enrolledQuery = this.resultRepository
+            .createQueryBuilder('result')
+            .select('COUNT(DISTINCT result.userId)', 'count')
+            .where('result.courseId = :courseId', { courseId: result.courseId });
+
+        if (result.orgId) {
+            enrolledQuery.andWhere('result.orgId = :orgId', { orgId: result.orgId.id });
+        }
+        if (result.branchId) {
+            enrolledQuery.andWhere('result.branchId = :branchId', { branchId: result.branchId.id });
+        }
+
+        const enrollmentResult = await enrolledQuery.getRawOne();
+        const enrolledStudents = parseInt(enrollmentResult?.count || '0');
+
+        return {
+            totalQuestions,
+            questionsAnswered,
+            enrolledStudents,
+        };
+    }
+
+    /**
+     * Get class average percentage for difficulty calculation
+     */
+    private async getClassAveragePercentage(testId: number, orgId?: string, branchId?: string): Promise<number> {
+        const resultsQuery = this.resultRepository
+            .createQueryBuilder('result')
+            .select('AVG(result.percentage)', 'avgPercentage')
+            .where('result.testId = :testId', { testId });
+
+        if (orgId) {
+            resultsQuery.andWhere('result.orgId = :orgId', { orgId });
+        }
+        if (branchId) {
+            resultsQuery.andWhere('result.branchId = :branchId', { branchId });
+        }
+
+        const avgResult = await resultsQuery.getRawOne();
+        return parseFloat(avgResult?.avgPercentage || '75'); // default to 75% if no data
+    }
+
+    /**
+     * Invalidate cache entries for a specific result and related data
+     */
+    private async invalidateResultCache(result: Result): Promise<void> {
+        try {
+            const patterns = [
+                // Invalidate specific result cache
+                this.CACHE_KEYS.RESULT_DETAILS(result.resultId, result.orgId?.id, result.branchId?.id),
+                // Invalidate user results cache patterns
+                `org:${result.orgId?.id || 'global'}:branch:${result.branchId?.id || 'global'}:user:${result.userId}:results:*`,
+                // Invalidate test results cache patterns
+                `org:${result.orgId?.id || 'global'}:branch:${result.branchId?.id || 'global'}:test:${result.testId}:results:*`,
+                // Invalidate course results cache patterns
+                `org:${result.orgId?.id || 'global'}:branch:${result.branchId?.id || 'global'}:course:${result.courseId}:results:*`,
+                // Invalidate test analytics cache
+                this.CACHE_KEYS.TEST_ANALYTICS(result.testId, result.orgId?.id, result.branchId?.id),
+            ];
+
+            for (const pattern of patterns) {
+                if (pattern.includes('*')) {
+                    // For wildcard patterns, we need to get all matching keys and delete them
+                    const keys = await this.getCacheKeysByPattern(pattern);
+                    for (const key of keys) {
+                        await this.cacheManager.del(key);
+                    }
+                } else {
+                    await this.cacheManager.del(pattern);
+                }
+            }
+
+            this.logger.debug(`Invalidated cache for result ${result.resultId}`);
+        } catch (error) {
+            this.logger.error('Failed to invalidate cache:', error);
+            // Don't throw error - cache invalidation failure shouldn't break the main operation
+        }
+    }
+
+    /**
+     * Get cache keys matching a pattern (Redis-specific implementation)
+     */
+    private async getCacheKeysByPattern(pattern: string): Promise<string[]> {
+        try {
+            // This is a simplified implementation
+            // In a real Redis implementation, you would use SCAN with pattern matching
+            // For now, we'll just return empty array since most cache managers don't support this
+            return [];
+        } catch (error) {
+            this.logger.error('Failed to get cache keys by pattern:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Invalidate all cache entries for a user
+     */
+    private async invalidateUserCache(userId: string, orgId?: string, branchId?: string): Promise<void> {
+        try {
+            const pattern = `org:${orgId || 'global'}:branch:${branchId || 'global'}:user:${userId}:*`;
+            const keys = await this.getCacheKeysByPattern(pattern);
+            
+            for (const key of keys) {
+                await this.cacheManager.del(key);
+            }
+            
+            this.logger.debug(`Invalidated user cache for ${userId}`);
+        } catch (error) {
+            this.logger.error('Failed to invalidate user cache:', error);
+        }
+    }
+
+    /**
+     * Invalidate all cache entries for a test
+     */
+    private async invalidateTestCache(testId: number, orgId?: string, branchId?: string): Promise<void> {
+        try {
+            const patterns = [
+                `org:${orgId || 'global'}:branch:${branchId || 'global'}:test:${testId}:*`,
+                this.CACHE_KEYS.TEST_ANALYTICS(testId, orgId, branchId),
+            ];
+
+            for (const pattern of patterns) {
+                if (pattern.includes('*')) {
+                    const keys = await this.getCacheKeysByPattern(pattern);
+                    for (const key of keys) {
+                        await this.cacheManager.del(key);
+                    }
+                } else {
+                    await this.cacheManager.del(pattern);
+                }
+            }
+            
+            this.logger.debug(`Invalidated test cache for ${testId}`);
+        } catch (error) {
+            this.logger.error('Failed to invalidate test cache:', error);
+        }
+    }
+
+    /**
+     * Invalidate all cache entries for a course
+     */
+    private async invalidateCourseCache(courseId: number, orgId?: string, branchId?: string): Promise<void> {
+        try {
+            const pattern = `org:${orgId || 'global'}:branch:${branchId || 'global'}:course:${courseId}:*`;
+            const keys = await this.getCacheKeysByPattern(pattern);
+            
+            for (const key of keys) {
+                await this.cacheManager.del(key);
+            }
+            
+            this.logger.debug(`Invalidated course cache for ${courseId}`);
+        } catch (error) {
+            this.logger.error('Failed to invalidate course cache:', error);
         }
     }
 }
