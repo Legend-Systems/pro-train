@@ -549,14 +549,14 @@ export class LeaderboardService {
             } else {
                 await this.leaderboardRepository.save(
                     this.leaderboardRepository.create({
-                        courseId,
-                        userId,
+                    courseId,
+                    userId,
                         rank: 1, // Temporary rank, will be recalculated
-                        averageScore: Math.round(averageScore * 100) / 100,
-                        testsCompleted,
-                        totalPoints: Math.round(totalPoints * 100) / 100,
-                        orgId: orgEntity,
-                        branchId: branchEntity,
+                    averageScore: Math.round(averageScore * 100) / 100,
+                    testsCompleted,
+                    totalPoints: Math.round(totalPoints * 100) / 100,
+                    orgId: orgEntity,
+                    branchId: branchEntity,
                     }),
                 );
             }
@@ -636,8 +636,8 @@ export class LeaderboardService {
                     return plainToClass(LeaderboardResponseDto, enhanced, {
                         excludeExtraneousValues: true,
                     });
-                }),
-            );
+                    }),
+                );
 
             return {
                 totalPoints: Math.round(totalPoints * 100) / 100,
