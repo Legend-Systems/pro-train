@@ -6,8 +6,9 @@ A comprehensive file upload and media management system for the NestJS applicati
 
 ### File Upload & Storage
 - **Google Cloud Storage Integration**: Direct upload to GCS with automatic URL generation
-- **Multiple File Types Support**: Images, documents, videos, and audio files
-- **File Size Validation**: Configurable limits (default 50MB per file)
+- **Extensive File Types Support**: Images, documents, videos, and audio files with enhanced detection
+- **File Size Validation**: Configurable limits (default 100MB per file, set via MEDIA_MAX_FILE_SIZE)
+- **Intelligent Type Detection**: Primary MIME type validation with fallback to file extension detection
 - **Secure Upload**: Authentication required with org/branch scoping
 
 ### Image Processing 🖼️
@@ -41,7 +42,7 @@ GOOGLE_CLOUD_KEY_FILE=path/to/your/service-account-key.json
 GOOGLE_CLOUD_STORAGE_BUCKET=your-storage-bucket-name
 
 # Optional Configuration
-MEDIA_MAX_FILE_SIZE=52428800  # 50MB in bytes
+MEDIA_MAX_FILE_SIZE=104857600  # 100MB in bytes (configurable upload limit)
 ```
 
 ### Google Cloud Storage Setup
@@ -70,13 +71,16 @@ MEDIA_MAX_FILE_SIZE=52428800  # 50MB in bytes
 - WebP (`image/webp`)
 - GIF (`image/gif`)
 - SVG (`image/svg+xml`)
+- BMP (`image/bmp`)
+- TIFF (`image/tiff`, `image/tif`)
 
 ### Documents
-- PDF (`application/pdf`)
-- Word (`application/msword`, `.docx`)
-- Excel (`application/vnd.ms-excel`, `.xlsx`)
-- PowerPoint (`application/vnd.ms-powerpoint`, `.pptx`)
-- Text (`text/plain`)
+- **PDF** (`application/pdf`, `application/x-pdf`, `application/acrobat`, `application/vnd.pdf`, `text/pdf`)
+- **Microsoft Office** (`application/msword`, `.docx`, `.xlsx`, `.pptx`)
+- **OpenDocument** (`.odt`, `.ods`, `.odp`)
+- **Text & Markup** (`text/plain`, `text/csv`, `text/rtf`, `text/xml`, `text/markdown`, `text/html`)
+- **Archives** (`application/zip`, `.rar`, `.7z`)
+- **Other** (`application/json`, `application/epub+zip`)
 
 ### Videos
 - MP4 (`video/mp4`)
@@ -84,12 +88,19 @@ MEDIA_MAX_FILE_SIZE=52428800  # 50MB in bytes
 - QuickTime (`video/quicktime`)
 - AVI (`video/x-msvideo`)
 - WebM (`video/webm`)
+- OGG (`video/ogg`)
+- 3GP (`video/3gpp`)
+- WMV (`video/x-ms-wmv`)
+- FLV (`video/x-flv`)
 
 ### Audio
 - MP3 (`audio/mpeg`)
 - WAV (`audio/wav`)
 - OGG (`audio/ogg`)
 - M4A (`audio/x-m4a`)
+- AAC (`audio/aac`)
+- FLAC (`audio/flac`)
+- WebM Audio (`audio/webm`)
 
 ## API Endpoints 🚀
 

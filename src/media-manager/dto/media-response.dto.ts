@@ -70,7 +70,7 @@ export class MediaFileResponseDto {
         type: Number,
         title: 'File Size (bytes)',
         minimum: 0,
-        maximum: 52428800, // 50MB
+        maximum: 104857600, // 100MB
     })
     size: number;
 

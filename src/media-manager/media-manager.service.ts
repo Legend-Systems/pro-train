@@ -94,7 +94,7 @@ export class MediaManagerService {
         [ImageVariant.LARGE]: { width: 1200, height: 1200 },
     };
 
-    // Supported file types
+    // Supported file types - EXPANDED for better PDF and document support
     private readonly supportedMimeTypes = {
         image: [
             'image/jpeg',
@@ -103,16 +103,46 @@ export class MediaManagerService {
             'image/webp',
             'image/gif',
             'image/svg+xml',
+            'image/bmp',
+            'image/tiff',
+            'image/tif',
         ],
         document: [
+            // PDF variants - multiple MIME types for better compatibility
             'application/pdf',
+            'application/x-pdf',
+            'application/acrobat',
+            'application/vnd.pdf',
+            'text/pdf',
+            // Microsoft Office formats
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/vnd.ms-excel',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/vnd.ms-powerpoint',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            // OpenDocument formats
+            'application/vnd.oasis.opendocument.text',
+            'application/vnd.oasis.opendocument.spreadsheet',
+            'application/vnd.oasis.opendocument.presentation',
+            // Text and markup formats
             'text/plain',
+            'text/csv',
+            'text/rtf',
+            'application/rtf',
+            'text/xml',
+            'application/xml',
+            'text/markdown',
+            'text/x-markdown',
+            // Archive formats
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/x-rar-compressed',
+            'application/x-7z-compressed',
+            // Other common document types
+            'application/json',
+            'text/html',
+            'application/epub+zip',
         ],
         video: [
             'video/mp4',
@@ -120,6 +150,10 @@ export class MediaManagerService {
             'video/quicktime',
             'video/x-msvideo',
             'video/webm',
+            'video/ogg',
+            'video/3gpp',
+            'video/x-ms-wmv',
+            'video/x-flv',
         ],
         audio: [
             'audio/mpeg',
@@ -127,7 +161,68 @@ export class MediaManagerService {
             'audio/mp3',
             'audio/ogg',
             'audio/x-m4a',
+            'audio/aac',
+            'audio/webm',
+            'audio/flac',
+            'audio/x-wav',
         ],
+    };
+
+    // File extension mappings for fallback detection
+    private readonly fileExtensionMapping = {
+        // PDF extensions
+        '.pdf': 'document',
+        // Microsoft Office
+        '.doc': 'document',
+        '.docx': 'document',
+        '.xls': 'document', 
+        '.xlsx': 'document',
+        '.ppt': 'document',
+        '.pptx': 'document',
+        // OpenDocument
+        '.odt': 'document',
+        '.ods': 'document',
+        '.odp': 'document',
+        // Text formats
+        '.txt': 'document',
+        '.csv': 'document',
+        '.rtf': 'document',
+        '.xml': 'document',
+        '.json': 'document',
+        '.md': 'document',
+        '.html': 'document',
+        '.htm': 'document',
+        // Images
+        '.jpg': 'image',
+        '.jpeg': 'image',
+        '.png': 'image',
+        '.gif': 'image',
+        '.bmp': 'image',
+        '.tiff': 'image',
+        '.tif': 'image',
+        '.webp': 'image',
+        '.svg': 'image',
+        // Videos
+        '.mp4': 'video',
+        '.avi': 'video',
+        '.mov': 'video',
+        '.wmv': 'video',
+        '.flv': 'video',
+        '.webm': 'video',
+        '.ogv': 'video',
+        '.3gp': 'video',
+        // Audio
+        '.mp3': 'audio',
+        '.wav': 'audio',
+        '.ogg': 'audio',
+        '.m4a': 'audio',
+        '.aac': 'audio',
+        '.flac': 'audio',
+        // Archives
+        '.zip': 'document',
+        '.rar': 'document',
+        '.7z': 'document',
+        '.epub': 'document',
     };
 
     constructor(
@@ -293,9 +388,9 @@ export class MediaManagerService {
                 // Validate file
                 this.validateFile(file);
 
-                // Determine media type
+                // Determine media type with fallback to filename detection
                 const mediaType =
-                    uploadDto.type || this.detectMediaType(file.mimetype);
+                    uploadDto.type || this.detectMediaType(file.mimetype, file.originalname);
 
                 // Generate unique filename
                 const filename = this.generateFilename(
@@ -820,28 +915,49 @@ export class MediaManagerService {
     }
 
     private validateFile(file: UploadedFile): void {
-        const maxSize = 50 * 1024 * 1024; // 50MB
+        const maxSize = this.configService.get<number>('MEDIA_MAX_FILE_SIZE') || 100 * 1024 * 1024; // 100MB default, configurable
 
         if (!file || !file.buffer) {
             throw new BadRequestException('No file provided');
         }
 
         if (file.size > maxSize) {
-            throw new BadRequestException('File size exceeds 50MB limit');
+            const maxSizeMB = Math.round(maxSize / (1024 * 1024));
+            throw new BadRequestException(
+                `File size exceeds ${maxSizeMB}MB limit. Your file is ${Math.round(file.size / (1024 * 1024))}MB`
+            );
         }
 
+        // Primary validation: Check MIME type
         const isSupported = Object.values(this.supportedMimeTypes)
             .flat()
             .includes(file.mimetype);
 
-        if (!isSupported) {
-            throw new BadRequestException(
-                `Unsupported file type: ${file.mimetype}`,
-            );
+        if (isSupported) {
+            return; // File is valid
         }
+
+        // Fallback validation: Check file extension if MIME type is not recognized
+        const fileExtension = path.extname(file.originalname).toLowerCase();
+        const isSupportedByExtension = fileExtension in this.fileExtensionMapping;
+
+        if (isSupportedByExtension) {
+            this.logger.warn(
+                `File ${file.originalname} has unsupported MIME type ${file.mimetype} but valid extension ${fileExtension}. Allowing upload.`
+            );
+            return; // Allow upload based on extension
+        }
+
+        // Neither MIME type nor extension is supported
+        const supportedExtensions = Object.keys(this.fileExtensionMapping).join(', ');
+        throw new BadRequestException(
+            `Unsupported file type. MIME type: "${file.mimetype}", Extension: "${fileExtension}". ` +
+            `Supported extensions: ${supportedExtensions}`
+        );
     }
 
-    private detectMediaType(mimeType: string): MediaType {
+    private detectMediaType(mimeType: string, filename?: string): MediaType {
+        // Primary detection: Check MIME type
         for (const [type, mimeTypes] of Object.entries(
             this.supportedMimeTypes,
         )) {
@@ -849,6 +965,23 @@ export class MediaManagerService {
                 return type as MediaType;
             }
         }
+
+        // Fallback detection: Check file extension if filename is provided
+        if (filename) {
+            const fileExtension = path.extname(filename).toLowerCase();
+            const detectedType = this.fileExtensionMapping[fileExtension];
+            
+            if (detectedType) {
+                this.logger.warn(
+                    `Using extension-based detection for ${filename}. MIME: ${mimeType}, Extension: ${fileExtension} -> Type: ${detectedType}`
+                );
+                return detectedType as MediaType;
+            }
+        }
+
+        this.logger.warn(
+            `Could not determine media type for MIME: ${mimeType}, filename: ${filename}. Defaulting to OTHER.`
+        );
         return MediaType.OTHER;
     }
 

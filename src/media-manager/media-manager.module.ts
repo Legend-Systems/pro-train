@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MulterModule } from '@nestjs/platform-express';
 import { MediaManagerService } from './media-manager.service';
 import { MediaManagerController } from './media-manager.controller';
@@ -20,10 +20,16 @@ import { RetryService } from '../common/services/retry.service';
         ConfigModule,
         UserModule,
         AuthModule,
-        MulterModule.register({
-            limits: {
-                fileSize: 50 * 1024 * 1024, // 50MB limit
-            },
+        MulterModule.registerAsync({
+            imports: [ConfigModule],
+            useFactory: (configService: ConfigService) => ({
+                limits: {
+                    fileSize:
+                        configService.get<number>('MEDIA_MAX_FILE_SIZE') ||
+                        100 * 1024 * 1024, // 100MB default, configurable
+                },
+            }),
+            inject: [ConfigService],
         }),
     ],
     controllers: [MediaManagerController],

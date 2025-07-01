@@ -87,10 +87,10 @@ export class MediaManagerController {
       - Metadata extraction and storage
       
       **Supported File Types:**
-      - **Images**: JPEG, PNG, WebP, GIF, SVG (auto-generates thumbnails)
-      - **Documents**: PDF, Word, Excel, PowerPoint, Text
-      - **Videos**: MP4, MPEG, QuickTime, AVI, WebM
-      - **Audio**: MP3, WAV, OGG, M4A
+      - **Images**: JPEG, PNG, WebP, GIF, SVG, BMP, TIFF (auto-generates thumbnails)
+      - **Documents**: PDF (multiple variants), Word, Excel, PowerPoint, OpenDocument, RTF, CSV, XML, JSON, HTML, EPUB, Archives (ZIP, RAR, 7Z)
+      - **Videos**: MP4, MPEG, QuickTime, AVI, WebM, OGG, 3GP, WMV, FLV
+      - **Audio**: MP3, WAV, OGG, M4A, AAC, FLAC
       
       **Image Processing:**
       - Original image preserved at full resolution
@@ -99,8 +99,8 @@ export class MediaManagerController {
       - Optimized JPEG compression for variants
       
       **Security Features:**
-      - 50MB file size limit
-      - File type validation
+      - 100MB file size limit (configurable via MEDIA_MAX_FILE_SIZE)
+      - Enhanced file type validation with fallback detection
       - Virus scanning (if configured)
       - Organization/branch scoping
       
@@ -116,55 +116,132 @@ export class MediaManagerController {
     @ApiBody({
         type: UploadFileDto,
         description:
-            'File upload with comprehensive metadata and processing options',
+            'File upload with comprehensive metadata and processing options. Enhanced validation supports multiple MIME types and file extensions.',
         examples: {
-            'image-with-thumbnails': {
-                summary: '🖼️ Image Upload with Thumbnails',
-                description:
-                    'Upload an image file with automatic thumbnail generation',
-                value: {
-                    file: '[binary image data]',
-                    altText:
-                        'Computer Science course introduction showing programming fundamentals',
-                    description:
-                        'Comprehensive introduction image for CS101 course covering basic programming concepts',
-                    generateThumbnails: true,
-                    variants: ['thumbnail', 'medium'],
-                },
-            },
-            'document-upload': {
-                summary: '📄 Document Upload',
-                description: 'Upload a PDF document for course materials',
+            'pdf-document': {
+                summary: '📄 PDF Document Upload',
+                description: 'Upload PDF document with enhanced validation (supports multiple PDF MIME types)',
                 value: {
                     file: '[binary PDF data]',
-                    description:
-                        'Course syllabus and curriculum overview for Computer Science fundamentals',
+                    description: 'Course syllabus and curriculum overview for Computer Science fundamentals',
                     type: 'document',
+                    designation: 'course_material',
                     generateThumbnails: false,
+                    metadata: {
+                        category: 'academic',
+                        course: 'CS101',
+                        version: '1.0'
+                    }
                 },
             },
-            'video-content': {
-                summary: '🎥 Video Upload',
-                description: 'Upload video content for online learning',
+            'large-document': {
+                summary: '📑 Large Document Upload (up to 100MB)',
+                description: 'Upload large PDF or document file with new size limits',
                 value: {
-                    file: '[binary video data]',
-                    altText:
-                        'Course lecture video on advanced programming concepts',
-                    description:
-                        'Detailed lecture covering object-oriented programming principles and best practices',
-                    type: 'video',
+                    file: '[binary large document data]',
+                    description: 'Comprehensive training manual with multimedia content',
+                    type: 'document',
+                    designation: 'course_material',
                     generateThumbnails: false,
+                    metadata: {
+                        fileSize: '85MB',
+                        pages: 500,
+                        category: 'reference'
+                    }
                 },
             },
-            'profile-picture': {
-                summary: '👤 Profile Picture Upload',
-                description: 'Upload user profile picture with variants',
+            'image-with-thumbnails': {
+                summary: '🖼️ Image Upload with Thumbnails',
+                description: 'Upload image with automatic thumbnail generation (supports JPEG, PNG, WebP, GIF, SVG, BMP, TIFF)',
                 value: {
                     file: '[binary image data]',
-                    altText: 'User profile picture',
-                    description: 'Professional headshot for user profile',
+                    altText: 'Computer Science course introduction showing programming fundamentals',
+                    description: 'Comprehensive introduction image for CS101 course covering basic programming concepts',
                     generateThumbnails: true,
-                    variants: ['thumbnail', 'medium', 'large'],
+                    variants: ['thumbnail', 'medium'],
+                    designation: 'course_thumbnail',
+                    metadata: {
+                        resolution: 'high',
+                        tags: ['education', 'programming']
+                    }
+                },
+            },
+            'office-document': {
+                summary: '📊 Microsoft Office Document',
+                description: 'Upload Word, Excel, or PowerPoint files with enhanced type detection',
+                value: {
+                    file: '[binary office document]',
+                    description: 'Course presentation slides for advanced programming concepts',
+                    type: 'document',
+                    designation: 'course_material',
+                    generateThumbnails: false,
+                    metadata: {
+                        format: 'presentation',
+                        slides: 45,
+                        course: 'Advanced Programming'
+                    }
+                },
+            },
+            'archive-upload': {
+                summary: '📦 Archive File Upload',
+                description: 'Upload ZIP, RAR, or 7Z archive files containing course materials',
+                value: {
+                    file: '[binary archive data]',
+                    description: 'Complete course resource pack including assignments, examples, and reference materials',
+                    type: 'document',
+                    designation: 'course_material',
+                    generateThumbnails: false,
+                    metadata: {
+                        archiveType: 'zip',
+                        contents: ['assignments', 'examples', 'references'],
+                        fileCount: 25
+                    }
+                },
+            },
+            'multimedia-content': {
+                summary: '🎬 Video/Audio Upload',
+                description: 'Upload video or audio content with enhanced format support',
+                value: {
+                    file: '[binary multimedia data]',
+                    altText: 'Course lecture video on object-oriented programming',
+                    description: 'Detailed lecture covering inheritance, polymorphism, and design patterns',
+                    type: 'video',
+                    designation: 'course_material',
+                    generateThumbnails: false,
+                    metadata: {
+                        duration: '45 minutes',
+                        quality: '1080p',
+                        chapter: 5
+                    }
+                },
+            },
+            'text-markup-files': {
+                summary: '📝 Text and Markup Files',
+                description: 'Upload CSV, XML, JSON, HTML, Markdown files',
+                value: {
+                    file: '[text file data]',
+                    description: 'Course data in structured format for import/export',
+                    type: 'document',
+                    designation: 'general_upload',
+                    generateThumbnails: false,
+                    metadata: {
+                        format: 'csv',
+                        records: 1500,
+                        encoding: 'UTF-8'
+                    }
+                },
+            },
+            'fallback-detection': {
+                summary: '🔍 Files with Unusual MIME Types',
+                description: 'Example of fallback detection when MIME type is non-standard',
+                value: {
+                    file: '[file with non-standard MIME type]',
+                    description: 'File that will be validated using extension fallback detection',
+                    generateThumbnails: false,
+                    metadata: {
+                        note: 'System will use file extension for validation if MIME type is not recognized',
+                        detectionMethod: 'fallback'
+                    }
                 },
             },
         },
@@ -174,38 +251,48 @@ export class MediaManagerController {
                 file: {
                     type: 'string',
                     format: 'binary',
-                    description:
-                        'File to upload (max 50MB). Supports images, documents, videos, and audio files.',
+                    description: `File to upload (max 100MB, configurable via MEDIA_MAX_FILE_SIZE).
+
+**Enhanced File Type Support:**
+- **Images**: JPEG, PNG, WebP, GIF, SVG, BMP, TIFF
+- **Documents**: PDF (multiple MIME types), MS Office, OpenDocument, RTF, CSV, XML, JSON, HTML, Markdown, Archives (ZIP/RAR/7Z), EPUB
+- **Videos**: MP4, AVI, MOV, WebM, MPEG, OGG, 3GP, WMV, FLV
+- **Audio**: MP3, WAV, OGG, M4A, AAC, FLAC, WebM Audio
+
+**Smart Validation:**
+- Primary: MIME type checking
+- Fallback: File extension validation
+- Enhanced error messages with debugging info`,
+                    examples: {
+                        pdf: 'course-syllabus.pdf',
+                        image: 'course-thumbnail.jpg',
+                        video: 'lecture-recording.mp4',
+                        office: 'presentation.pptx'
+                    }
                 },
                 altText: {
                     type: 'string',
-                    description:
-                        'Alternative text for images to improve accessibility and SEO compliance',
-                    example:
-                        'Computer Science course introduction showing programming fundamentals',
+                    description: 'Alternative text for images to improve accessibility and SEO compliance. Required for accessibility best practices.',
+                    example: 'Computer Science course introduction showing programming fundamentals',
                     maxLength: 255,
                     minLength: 3,
                 },
                 description: {
                     type: 'string',
-                    description:
-                        'Detailed description for content management and search optimization',
-                    example:
-                        'Comprehensive introduction image for CS101 course covering basic programming concepts',
+                    description: 'Detailed description for content management, search optimization, and file organization.',
+                    example: 'Comprehensive introduction image for CS101 course covering basic programming concepts',
                     maxLength: 1000,
                     minLength: 5,
                 },
                 type: {
                     type: 'string',
                     enum: ['image', 'document', 'video', 'audio', 'other'],
-                    description:
-                        'Media type classification (auto-detected if not specified)',
-                    example: 'image',
+                    description: 'Media type classification. If not specified, type will be auto-detected from MIME type or file extension with fallback validation.',
+                    example: 'document',
                 },
                 generateThumbnails: {
                     type: 'boolean',
-                    description:
-                        'Enable automatic thumbnail generation for images',
+                    description: 'Enable automatic thumbnail generation for images. Creates optimized versions for different display contexts.',
                     default: true,
                     example: true,
                 },
@@ -215,9 +302,27 @@ export class MediaManagerController {
                         type: 'string',
                         enum: ['thumbnail', 'medium', 'large'],
                     },
-                    description:
-                        'Specific image variants to generate for different display contexts',
+                    description: 'Specific image variants to generate: thumbnail (150x150), medium (500x500), large (1200x1200)',
                     example: ['thumbnail', 'medium'],
+                },
+                designation: {
+                    type: 'string',
+                    enum: ['user_avatar', 'course_thumbnail', 'course_material', 'question_image', 'answer_attachment', 'organization_logo', 'test_attachment', 'general_upload', 'other'],
+                    description: 'File designation indicating what this file will be used for. Helps with organization and file management.',
+                    example: 'course_material',
+                    default: 'general_upload'
+                },
+                metadata: {
+                    type: 'object',
+                    description: 'Custom metadata for the file. Can include tags, custom properties, processing information, or any additional context.',
+                    example: {
+                        category: 'academic',
+                        course: 'CS101',
+                        chapter: 5,
+                        tags: ['programming', 'education'],
+                        version: '1.0'
+                    },
+                    additionalProperties: true
                 },
             },
             required: ['file'],
@@ -225,42 +330,176 @@ export class MediaManagerController {
     })
     @ApiResponse({
         status: HttpStatus.CREATED,
-        description: '✅ File uploaded successfully with variants generated',
+        description: '✅ File uploaded successfully with enhanced validation and processing',
+        examples: {
+            'pdf-upload-success': {
+                summary: '📄 PDF Upload Success',
+                value: {
+                    file: {
+                        id: 1,
+                        originalName: 'course-syllabus.pdf',
+                        filename: 'media/org-123/2025/01/15/a1b2c3d4-course-syllabus.pdf',
+                        url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/a1b2c3d4-course-syllabus.pdf',
+                        mimeType: 'application/pdf',
+                        size: 5242880, // 5MB
+                        type: 'document',
+                        variant: null,
+                        designation: 'course_material',
+                        altText: null,
+                        description: 'Course syllabus and curriculum overview',
+                        metadata: { category: 'academic', course: 'CS101' },
+                        uploadedBy: '1',
+                        createdAt: '2025-01-15T10:30:45.123Z',
+                        isActive: true,
+                        status: 'active'
+                    },
+                    variants: [], // No variants for documents
+                    uploadInfo: {
+                        detectionMethod: 'mime-type',
+                        fileExtension: '.pdf',
+                        validationPassed: true
+                    }
+                }
+            },
+            'large-file-success': {
+                summary: '📑 Large File Upload Success (up to 100MB)',
+                value: {
+                    file: {
+                        id: 2,
+                        originalName: 'training-manual.pdf',
+                        filename: 'media/org-123/2025/01/15/b2c3d4e5-training-manual.pdf',
+                        url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/b2c3d4e5-training-manual.pdf',
+                        mimeType: 'application/pdf',
+                        size: 89128960, // 85MB
+                        type: 'document',
+                        designation: 'course_material',
+                        description: 'Comprehensive training manual with multimedia content',
+                        metadata: { fileSize: '85MB', pages: 500 },
+                        uploadedBy: '1',
+                        createdAt: '2025-01-15T10:35:22.456Z',
+                        isActive: true,
+                        status: 'active'
+                    },
+                    uploadInfo: {
+                        detectionMethod: 'mime-type',
+                        sizeValidation: 'passed',
+                        limit: '100MB'
+                    }
+                }
+            },
+            'fallback-detection-success': {
+                summary: '🔍 Fallback Detection Success',
+                value: {
+                    file: {
+                        id: 3,
+                        originalName: 'document.pdf',
+                        filename: 'media/org-123/2025/01/15/c3d4e5f6-document.pdf',
+                        url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/c3d4e5f6-document.pdf',
+                        mimeType: 'application/octet-stream', // Non-standard MIME type
+                        size: 1048576,
+                        type: 'document',
+                        designation: 'general_upload',
+                        description: 'File validated using extension fallback',
+                        uploadedBy: '1',
+                        createdAt: '2025-01-15T10:40:11.789Z',
+                        isActive: true,
+                        status: 'active'
+                    },
+                    uploadInfo: {
+                        detectionMethod: 'extension-fallback',
+                        fileExtension: '.pdf',
+                        originalMimeType: 'application/octet-stream',
+                        warning: 'Used extension-based validation due to non-standard MIME type'
+                    }
+                }
+            },
+            'image-with-variants': {
+                summary: '🖼️ Image with Generated Variants',
+                value: {
+                    file: {
+                        id: 4,
+                        originalName: 'course-banner.jpg',
+                        filename: 'media/org-123/2025/01/15/d4e5f6g7-course-banner.jpg',
+                        url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/d4e5f6g7-course-banner.jpg',
+                        mimeType: 'image/jpeg',
+                        size: 2048576,
+                        type: 'image',
+                        variant: 'original',
+                        width: 1920,
+                        height: 1080,
+                        designation: 'course_thumbnail',
+                        altText: 'Course introduction banner',
+                        description: 'Main banner image for course landing page',
+                        uploadedBy: '1',
+                        createdAt: '2025-01-15T10:45:33.012Z',
+                        isActive: true,
+                        status: 'active'
+                    },
+                    variants: [
+                        {
+                            id: 5,
+                            variant: 'thumbnail',
+                            filename: 'media/org-123/2025/01/15/d4e5f6g7-course-banner-thumbnail.jpg',
+                            url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/d4e5f6g7-course-banner-thumbnail.jpg',
+                            width: 150,
+                            height: 150,
+                            size: 15360
+                        },
+                        {
+                            id: 6,
+                            variant: 'medium',
+                            filename: 'media/org-123/2025/01/15/d4e5f6g7-course-banner-medium.jpg',
+                            url: 'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/d4e5f6g7-course-banner-medium.jpg',
+                            width: 500,
+                            height: 500,
+                            size: 81920
+                        }
+                    ]
+                }
+            }
+        },
         schema: {
             type: 'object',
             properties: {
                 file: {
                     type: 'object',
-                    description: 'Main uploaded file information',
+                    description: 'Main uploaded file information with enhanced metadata',
                     properties: {
                         id: { type: 'number', example: 1 },
                         originalName: {
                             type: 'string',
-                            example: 'course-introduction.jpg',
+                            example: 'course-syllabus.pdf',
                         },
                         filename: {
                             type: 'string',
                             example:
-                                'media/org-123/2025/01/15/a1b2c3d4-course-introduction.jpg',
+                                'media/org-123/2025/01/15/a1b2c3d4-course-syllabus.pdf',
                         },
                         url: {
                             type: 'string',
                             example:
-                                'https://storage.googleapis.com/crmapplications/media/org-123/2025/01/15/a1b2c3d4-course-introduction.jpg',
+                                'https://storage.googleapis.com/bucket/media/org-123/2025/01/15/a1b2c3d4-course-syllabus.pdf',
                         },
-                        mimeType: { type: 'string', example: 'image/jpeg' },
-                        size: { type: 'number', example: 2048576 },
-                        type: { type: 'string', example: 'image' },
-                        variant: { type: 'string', example: 'original' },
-                        width: { type: 'number', example: 1920 },
-                        height: { type: 'number', example: 1080 },
+                        mimeType: { type: 'string', example: 'application/pdf' },
+                        size: { type: 'number', example: 5242880 },
+                        type: { type: 'string', example: 'document' },
+                        variant: { type: 'string', example: 'original', nullable: true },
+                        width: { type: 'number', example: null, nullable: true },
+                        height: { type: 'number', example: null, nullable: true },
+                        designation: { type: 'string', example: 'course_material' },
                         altText: {
                             type: 'string',
-                            example: 'Computer Science course introduction',
+                            example: 'Course syllabus document',
+                            nullable: true
                         },
                         description: {
                             type: 'string',
-                            example: 'Introduction image for CS fundamentals',
+                            example: 'Course syllabus and curriculum overview',
+                        },
+                        metadata: {
+                            type: 'object',
+                            example: { category: 'academic', course: 'CS101' },
+                            nullable: true
                         },
                         uploadedBy: {
                             type: 'string',
@@ -314,16 +553,100 @@ export class MediaManagerController {
     })
     @ApiResponse({
         status: HttpStatus.BAD_REQUEST,
-        description: '❌ Invalid file or request',
+        description: '❌ Invalid file or request with enhanced error details',
+        examples: {
+            'file-size-exceeded': {
+                summary: '📏 File Size Limit Exceeded',
+                value: {
+                    statusCode: 400,
+                    message: 'File size exceeds 100MB limit. Your file is 120MB',
+                    error: 'Bad Request',
+                    details: {
+                        fileSize: '125829120', // bytes
+                        fileSizeMB: '120',
+                        limit: '104857600', // bytes
+                        limitMB: '100',
+                        filename: 'large-document.pdf'
+                    }
+                }
+            },
+            'unsupported-file-type': {
+                summary: '🚫 Unsupported File Type',
+                value: {
+                    statusCode: 400,
+                    message: 'Unsupported file type. MIME type: "application/unknown", Extension: ".xyz". Supported extensions: .pdf, .doc, .docx, .jpg, .png, .mp4, .mp3, ...',
+                    error: 'Bad Request',
+                    details: {
+                        mimeType: 'application/unknown',
+                        fileExtension: '.xyz',
+                        filename: 'document.xyz',
+                        supportedExtensions: ['.pdf', '.doc', '.docx', '.jpg', '.png', '.mp4', '.mp3'],
+                        validationMethod: 'both-failed'
+                    }
+                }
+            },
+            'no-file-provided': {
+                summary: '📄 No File Provided',
+                value: {
+                    statusCode: 400,
+                    message: 'No file provided',
+                    error: 'Bad Request'
+                }
+            },
+            'validation-errors': {
+                summary: '📝 Validation Errors',
+                value: {
+                    statusCode: 400,
+                    message: [
+                        'altText must not exceed 255 characters',
+                        'description must be at least 5 characters long',
+                        'Invalid file designation. Must be one of: user_avatar, course_thumbnail, course_material, question_image, answer_attachment, organization_logo, test_attachment, general_upload, other'
+                    ],
+                    error: 'Bad Request'
+                }
+            },
+            'storage-error': {
+                summary: '☁️ Storage Service Error',
+                value: {
+                    statusCode: 400,
+                    message: 'Failed to upload file to Google Cloud Storage',
+                    error: 'Bad Request',
+                    details: {
+                        storageError: 'Access denied',
+                        filename: 'document.pdf',
+                        bucket: 'training-bucket'
+                    }
+                }
+            }
+        },
         schema: {
             type: 'object',
             properties: {
                 statusCode: { type: 'number', example: 400 },
                 message: {
-                    type: 'string',
-                    example: 'File size exceeds 50MB limit',
+                    oneOf: [
+                        { 
+                            type: 'string',
+                            example: 'File size exceeds 100MB limit. Your file is 120MB'
+                        },
+                        {
+                            type: 'array',
+                            items: { type: 'string' },
+                            example: ['altText must not exceed 255 characters']
+                        }
+                    ]
                 },
                 error: { type: 'string', example: 'Bad Request' },
+                details: {
+                    type: 'object',
+                    description: 'Additional error context for debugging',
+                    example: {
+                        mimeType: 'application/unknown',
+                        fileExtension: '.xyz',
+                        validationMethod: 'both-failed'
+                    },
+                    additionalProperties: true
+                }
             },
         },
     })
@@ -418,7 +741,7 @@ export class MediaManagerController {
                         type: 'string',
                         format: 'binary',
                     },
-                    description: 'Files to upload (max 10 files, 50MB each)',
+                    description: 'Files to upload (max 10 files, 100MB each)',
                     maxItems: 10,
                 },
                 commonAltText: {
