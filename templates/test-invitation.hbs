@@ -5,251 +5,581 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test Invitation - {{testTitle}}</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
             max-width: 600px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
             background-color: #ffffff;
-            padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        
         .header {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            padding: 40px 20px;
             text-align: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #6c5ce7;
-        }
-        .logo {
-            color: #6c5ce7;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .invitation-badge {
-            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
             color: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            margin: 20px 0;
         }
-        .invitation-title {
-            font-size: 22px;
-            font-weight: bold;
-            margin-bottom: 10px;
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
         }
-        .invitation-subtitle {
+        
+        .header p {
             font-size: 16px;
             opacity: 0.9;
         }
-        .test-info {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 6px;
-            margin: 20px 0;
-            border-left: 4px solid #6c5ce7;
+        
+        .content {
+            padding: 40px 30px;
         }
-        .test-title {
-            color: #6c5ce7;
+        
+        .greeting {
             font-size: 20px;
-            font-weight: bold;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+
+        .inviter-info {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #f59e0b;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .inviter-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin-bottom: 15px;
+            border: 3px solid #f59e0b;
+            object-fit: cover;
+        }
+        
+        .inviter-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: #92400e;
+            margin-bottom: 10px;
+        }
+        
+        .invitation-message {
+            font-size: 16px;
+            color: #78350f;
+            font-style: italic;
+            line-height: 1.6;
+        }
+
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+        }
+
+        .test-info {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #6366f1;
+        }
+        
+        .test-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e40af;
             margin-bottom: 15px;
         }
+        
+        .test-details {
+            display: grid;
+            gap: 15px;
+        }
+        
         .detail-item {
-            margin: 8px 0;
             display: flex;
-            justify-content: space-between;
-            padding: 5px 0;
+            align-items: center;
+            font-size: 16px;
         }
+        
         .detail-label {
-            font-weight: bold;
-            color: #555;
+            font-weight: 600;
+            color: #374151;
+            width: 140px;
+            flex-shrink: 0;
         }
+        
         .detail-value {
-            color: #333;
+            color: #4b5563;
+            font-weight: 500;
         }
-        .message-box {
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "📧";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .custom-message {
             background-color: #e8f4fd;
             border: 1px solid #bee5eb;
             border-left: 4px solid #17a2b8;
-            padding: 15px;
-            border-radius: 5px;
+            padding: 20px;
+            border-radius: 8px;
             margin: 20px 0;
         }
-        .message-title {
+        
+        .custom-message h4 {
             font-weight: bold;
             color: #0c5460;
-            margin-bottom: 5px;
+            margin-bottom: 10px;
         }
-        .action-buttons {
-            text-align: center;
-            margin: 30px 0;
-        }
-        .btn {
-            display: inline-block;
-            padding: 15px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 16px;
-            margin: 10px;
-            text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .btn-accept {
-            background-color: #28a745;
-            color: white;
-        }
-        .btn-accept:hover {
-            background-color: #218838;
-        }
-        .btn-decline {
-            background-color: #dc3545;
-            color: white;
-        }
-        .btn-decline:hover {
-            background-color: #c82333;
-        }
-        .btn-info {
-            background-color: #6c5ce7;
-            color: white;
-        }
-        .btn-info:hover {
-            background-color: #5a4fcf;
-        }
+
         .expiry-warning {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-left: 4px solid #ffc107;
+            background-color: #fef3c7;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 8px;
             margin: 20px 0;
-        }
-        .time-info {
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            border-left: 4px solid #17a2b8;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
+            border-left: 4px solid #f59e0b;
             text-align: center;
+        }
+        
+        .expiry-warning p {
+            color: #92400e;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 8px;
+            transition: transform 0.2s ease;
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .cta-button.decline {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+        }
+
+        .cta-button.info {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            box-shadow: 0 4px 6px rgba(99, 102, 241, 0.3);
+        }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+
+        .benefits {
+            background-color: #f0f9ff;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #0ea5e9;
+        }
+        
+        .benefits h4 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0c4a6e;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .benefits ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .benefits li {
+            padding: 8px 0;
+            color: #0f172a;
+            position: relative;
+            padding-left: 25px;
+        }
+        
+        .benefits li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
             color: #666;
             font-size: 14px;
         }
-        .inviter-info {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 15px 0;
-            border-left: 3px solid #6c5ce7;
+        
+        .footer p {
+            margin: 5px 0;
+        }
+        
+        .footer a {
+            color: #6366f1;
+            text-decoration: none;
+        }
+
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .test-info {
+                padding: 20px;
+            }
+            
+            .test-title {
+                font-size: 20px;
+            }
+            
+            .detail-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            
+            .detail-label {
+                width: auto;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">{{companyName}}</div>
             <h1>📧 Test Invitation</h1>
+            <p>You have been invited to take an assessment</p>
         </div>
-
-        <div class="invitation-badge">
-            <div class="invitation-title">You're Invited!</div>
-            <div class="invitation-subtitle">Complete a test assessment</div>
-        </div>
-
-        <p>Hello {{userFirstName}},</p>
         
-        <p>You have been invited to take a test assessment. Please review the details below and respond to this invitation.</p>
-
-        <div class="inviter-info">
-            <strong>Invited by:</strong> {{inviterName}}
-        </div>
-
-        {{#if hasCustomMessage}}
-        <div class="message-box">
-            <div class="message-title">Personal Message:</div>
-            <p>{{customMessage}}</p>
-        </div>
-        {{/if}}
-
-        <div class="test-info">
-            <div class="test-title">{{testTitle}}</div>
-            
-            <div class="detail-item">
-                <span class="detail-label">Course:</span>
-                <span class="detail-value">{{courseTitle}}</span>
+        <div class="content">
+            <div class="greeting">
+                Hello{{#if recipientName}} {{recipientName}}{{/if}},
             </div>
-            <div class="detail-item">
-                <span class="detail-label">Test Type:</span>
-                <span class="detail-value">{{testType}}</span>
+
+            <div class="inviter-info">
+                {{#if inviterAvatar}}
+                <img src="{{inviterAvatar.url}}" alt="{{inviterName}}" class="inviter-avatar">
+                {{/if}}
+                <div class="inviter-name">{{inviterName}}</div>
+                <div class="invitation-message">
+                    has personally invited you to take a test assessment. They believe this will be a valuable opportunity for your professional development and skill validation.
+                </div>
             </div>
-            {{#if durationMinutes}}
-            <div class="detail-item">
-                <span class="detail-label">Time Limit:</span>
-                <span class="detail-value">{{durationMinutes}} minutes</span>
+
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div style="font-size: 14px; color: #6b7280;">
+                    <a href="{{organizationWebsite}}" style="color: #6366f1; text-decoration: none;">{{organizationWebsite}}</a>
+                </div>
+                {{/if}}
             </div>
             {{/if}}
-            {{#if maxAttempts}}
-            <div class="detail-item">
-                <span class="detail-label">Attempts Allowed:</span>
-                <span class="detail-value">{{maxAttempts}}</span>
+
+            <div class="account-info">
+                <h3>Invitation Details</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Your Email</div>
+                    <div class="account-detail-value">{{recipientEmail}}</div>
+                </div>
+                <div class="account-detail">
+                    <div class="account-detail-label">Invited By</div>
+                    <div class="account-detail-value">{{inviterName}} ({{inviterEmail}})</div>
+                </div>
+                {{#if hasExpiry}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Invitation Expires</div>
+                    <div class="account-detail-value">{{formattedExpiryDate}}</div>
+                </div>
+                {{/if}}
+            </div>
+
+            {{#if hasCustomMessage}}
+            <div class="custom-message">
+                <h4>📝 Personal Message from {{inviterName}}:</h4>
+                <p>{{customMessage}}</p>
             </div>
             {{/if}}
+
+            <div class="test-info">
+                <div class="test-title">{{testTitle}}</div>
+                
+                <div class="test-details">
+                    {{#if courseTitle}}
+                    <div class="detail-item">
+                        <span class="detail-label">📚 Course:</span>
+                        <span class="detail-value">{{courseTitle}}</span>
+                    </div>
+                    {{/if}}
+                    {{#if testType}}
+                    <div class="detail-item">
+                        <span class="detail-label">📋 Test Type:</span>
+                        <span class="detail-value">{{testType}}</span>
+                    </div>
+                    {{/if}}
+                    {{#if durationMinutes}}
+                    <div class="detail-item">
+                        <span class="detail-label">⏱️ Time Limit:</span>
+                        <span class="detail-value">{{durationMinutes}} minutes</span>
+                    </div>
+                    {{/if}}
+                    {{#if maxAttempts}}
+                    <div class="detail-item">
+                        <span class="detail-label">🎯 Attempts Allowed:</span>
+                        <span class="detail-value">{{maxAttempts}}</span>
+                    </div>
+                    {{/if}}
+                    {{#if totalQuestions}}
+                    <div class="detail-item">
+                        <span class="detail-label">📝 Total Questions:</span>
+                        <span class="detail-value">{{totalQuestions}}</span>
+                    </div>
+                    {{/if}}
+                    {{#if passingScore}}
+                    <div class="detail-item">
+                        <span class="detail-label">🏆 Passing Score:</span>
+                        <span class="detail-value">{{passingScore}}%</span>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+
+            {{#if hasExpiry}}
+            <div class="expiry-warning">
+                <p>⏰ This invitation expires on {{formattedExpiryDate}}. Please respond before this date to secure your opportunity.</p>
+            </div>
+            {{/if}}
+
+            <div class="benefits">
+                <h4>🚀 Why Take This Assessment?</h4>
+                <ul>
+                    <li>Validate your knowledge and skills in {{testType}}</li>
+                    <li>Receive immediate feedback on your performance</li>
+                    <li>Track your progress and identify areas for improvement</li>
+                    <li>Earn recognition for your achievements</li>
+                    <li>Advance your professional development journey</li>
+                </ul>
+            </div>
+
+            <div class="message">
+                <strong>Ready to showcase your knowledge?</strong> {{inviterName}} believes in your potential and wants to see you succeed. This assessment is designed to be fair, comprehensive, and valuable for your professional growth.
+            </div>
+
+            <div class="cta-section">
+                <a href="{{acceptInvitationUrl}}" class="cta-button">Accept Invitation & Start Test</a>
+                <a href="{{declineInvitationUrl}}" class="cta-button decline">Decline Invitation</a>
+            </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{acceptInvitationUrl}}" class="quick-link-button primary">Accept Test</a>
+                    <a href="{{testUrl}}" class="quick-link-button info">View Details</a>
+                    <a href="{{dashboardUrl}}" class="quick-link-button">Dashboard</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Get Support</a>
+                </div>
+            </div>
+
+            <div class="message">
+                <strong>What happens next?</strong>
+            </div>
+
+            <div class="benefits">
+                <h4>📋 Next Steps</h4>
+                <ul>
+                    <li><strong>Accept:</strong> Click "Accept Invitation" to begin the assessment</li>
+                    <li><strong>Prepare:</strong> Ensure you have {{durationMinutes}} minutes of uninterrupted time</li>
+                    <li><strong>Complete:</strong> Answer all questions to the best of your ability</li>
+                    <li><strong>Review:</strong> Receive instant results and feedback</li>
+                    <li><strong>Grow:</strong> Use insights to continue your learning journey</li>
+                </ul>
+            </div>
+
+            <div class="message">
+                Questions about the assessment? Feel free to reach out to {{inviterName}} or our support team. We're here to ensure you have a great testing experience! 🌟
+            </div>
         </div>
-
-        {{#if hasExpiry}}
-        <div class="expiry-warning">
-            <p><strong>⏰ Important:</strong> This invitation expires on {{formattedExpiryDate}}. Please respond before this date.</p>
-        </div>
-        {{/if}}
-
-        {{#if hasTimeLimit}}
-        <div class="time-info">
-            <p><strong>📝 Test Duration:</strong> Once you start the test, you'll have {{durationMinutes}} minutes to complete it. Make sure you have enough uninterrupted time before beginning.</p>
-        </div>
-        {{/if}}
-
-        <div class="action-buttons">
-            <a href="{{acceptInvitationUrl}}" class="btn btn-accept">✅ Accept Invitation</a>
-            <a href="{{declineInvitationUrl}}" class="btn btn-decline">❌ Decline Invitation</a>
-        </div>
-
-        <p><strong>What happens next?</strong></p>
-        <ul>
-            <li><strong>If you accept:</strong> You'll be able to take the test immediately or at your convenience</li>
-            <li><strong>If you decline:</strong> The invitation will be marked as declined and you won't receive further reminders</li>
-            <li><strong>Need more info?</strong> Click the button below to view detailed test information</li>
-        </ul>
-
-        <div style="text-align: center; margin: 20px 0;">
-            <a href="{{testUrl}}" class="btn btn-info">View Test Details</a>
-        </div>
-
-        <p><strong>Questions or need help?</strong> You can:</p>
-        <ul>
-            <li>Contact {{inviterName}} who sent this invitation</li>
-            <li>Visit your <a href="{{dashboardUrl}}">dashboard</a> to manage all your invitations</li>
-            <li>Reach out to our support team for technical assistance</li>
-        </ul>
-
+        
         <div class="footer">
-            <p>This invitation was sent to {{recipientEmail}} by {{inviterName}}</p>
-            <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>© {{companyName}} - All rights reserved</p>
-            <p><small>Invitation ID: {{invitationId}}</small></p>
+            <p>This invitation was sent to {{recipientEmail}} by {{inviterName}} ({{inviterEmail}}){{#if organizationName}} from {{organizationName}}{{/if}}</p>
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>{{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} - Empowering Learning Through Assessment</p>
+            {{#if invitationId}}<p><small>Invitation ID: {{invitationId}}</small></p>{{/if}}
         </div>
     </div>
 </body>

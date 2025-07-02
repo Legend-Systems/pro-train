@@ -22,9 +22,9 @@
             max-width: 600px;
             margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
         
         .header {
@@ -32,17 +32,61 @@
             padding: 40px 20px;
             text-align: center;
             color: white;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+            opacity: 0.5;
+        }
+        
+        .header-content {
+            position: relative;
+            z-index: 1;
         }
         
         .header h1 {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
             margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .header p {
-            font-size: 16px;
-            opacity: 0.9;
+            font-size: 18px;
+            opacity: 0.95;
+            font-weight: 500;
+        }
+        
+        .results-celebration {
+            text-align: center;
+            padding: 40px 30px;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        }
+        
+        .results-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            display: block;
+        }
+        
+        .results-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #065f46;
+            margin-bottom: 15px;
+        }
+        
+        .results-message {
+            font-size: 18px;
+            color: #047857;
+            font-weight: 500;
         }
         
         .content {
@@ -56,7 +100,42 @@
             margin-bottom: 20px;
         }
         
-        .results-card {
+        .organization-section {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .org-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        
+        .org-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+        
+        .org-website {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        .test-summary {
             background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
             padding: 30px;
             border-radius: 12px;
@@ -72,9 +151,42 @@
             text-align: center;
         }
         
+        .test-details {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #374151;
+            font-size: 16px;
+        }
+        
+        .detail-value {
+            color: #065f46;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
         .score-display {
             text-align: center;
-            margin: 20px 0;
+            margin: 30px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+            border-radius: 12px;
+            border: 2px solid #d1fae5;
         }
         
         .score-circle {
@@ -86,8 +198,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: row;
-            margin: 0 auto;
+            margin: 0 auto 15px;
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+        }
+        
+        .score-text {
             text-align: center;
         }
         
@@ -95,14 +210,19 @@
             font-size: 36px;
             font-weight: 700;
             line-height: 1;
-            margin: 0;
         }
         
         .score-label {
             font-size: 12px;
             opacity: 0.9;
-            line-height: 1;
-            margin: 0;
+            font-weight: 500;
+        }
+        
+        .score-description {
+            font-size: 18px;
+            color: #065f46;
+            font-weight: 600;
+            margin-top: 10px;
         }
         
         .score-details {
@@ -133,16 +253,18 @@
         }
         
         .feedback-section {
-            background-color: #f8fafc;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #3b82f6;
         }
         
         .feedback-title {
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 10px;
+            color: #1e40af;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 15px;
         }
         
         .performance-badge {
@@ -170,7 +292,7 @@
         
         .cta-section {
             text-align: center;
-            margin: 30px 0;
+            margin: 40px 0;
         }
         
         .cta-button {
@@ -182,11 +304,66 @@
             border-radius: 8px;
             font-weight: 600;
             font-size: 16px;
-            transition: transform 0.2s ease;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
         
         .cta-button:hover {
             transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+        }
+        
+        .next-steps {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .next-steps h4 {
+            color: #1e40af;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+        
+        .next-steps ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .next-steps li {
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+            color: #1f2937;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        
+        .next-steps li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .congratulations {
+            background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            text-align: center;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .congratulations p {
+            color: #92400e;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
         }
         
         .message {
@@ -197,26 +374,83 @@
         }
         
         .footer {
-            background-color: #f8fafc;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
             padding: 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
         }
         
-        .footer p {
-            color: #6b7280;
-            font-size: 14px;
+        .footer-logo {
+            margin-bottom: 15px;
+        }
+        
+        .footer-company {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
             margin-bottom: 10px;
         }
         
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
         .footer a {
-            color: #10b981;
+            color: #3b82f6;
             text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .footer-links {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #d1d5db;
+        }
+        
+        .footer-links a {
+            margin: 0 10px;
+            font-size: 13px;
         }
         
         @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 8px;
+            }
+            
             .content {
                 padding: 30px 20px;
+            }
+            
+            .results-celebration {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 28px;
+            }
+            
+            .results-title {
+                font-size: 24px;
+            }
+            
+            .results-icon {
+                font-size: 48px;
+            }
+            
+            .test-summary {
+                padding: 20px;
             }
             
             .score-details {
@@ -237,8 +471,16 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Test Results</h1>
-            <p>Your performance summary</p>
+            <div class="header-content">
+                <h1>📊 Test Results</h1>
+                <p>Your performance summary</p>
+            </div>
+        </div>
+        
+        <div class="results-celebration">
+            <div class="results-icon">🎯</div>
+            <div class="results-title">Results Ready!</div>
+            <div class="results-message">Your dedication has paid off</div>
         </div>
         
         <div class="content">
@@ -250,42 +492,108 @@
                 🎉 The moment you've been waiting for is here! Your test results reveal not just what you scored, but the incredible progress you've made. Every correct answer represents knowledge gained, every challenge overcome represents growth achieved. This is more than a score - it's proof of your dedication and capability.
             </div>
             
-            <div class="results-card">
+            {{#if organizationName}}
+            <div class="organization-section">
+                <div class="org-logo">{{organizationName.[0]}}</div>
+                <div class="org-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div class="org-website">{{organizationWebsite}}</div>
+                {{/if}}
+            </div>
+            {{/if}}
+            
+            <div class="test-summary">
                 <div class="test-title">{{testTitle}}</div>
-        
-                <div class="score-details">
-                    <div class="score-item">
-                        <div class="score-item-value">{{correctAnswers}}/{{totalQuestions}}</div>
-                        <div class="score-item-label">Correct Answers</div>
+                
+                <div class="test-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Score</div>
+                        <div class="detail-value">{{percentage}}%</div>
                     </div>
-                    <div class="score-item">
-                        <div class="score-item-value">{{completionTime}}</div>
-                        <div class="score-item-label">Completion Time</div>
+                    <div class="detail-item">
+                        <div class="detail-label">Correct Answers</div>
+                        <div class="detail-value">{{correctAnswers}}/{{totalQuestions}}</div>
                     </div>
+                    {{#if completionTime}}
+                    <div class="detail-item">
+                        <div class="detail-label">Completion Time</div>
+                        <div class="detail-value">{{completionTime}}</div>
+                    </div>
+                    {{/if}}
+                    {{#if passingScore}}
+                    <div class="detail-item">
+                        <div class="detail-label">Passing Score</div>
+                        <div class="detail-value">{{passingScore}}%</div>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+            
+            <div class="score-display">
+                <div class="score-circle">
+                    <div class="score-text">
+                        <div class="score-percentage">{{percentage}}%</div>
+                        <div class="score-label">SCORE</div>
+                    </div>
+                </div>
+                <div class="score-description">
+                    {{#ifCond percentage ">=" 90}}
+                    Exceptional Performance
+                    {{else}}
+                        {{#ifCond percentage ">=" 80}}
+                        Outstanding Achievement
+                        {{else}}
+                            {{#ifCond percentage ">=" 70}}
+                            Great Performance
+                            {{else}}
+                                {{#ifCond percentage ">=" 60}}
+                                Good Progress
+                                {{else}}
+                                Keep Learning
+                                {{/ifCond}}
+                            {{/ifCond}}
+                        {{/ifCond}}
+                    {{/ifCond}}
                 </div>
             </div>
             
             {{#if feedback}}
             <div class="feedback-section">
-                <div class="feedback-title">Instructor Feedback:</div>
+                <div class="feedback-title">📝 Instructor Feedback</div>
                 <p>{{feedback}}</p>
             </div>
             {{/if}}
             
-            <div class="cta-section">
-                <a href="{{resultsUrl}}" class="cta-button">View Detailed Results</a>
-            </div>
-            
             <div class="message">
-                {{#ifCond this.percentage ">=" 80}}
+                {{#ifCond percentage ">=" 80}}
                 🌟 Outstanding achievement! You've not just learned the material - you've mastered it. This score reflects your dedication, focus, and natural ability to absorb and apply knowledge. You're setting a fantastic example for other learners and proving that excellence is within reach when you commit to growth.
                 {{else}}
-                  {{#ifCond this.percentage ">=" 60}}
+                  {{#ifCond percentage ">=" 60}}
                   👏 Solid performance! You've grasped the core concepts and shown real understanding. The areas where you can improve aren't weaknesses - they're your next opportunities for growth. With your foundation this strong, focusing on those specific areas will take you to the next level quickly.
                   {{else}}
                   💪 Every expert was once a beginner, and every master was once a disaster! Your score shows you're in the learning process, which is exactly where growth happens. This isn't about where you are - it's about where you're going. Use this feedback as your roadmap, and remember that persistence always pays off.
                   {{/ifCond}}
                 {{/ifCond}}
+            </div>
+            
+            {{#if resultsUrl}}
+            <div class="cta-section">
+                <a href="{{resultsUrl}}" class="cta-button">View Detailed Results</a>
+            </div>
+            {{/if}}
+            
+            <div class="next-steps">
+                <h4>What's Next?</h4>
+                <ul>
+                    <li>Review your detailed results and identify areas for improvement</li>
+                    <li>Practice with additional resources and materials</li>
+                    <li>Continue your learning journey with related courses</li>
+                    <li>Share your achievement with others</li>
+                </ul>
+            </div>
+            
+            <div class="congratulations">
+                <p>🎊 Congratulations on completing your test! Your commitment to learning is truly inspiring.</p>
             </div>
             
             <div class="message">
@@ -294,11 +602,14 @@
         </div>
         
         <div class="footer">
+            {{#if companyName}}
+            <div class="footer-company">{{companyName}}</div>
+            {{/if}}
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>
-                {{companyName}} | 
+            <div class="footer-links">
+                {{#if companyUrl}}<a href="{{companyUrl}}">Visit Our Website</a>{{/if}}
                 {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
-            </p>
+            </div>
         </div>
     </div>
 </body>

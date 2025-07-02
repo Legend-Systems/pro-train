@@ -46,6 +46,66 @@
             color: #555;
             margin-bottom: 30px;
         }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "🔐";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+        
+        .password-instructions {
+            background-color: #fef3c7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .password-instructions p {
+            color: #92400e;
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
         .cta-section {
             text-align: center;
             margin: 40px 0;
@@ -112,6 +172,68 @@
             margin: 0;
             font-size: 14px;
         }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .quick-link-button.info {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        
         .footer {
             background-color: #2c3e50;
             color: #bdc3c7;
@@ -140,6 +262,11 @@
             .header, .content, .footer {
                 padding: 20px;
             }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+            
             .cta-button {
                 padding: 14px 24px;
                 font-size: 15px;
@@ -151,6 +278,7 @@
     <div class="container">
         <div class="header">
             <h1>🎓 Your Learning Journey Awaits</h1>
+            <p>Ready to continue where you left off?</p>
         </div>
         
         <div class="content">
@@ -164,6 +292,17 @@
                 <p>Your account has been set up and is ready to use. Whether you're looking to enhance your skills, prepare for assessments, or advance your learning goals, our platform is designed to support your journey every step of the way.</p>
                 
                 <p>Don't let this valuable opportunity pass by - your learning awaits!</p>
+            </div>
+
+            <div class="account-info">
+                <h3>Your Account Information</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Sign-in Email</div>
+                    <div class="account-detail-value">{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</div>
+                </div>
+                <div class="password-instructions">
+                    <p><strong>🔑 Sign-in Reminder:</strong> You can sign in using your email address ending in <strong>{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</strong> and your existing password. If you've forgotten your password, use the "Forgot Password" link on the login page or contact your HR department or our support team for a reset.</p>
+                </div>
             </div>
 
             <div class="features">
@@ -198,15 +337,25 @@
                 <p>We're excited to see what you'll achieve!</p>
             </div>
 
-            <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e9ecef;">
-                <p style="font-size: 14px; color: #666; margin: 0;">
-                    <strong>Quick Access Links:</strong><br>
-                    • <a href="{{loginUrl}}" style="color: #667eea;">Login to Platform</a><br>
-                    • <a href="{{coursesUrl}}" style="color: #667eea;">Browse Courses</a><br>
-                    • <a href="{{testsUrl}}" style="color: #667eea;">Take Assessments</a><br>
-                    • <a href="{{leaderboardUrl}}" style="color: #667eea;">View Leaderboard</a><br>
-                    • <a href="mailto:{{supportEmail}}" style="color: #667eea;">Contact Support</a>
-                </p>
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{loginUrl}}" class="quick-link-button primary">Sign In</a>
+                    <a href="{{dashboardUrl}}" class="quick-link-button primary">Dashboard</a>
+                    <a href="{{coursesUrl}}" class="quick-link-button info">Browse Courses</a>
+                    <a href="{{testsUrl}}" class="quick-link-button info">Take Assessments</a>
+                    <a href="{{leaderboardUrl}}" class="quick-link-button info">View Leaderboard</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Contact Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button">Unsubscribe</a>
+                    {{/if}}
+                </div>
             </div>
         </div>
         
@@ -221,8 +370,7 @@
             
             <p style="font-size: 12px; margin-top: 20px;">
                 This message was sent to {{recipientEmail}} by {{organizationName}}.<br>
-                If you no longer wish to receive these updates, you can 
-                <a href="{{unsubscribeUrl}}">unsubscribe here</a>.
+                {{#if unsubscribeUrl}}If you no longer wish to receive these updates, you can <a href="{{unsubscribeUrl}}">unsubscribe here</a>.{{/if}}
             </p>
             
             <p style="font-size: 11px; color: #95a5a6; margin-top: 15px;">

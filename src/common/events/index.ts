@@ -10,7 +10,6 @@ export * from './course-created.event';
 export * from './test-created.event';
 export * from './test-activated.event';
 export * from './test-attempt-started.event';
-export * from './test-completed.event';
 export * from './test-results-ready.event';
 export * from './test-invitation-sent.event';
 export * from './test-invitation-responded.event';

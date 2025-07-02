@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ConfigService } from '@nestjs/config';
+import { OrgService } from '../org/org.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CreateCommunicationDto } from './dto/create-communication.dto';
 import { UpdateCommunicationDto } from './dto/update-communication.dto';
@@ -29,6 +30,7 @@ export class CommunicationsService {
         private readonly emailSMTPService: EmailSMTPService,
         private readonly emailQueueService: EmailQueueService,
         private readonly configService: ConfigService,
+        private readonly orgService: OrgService,
     ) {}
 
     /**
@@ -58,6 +60,75 @@ export class CommunicationsService {
             companyUrl: clientUrl,
             supportEmail,
             unsubscribeUrl: `${clientUrl}/unsubscribe`,
+        };
+    }
+
+    /**
+     * Get organization data for email sender information
+     */
+    private async getOrganizationDataForEmail(
+        organizationId?: string,
+    ): Promise<{
+        organization?: {
+            id: string;
+            name: string;
+            email?: string;
+            logoUrl?: string;
+            website?: string;
+        };
+        sender: {
+            email: string;
+            name: string;
+        };
+    }> {
+        let organizationData: any = undefined;
+        let senderData: any;
+
+        // Load organization data if organizationId is provided
+        if (organizationId) {
+            try {
+                const organization = await this.orgService.findOrganizationById(organizationId);
+                if (organization) {
+                    organizationData = {
+                        id: organization.id,
+                        name: organization.name,
+                        email: organization.email,
+                        logoUrl: organization.logoUrl,
+                        website: organization.website,
+                    };
+
+                    // Set organization as sender if organization email exists
+                    if (organization.email) {
+                        senderData = {
+                            email: organization.email,
+                            name: organization.name,
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load organization data for email:', error);
+            }
+        }
+
+        // Fallback to system sender if no organization sender
+        if (!senderData) {
+            const appName = this.configService.get<string>(
+                'APP_NAME',
+                'trainpro Platform',
+            );
+            const systemEmail = this.configService.get<string>(
+                'EMAIL_FROM_ADDRESS',
+                'noreply@trainpro.com',
+            );
+            senderData = {
+                email: systemEmail,
+                name: appName,
+            };
+        }
+
+        return {
+            organization: organizationData,
+            sender: senderData,
         };
     }
 
@@ -803,6 +874,7 @@ export class CommunicationsService {
         completionTime: string;
         resultsUrl: string;
         feedback?: string;
+        organizationId?: string;
     }): Promise<void> {
         try {
             const baseData = this.getBaseTemplateData(
@@ -810,9 +882,15 @@ export class CommunicationsService {
                 templateData.recipientName,
             );
 
+            // Get organization data for sender information
+            const orgData = await this.getOrganizationDataForEmail(templateData.organizationId);
+
             const fullTemplateData = {
                 ...baseData,
                 ...templateData,
+                organizationName: orgData.organization?.name,
+                organizationLogo: orgData.organization?.logoUrl,
+                organizationWebsite: orgData.organization?.website,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -823,11 +901,8 @@ export class CommunicationsService {
             const communication = this.communicationRepository.create({
                 recipientEmail: templateData.recipientEmail,
                 recipientName: templateData.recipientName,
-                senderEmail: this.configService.get(
-                    'EMAIL_FROM_ADDRESS',
-                    'noreply@trainpro.com',
-                ),
-                senderName: 'trainpro Platform',
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
                 subject: rendered.subject,
                 body: rendered.html || '',
                 plainTextBody: rendered.text,
@@ -888,6 +963,9 @@ export class CommunicationsService {
                 `${userFirstName} ${userLastName}`,
             );
 
+            // Get organization data for sender information
+            const orgData = await this.getOrganizationDataForEmail(organizationId);
+
             const templateData = {
                 ...baseData,
                 invitationId,
@@ -910,25 +988,25 @@ export class CommunicationsService {
                 hasTimeLimit: !!durationMinutes,
                 hasExpiry: !!expiresAt,
                 hasCustomMessage: !!message,
+                organizationName: orgData.organization?.name,
+                organizationLogo: orgData.organization?.logoUrl,
+                organizationWebsite: orgData.organization?.website,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
-                EmailType.TEST_NOTIFICATION,
+                EmailType.TEST_INVITATION,
                 templateData,
             );
 
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${userFirstName} ${userLastName}`,
-                senderEmail: this.configService.get(
-                    'EMAIL_FROM_ADDRESS',
-                    'noreply@trainpro.com',
-                ),
-                senderName: 'TrainPro Platform',
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
                 subject: rendered.subject,
                 body: rendered.html || '',
                 plainTextBody: rendered.text,
-                emailType: EmailType.TEST_NOTIFICATION,
+                emailType: EmailType.TEST_INVITATION,
                 templateUsed: 'test-invitation',
                 status: EmailStatus.PENDING,
                 metadata: {
@@ -981,6 +1059,9 @@ export class CommunicationsService {
                 `${userFirstName} ${userLastName}`,
             );
 
+            // Get organization data for sender information
+            const orgData = await this.getOrganizationDataForEmail(organizationId);
+
             const templateData = {
                 ...baseData,
                 invitationId,
@@ -991,26 +1072,26 @@ export class CommunicationsService {
                 userLastName,
                 responseNotes,
                 hasResponseNotes: !!responseNotes,
+                organizationName: orgData.organization?.name,
+                organizationLogo: orgData.organization?.logoUrl,
+                organizationWebsite: orgData.organization?.website,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
-                EmailType.TEST_NOTIFICATION,
+                EmailType.TEST_ACTIVATED,
                 templateData,
             );
 
             const communication = this.communicationRepository.create({
                 recipientEmail: userEmail,
                 recipientName: `${userFirstName} ${userLastName}`,
-                senderEmail: this.configService.get(
-                    'EMAIL_FROM_ADDRESS',
-                    'noreply@trainpro.com',
-                ),
-                senderName: 'TrainPro Platform',
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
                 subject: rendered.subject,
                 body: rendered.html || '',
                 plainTextBody: rendered.text,
-                emailType: EmailType.TEST_NOTIFICATION,
-                templateUsed: 'test-invitation-accepted',
+                emailType: EmailType.TEST_ACTIVATED,
+                templateUsed: 'test-activated',
                 status: EmailStatus.PENDING,
                 metadata: {
                     invitationId,

@@ -63,6 +63,18 @@
             margin: 25px 0;
             border-left: 4px solid #f59e0b;
             text-align: center;
+            display: flex;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .inviter-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            margin-bottom: 15px;
+            border: 3px solid #f59e0b;
+            object-fit: cover;
         }
         
         .inviter-name {
@@ -77,6 +89,86 @@
             color: #78350f;
             font-style: italic;
             line-height: 1.6;
+        }
+        
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+        }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "🔐";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+        
+        .password-instructions {
+            background-color: #fef3c7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .password-instructions p {
+            color: #92400e;
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
         }
         
         .value-proposition {
@@ -137,6 +229,63 @@
         
         .cta-button:hover {
             transform: translateY(-2px);
+        }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
         }
         
         .company-benefits {
@@ -223,6 +372,10 @@
                 grid-template-columns: 1fr;
             }
             
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+            
             .header {
                 padding: 30px 20px;
             }
@@ -251,6 +404,9 @@
             </div>
             
             <div class="inviter-info">
+                {{#if inviterAvatar}}
+                <img src="{{inviterAvatar.url}}" alt="{{inviterName}}" class="inviter-avatar">
+                {{/if}}
                 <div class="inviter-name">{{inviterName}}</div>
                 <div class="invitation-message">
                     {{#if customMessage}}
@@ -258,6 +414,31 @@
                     {{else}}
                         has personally invited you to join our learning platform because they believe in your potential and want to see you succeed!
                     {{/if}}
+                </div>
+            </div>
+            
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div style="font-size: 14px; color: #6b7280;">
+                    <a href="{{organizationWebsite}}" style="color: #f59e0b; text-decoration: none;">{{organizationWebsite}}</a>
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
+
+            <div class="account-info">
+                <h3>Your Account Information</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Sign-in Email</div>
+                    <div class="account-detail-value">{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</div>
+                </div>
+                <div class="password-instructions">
+                    <p><strong>🔑 Password Setup:</strong> After accepting this invitation, you'll set up your secure password during the account activation process. If you experience any issues or forget your password later, simply contact your HR department or our support team for a quick password reset.</p>
                 </div>
             </div>
             
@@ -310,6 +491,23 @@
             <div class="urgency-note">
                 <p>⏰ This invitation expires in {{expiryTime}} - don't miss out on this opportunity!</p>
             </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{invitationUrl}}" class="quick-link-button primary">Accept Invitation</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Get Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button">Unsubscribe</a>
+                    {{/if}}
+                </div>
+            </div>
             
             <div class="message">
                 Ready to unlock your potential? {{inviterName}} is excited to see what you'll accomplish, and we're here to support every step of your journey. Your success is our success! 🌟
@@ -321,9 +519,9 @@
         </div>
         
         <div class="footer">
-            <p>This invitation was sent by {{inviterName}} ({{inviterEmail}})</p>
+            <p>This invitation was sent by {{inviterName}} ({{inviterEmail}}){{#if organizationName}} from {{organizationName}}{{/if}}</p>
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>{{companyName}} - Empowering Learning, Driving Success</p>
+            <p>{{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} - Empowering Learning, Driving Success</p>
         </div>
     </div>
 </body>

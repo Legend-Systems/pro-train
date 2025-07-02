@@ -62,6 +62,65 @@
             margin-bottom: 30px;
             line-height: 1.7;
         }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "🔐";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+        
+        .password-instructions {
+            background-color: #ecfdf5;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #10b981;
+        }
+        
+        .password-instructions p {
+            color: #047857;
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
         
         .verification-notice {
             background-color: #ecfdf5;
@@ -120,6 +179,67 @@
             margin: 0;
             font-weight: 600;
         }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .quick-link-button.info {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
         
         .footer {
             background-color: #f8fafc;
@@ -142,6 +262,10 @@
         @media (max-width: 600px) {
             .content {
                 padding: 30px 20px;
+            }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
             }
             
             .header {
@@ -178,6 +302,17 @@
             <div class="message">
                 Welcome to {{companyName}}! 🎉 You're just one click away from accessing your new account. To ensure the security of your account and enable all features, please verify your email address by clicking the button below.
             </div>
+
+            <div class="account-info">
+                <h3>Your Account Setup</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Email Address</div>
+                    <div class="account-detail-value">{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</div>
+                </div>
+                <div class="password-instructions">
+                    <p><strong>🔑 Next Steps:</strong> After verifying your email, you'll be able to sign in using your email address ending in <strong>{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</strong> and the password you created during registration. If you need to reset your password later, contact your HR department or our support team.</p>
+                </div>
+            </div>
             
             <div class="verification-notice">
                 <p><strong>Why verify?</strong> Email verification helps us keep your account secure and ensures you receive important updates about your learning progress.</p>
@@ -202,6 +337,24 @@
             <div class="expiry-warning">
                 <p>⏰ This verification link expires in {{expiryTime}}. If it expires, you can request a new one from the login page.</p>
             </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{verificationUrl}}" class="quick-link-button primary">Verify Email</a>
+                    <a href="{{loginUrl}}" class="quick-link-button info">Sign In Page</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Get Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button">Unsubscribe</a>
+                    {{/if}}
+                </div>
+            </div>
             
             <div class="message">
                 <strong>Didn't create an account?</strong> If you received this email by mistake, you can safely ignore it. No account will be created without email verification.
@@ -215,7 +368,7 @@
         <div class="footer">
             <p>This email was sent from {{companyName}}</p>
             <p>If you have questions, contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>
+            <p>{{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications{{/if}}</p>
         </div>
     </div>
 </body>

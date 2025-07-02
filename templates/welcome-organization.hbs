@@ -6,13 +6,23 @@
     <title>Welcome to {{companyName}}</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
-            max-width: 600px;
-            margin: 0 auto;
+            background-color: #f8fafc;
+            margin: 0;
             padding: 20px;
         }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
         .header {
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: white;
@@ -43,11 +53,12 @@
             position: relative;
             z-index: 1;
         }
+        
         .content {
-            background-color: #f8f9fa;
-            padding: 30px;
-            border-radius: 0 0 8px 8px;
+            background-color: #ffffff;
+            padding: 40px 30px;
         }
+        
         .button {
             display: inline-block;
             background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
@@ -64,57 +75,177 @@
         .button:hover {
             transform: translateY(-2px);
         }
-        .footer {
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
             text-align: center;
-            margin-top: 30px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .quick-link-button.info {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        }
+        
+        .footer {
+            background-color: #f8fafc;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
             color: #666;
             font-size: 14px;
+        }
+        
+        .footer a {
+            color: #3b82f6;
+            text-decoration: none;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .button {
+                padding: 14px 28px;
+                font-size: 15px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Welcome to {{companyName}}!</h1>
-    </div>
-    
-    <div class="content">
-        <h2>Welcome to the future of learning, {{organizationName}}! 🎉</h2>
-        
-        <p>This is a pivotal moment for your organization! You've just unlocked a platform that will transform how your team learns, grows, and succeeds. We're not just excited to have you aboard - we're honored to partner with you in creating a culture of continuous learning and excellence.</p>
-        
-        <p><strong>Why this matters for {{organizationName}}:</strong> In today's rapidly evolving world, organizations that invest in their people's growth don't just survive - they thrive. You've just given your team access to tools that will accelerate their development, boost engagement, and drive measurable results for your business.</p>
-        
-        <h3>Your roadmap to organizational learning excellence:</h3>
-        <ul>
-            <li>Explore your comprehensive organization dashboard and analytics</li>
-            <li>Establish your first branch to start organizing your teams</li>
-            <li>Invite your team members to join this learning revolution</li>
-            <li>Design your first assessment and watch engagement soar</li>
-            <li>Discover how data-driven insights will guide your training strategy</li>
-            <li>Experience the ROI of investing in your people's potential</li>
-        </ul>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{dashboardUrl}}" class="button">Access Your Dashboard</a>
+    <div class="container">
+        <div class="header">
+            <h1>Welcome to {{companyName}}!</h1>
+            <p>Your organization's learning journey begins now</p>
         </div>
         
-        {{#if logoUrl}}
-        <p><strong>Organization Logo:</strong> <a href="{{logoUrl}}">View Logo</a></p>
-        {{/if}}
+        <div class="content">
+            <h2>Welcome to the future of learning, {{organizationName}}! 🎉</h2>
+            
+            <p>This is a pivotal moment for your organization! You've just unlocked a platform that will transform how your team learns, grows, and succeeds. We're not just excited to have you aboard - we're honored to partner with you in creating a culture of continuous learning and excellence.</p>
+            
+            <p><strong>Why this matters for {{organizationName}}:</strong> In today's rapidly evolving world, organizations that invest in their people's growth don't just survive - they thrive. You've just given your team access to tools that will accelerate their development, boost engagement, and drive measurable results for your business.</p>
+            
+            <h3>Your roadmap to organizational learning excellence:</h3>
+            <ul>
+                <li>Explore your comprehensive organization dashboard and analytics</li>
+                <li>Establish your first branch to start organizing your teams</li>
+                <li>Invite your team members to join this learning revolution</li>
+                <li>Design your first assessment and watch engagement soar</li>
+                <li>Discover how data-driven insights will guide your training strategy</li>
+                <li>Experience the ROI of investing in your people's potential</li>
+            </ul>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{dashboardUrl}}" class="button">Access Your Dashboard</a>
+            </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{dashboardUrl}}" class="quick-link-button primary">Organization Dashboard</a>
+                    <a href="{{loginUrl}}" class="quick-link-button primary">Sign In</a>
+                    <a href="{{branchUrl}}" class="quick-link-button info">Manage Branches</a>
+                    <a href="{{usersUrl}}" class="quick-link-button info">Invite Users</a>
+                    {{#if website}}
+                    <a href="{{website}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Get Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button">Unsubscribe</a>
+                    {{/if}}
+                </div>
+            </div>
+            
+            {{#if logoUrl}}
+            <p><strong>Organization Logo:</strong> <a href="{{logoUrl}}">View Logo</a></p>
+            {{/if}}
+            
+            {{#if website}}
+            <p><strong>Website:</strong> <a href="{{website}}">{{website}}</a></p>
+            {{/if}}
+            
+            <p>If you need any assistance getting started, please don't hesitate to reach out to our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
+            
+            <p>Best regards,<br>
+            The {{companyName}} Team</p>
+        </div>
         
-        {{#if website}}
-        <p><strong>Website:</strong> <a href="{{website}}">{{website}}</a></p>
-        {{/if}}
-        
-        <p>If you need any assistance getting started, please don't hesitate to reach out to our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>.</p>
-        
-        <p>Best regards,<br>
-        The {{companyName}} Team</p>
-    </div>
-    
-    <div class="footer">
-        <p>This email was sent to {{recipientEmail}}</p>
-        <p>{{companyName}} | <a href="{{companyUrl}}">{{companyUrl}}</a></p>
+        <div class="footer">
+            <p>This email was sent to {{recipientEmail}}</p>
+            <p>{{companyName}} | <a href="{{companyUrl}}">{{companyUrl}}</a></p>
+            <p>{{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications{{/if}}</p>
+        </div>
     </div>
 </body>
 </html> 

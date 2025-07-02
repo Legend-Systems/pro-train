@@ -102,23 +102,30 @@ export class EmailSMTPService {
     async sendEmail(
         options: EmailSendOptions,
         retryCount = 0,
+        senderInfo?: { email: string; name: string },
     ): Promise<EmailSendResult> {
         const startTime = Date.now();
 
         try {
-            const fromEmail =
-                this.configService.get<string>('EMAIL_FROM_ADDRESS') ||
-                this.configService.get<string>('SMTP_FROM') ||
-                this.configService.get<string>('SMTP_USER') ||
-                '';
+            // Use organization sender info if provided, otherwise use default config
+            let fromString: string;
+            if (senderInfo) {
+                fromString = `"${senderInfo.name}" <${senderInfo.email}>`;
+            } else {
+                const fromEmail =
+                    this.configService.get<string>('EMAIL_FROM_ADDRESS') ||
+                    this.configService.get<string>('SMTP_FROM') ||
+                    this.configService.get<string>('SMTP_USER') ||
+                    '';
 
-            const fromName = this.configService.get<string>(
-                'EMAIL_FROM_NAME',
-                'trainpro Platform',
-            );
-            const fromString = fromName
-                ? `"${fromName}" <${fromEmail}>`
-                : fromEmail;
+                const fromName = this.configService.get<string>(
+                    'EMAIL_FROM_NAME',
+                    'trainpro Platform',
+                );
+                fromString = fromName
+                    ? `"${fromName}" <${fromEmail}>`
+                    : fromEmail;
+            }
 
             const mailOptions = {
                 from: fromString,

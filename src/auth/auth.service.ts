@@ -254,6 +254,127 @@ export class AuthService {
         };
     }
 
+    /**
+     * Get complete user data for email templates including avatar and organization details
+     */
+    private async getCompleteUserDataForEmail(user: User): Promise<{
+        user: {
+            id: string;
+            email: string;
+            firstName: string;
+            lastName: string;
+            fullName: string;
+            avatar?: {
+                id: number;
+                originalName?: string;
+                url?: string;
+                thumbnail?: string;
+                medium?: string;
+                original?: string;
+            };
+        };
+        organization?: {
+            id: string;
+            name: string;
+            email?: string;
+            logoUrl?: string;
+            website?: string;
+            whiteLabelingConfig?: any;
+        };
+        branch?: {
+            id: string;
+            name: string;
+            email?: string;
+            address?: string;
+            contactNumber?: string;
+            managerName?: string;
+        };
+        sender?: {
+            email: string;
+            name: string;
+        };
+    }> {
+        const userData = {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            fullName: `${user.firstName} ${user.lastName}`,
+            avatar: this.transformAvatarForResponse(user.avatar),
+        };
+
+        let organizationData: any = undefined;
+        let branchData: any = undefined;
+        let senderData: any = undefined;
+
+        // Load organization data if user has orgId
+        if (user.orgId?.id) {
+            try {
+                const organization = await this.orgService.findOrganizationById(user.orgId.id);
+                if (organization) {
+                    organizationData = {
+                        id: organization.id,
+                        name: organization.name,
+                        email: organization.email,
+                        logoUrl: organization.logoUrl,
+                        website: organization.website,
+                        whiteLabelingConfig: organization.whiteLabelingConfig,
+                    };
+
+                    // Set organization as sender if organization email exists
+                    if (organization.email) {
+                        senderData = {
+                            email: organization.email,
+                            name: organization.name,
+                        };
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load organization data for email:', error);
+            }
+        }
+
+        // Load branch data if user has branchId
+        if (user.branchId?.id) {
+            try {
+                // Use the basic branch data from the user entity
+                branchData = {
+                    id: user.branchId.id,
+                    name: user.branchId.name || 'Branch',
+                    email: user.branchId.email,
+                    address: user.branchId.address,
+                    contactNumber: user.branchId.contactNumber,
+                    managerName: user.branchId.managerName,
+                };
+            } catch (error) {
+                console.error('Failed to load branch data for email:', error);
+            }
+        }
+
+        // Fallback to system sender if no organization sender
+        if (!senderData) {
+            const appName = this.configService.get<string>(
+                'APP_NAME',
+                'trainpro Platform',
+            );
+            const systemEmail = this.configService.get<string>(
+                'SUPPORT_EMAIL',
+                'support@trainpro.com',
+            );
+            senderData = {
+                email: systemEmail,
+                name: appName,
+            };
+        }
+
+        return {
+            user: userData,
+            organization: organizationData,
+            branch: branchData,
+            sender: senderData,
+        };
+    }
+
     async signUp(
         createUserDto: CreateUserDto,
     ): Promise<StandardApiResponse<SignUpResponseDto>> {
@@ -792,9 +913,15 @@ export class AuthService {
                 'trainpro Platform',
             );
 
+            // Get complete user data including avatar and organization details
+            const userData = await this.getCompleteUserDataForEmail(user);
+
             const templateData = {
-                recipientName: `${user.firstName} ${user.lastName}`,
-                recipientEmail: user.email,
+                recipientName: userData.user.fullName,
+                recipientEmail: userData.user.email,
+                firstName: userData.user.firstName,
+                lastName: userData.user.lastName,
+                avatar: userData.user.avatar,
                 loginUrl: `${baseUrl}/login`,
                 dashboardUrl: `${baseUrl}/dashboard`,
                 profileUrl: `${baseUrl}/profile`,
@@ -805,6 +932,12 @@ export class AuthService {
                     'support@trainpro.com',
                 ),
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization data
+                organizationName: userData.organization?.name,
+                organizationLogo: userData.organization?.logoUrl,
+                organizationWebsite: userData.organization?.website,
+                // Branch data
+                branchName: userData.branch?.name,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -824,6 +957,8 @@ export class AuthService {
                 {
                     userId: user.id,
                     templateType: EmailType.WELCOME,
+                    organizationId: userData.organization?.id,
+                    senderInfo: userData.sender, // Store sender info in metadata for now
                 },
             );
         } catch (error) {
@@ -851,9 +986,15 @@ export class AuthService {
             );
             const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
+            // Get complete user data including avatar and organization details
+            const userData = await this.getCompleteUserDataForEmail(user);
+
             const templateData = {
-                recipientName: `${user.firstName} ${user.lastName}`,
-                recipientEmail: user.email,
+                recipientName: userData.user.fullName,
+                recipientEmail: userData.user.email,
+                firstName: userData.user.firstName,
+                lastName: userData.user.lastName,
+                avatar: userData.user.avatar,
                 resetUrl,
                 resetToken: token,
                 expiryTime: '15 minutes',
@@ -864,6 +1005,12 @@ export class AuthService {
                     'support@trainpro.com',
                 ),
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization data
+                organizationName: userData.organization?.name,
+                organizationLogo: userData.organization?.logoUrl,
+                organizationWebsite: userData.organization?.website,
+                // Branch data
+                branchName: userData.branch?.name,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -884,6 +1031,8 @@ export class AuthService {
                     userId: user.id,
                     templateType: EmailType.PASSWORD_RESET,
                     tokenExpiresAt: expiresAt,
+                    organizationId: userData.organization?.id,
+                    senderInfo: userData.sender,
                 },
             );
         } catch (error) {
@@ -911,9 +1060,15 @@ export class AuthService {
             );
             const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
 
+            // Get complete user data including avatar and organization details
+            const userData = await this.getCompleteUserDataForEmail(user);
+
             const templateData = {
-                recipientName: `${user.firstName} ${user.lastName}`,
-                recipientEmail: user.email,
+                recipientName: userData.user.fullName,
+                recipientEmail: userData.user.email,
+                firstName: userData.user.firstName,
+                lastName: userData.user.lastName,
+                avatar: userData.user.avatar,
                 verificationUrl,
                 verificationToken: token,
                 expiryTime: '24 hours',
@@ -924,6 +1079,12 @@ export class AuthService {
                     'support@trainpro.com',
                 ),
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization data
+                organizationName: userData.organization?.name,
+                organizationLogo: userData.organization?.logoUrl,
+                organizationWebsite: userData.organization?.website,
+                // Branch data
+                branchName: userData.branch?.name,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -944,6 +1105,8 @@ export class AuthService {
                     userId: user.id,
                     templateType: EmailType.EMAIL_VERIFICATION,
                     tokenExpiresAt: expiresAt,
+                    organizationId: userData.organization?.id,
+                    senderInfo: userData.sender,
                 },
             );
         } catch (error) {
@@ -1050,9 +1213,15 @@ export class AuthService {
             // Get approximate location from IP (you might want to use a geolocation service)
             const location = ipAddress ? `IP: ${ipAddress}` : 'Unknown location';
 
+            // Get complete user data including avatar and organization details
+            const userData = await this.getCompleteUserDataForEmail(user);
+
             const templateData = {
-                recipientName: `${user.firstName} ${user.lastName}`,
-                recipientEmail: user.email,
+                recipientName: userData.user.fullName,
+                recipientEmail: userData.user.email,
+                firstName: userData.user.firstName,
+                lastName: userData.user.lastName,
+                avatar: userData.user.avatar,
                 loginDateTime: new Date().toLocaleString('en-US', {
                     timeZone: 'UTC',
                     year: 'numeric',
@@ -1076,6 +1245,12 @@ export class AuthService {
                     'support@trainpro.com',
                 ),
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization data
+                organizationName: userData.organization?.name,
+                organizationLogo: userData.organization?.logoUrl,
+                organizationWebsite: userData.organization?.website,
+                // Branch data
+                branchName: userData.branch?.name,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -1100,6 +1275,8 @@ export class AuthService {
                         userAgent,
                         loginTime: new Date(),
                     },
+                    organizationId: userData.organization?.id,
+                    senderInfo: userData.sender,
                 },
             );
         } catch (error) {
@@ -1151,9 +1328,15 @@ export class AuthService {
                 'trainpro Platform',
             );
 
+            // Get complete user data including avatar and organization details
+            const userData = await this.getCompleteUserDataForEmail(user);
+
             const templateData = {
-                recipientName: `${user.firstName} ${user.lastName}`,
-                recipientEmail: user.email,
+                recipientName: userData.user.fullName,
+                recipientEmail: userData.user.email,
+                firstName: userData.user.firstName,
+                lastName: userData.user.lastName,
+                avatar: userData.user.avatar,
                 changeDateTime: new Date().toLocaleString('en-US', {
                     timeZone: 'UTC',
                     year: 'numeric',
@@ -1175,6 +1358,12 @@ export class AuthService {
                 ipAddress,
                 userAgent,
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization data
+                organizationName: userData.organization?.name,
+                organizationLogo: userData.organization?.logoUrl,
+                organizationWebsite: userData.organization?.website,
+                // Branch data
+                branchName: userData.branch?.name,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -1194,6 +1383,8 @@ export class AuthService {
                 {
                     userId: user.id,
                     templateType: EmailType.PASSWORD_CHANGED,
+                    organizationId: userData.organization?.id,
+                    senderInfo: userData.sender,
                 },
             );
         } catch (error) {
@@ -1234,13 +1425,13 @@ export class AuthService {
             // Send re-engagement email to each user
             for (const user of allUsers) {
                 try {
-                    // Use the user's linked organization name dynamically, fallback to default if no org
-                    const organizationName =
-                        user.orgId?.name || 'Your Organization';
+                    // Get complete user data with organization branding
+                    const userData = await this.getCompleteUserDataForEmail(user);
 
                     const templateData = {
-                        recipientName: `${user.firstName} ${user.lastName}`,
-                        recipientEmail: user.email,
+                        recipientName: userData.user.fullName,
+                        recipientEmail: userData.user.email,
+                        recipientAvatar: userData.user.avatar,
                         loginUrl: `${baseUrl}/login`,
                         dashboardUrl: `${baseUrl}/dashboard`,
                         profileUrl: `${baseUrl}/profile`,
@@ -1248,7 +1439,6 @@ export class AuthService {
                         testsUrl: `${baseUrl}/tests`,
                         leaderboardUrl: `${baseUrl}/leaderboard`,
                         companyName: appName,
-                        organizationName: organizationName,
                         companyUrl: baseUrl,
                         supportEmail: this.configService.get<string>(
                             'SUPPORT_EMAIL',
@@ -1256,6 +1446,10 @@ export class AuthService {
                         ),
                         unsubscribeUrl: `${baseUrl}/unsubscribe`,
                         currentYear: new Date().getFullYear(),
+                        // Organization branding
+                        organizationName: userData.organization?.name || 'Your Organization',
+                        organizationLogo: userData.organization?.logoUrl,
+                        organizationWebsite: userData.organization?.website,
                     };
 
                     const rendered =
@@ -1279,7 +1473,8 @@ export class AuthService {
                             templateType: 're-invite',
                             batchOperation: true,
                             campaignType: 'user-reengagement',
-                            organizationId: user.orgId?.id,
+                            organizationId: userData.organization?.id,
+                            senderInfo: userData.sender,
                         },
                     );
 
@@ -1324,6 +1519,9 @@ export class AuthService {
         expiresAt: Date,
     ): Promise<void> {
         try {
+            // Get complete inviter data with organization branding
+            const inviterData = await this.getCompleteUserDataForEmail(inviter);
+            
             const baseUrl = this.configService.get<string>(
                 'CLIENT_URL',
                 'http://localhost:3000',
@@ -1336,13 +1534,14 @@ export class AuthService {
 
             const templateData = {
                 recipientEmail,
-                inviterName: `${inviter.firstName} ${inviter.lastName}`,
-                inviterEmail: inviter.email,
+                inviterName: inviterData.user.fullName,
+                inviterEmail: inviterData.user.email,
+                inviterAvatar: inviterData.user.avatar,
                 invitationUrl,
                 signupUrl: invitationUrl,
                 customMessage:
                     customMessage ||
-                    `You've been invited to join ${appName} by ${inviter.firstName} ${inviter.lastName}.`,
+                    `You've been invited to join ${appName} by ${inviterData.user.fullName}.`,
                 expiryTime: '7 days',
                 loginInstructions:
                     'After signing up, you will receive your login credentials and can access the platform immediately.',
@@ -1353,6 +1552,10 @@ export class AuthService {
                     'support@trainpro.com',
                 ),
                 unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                // Organization branding
+                organizationName: inviterData.organization?.name,
+                organizationLogo: inviterData.organization?.logoUrl,
+                organizationWebsite: inviterData.organization?.website,
             };
 
             // Use invitation template for personalized invitations
@@ -1365,7 +1568,7 @@ export class AuthService {
             await this.emailQueueService.queueEmail(
                 {
                     to: recipientEmail,
-                    subject: `${inviter.firstName} ${inviter.lastName} invited you to join ${appName}`,
+                    subject: `${inviterData.user.fullName} invited you to join ${appName}`,
                     html: rendered.html,
                     text: rendered.text,
                 },
@@ -1375,6 +1578,8 @@ export class AuthService {
                     inviterUserId: inviter.id,
                     templateType: 'invitation',
                     tokenExpiresAt: expiresAt,
+                    organizationId: inviterData.organization?.id,
+                    senderInfo: inviterData.sender,
                 },
             );
         } catch (error) {

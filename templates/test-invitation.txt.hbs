@@ -1,0 +1,74 @@
+🎯 Test Invitation - {{testTitle}}
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}}! 👋
+
+{{#if inviterName}}
+{{inviterName}} has personally invited you to take an important test! 
+{{else}}
+You've been invited to take an important test!
+{{/if}}
+
+{{#if organizationName}}
+📢 From: {{organizationName}}
+{{/if}}
+
+{{#if customMessage}}
+Personal message: "{{customMessage}}"
+{{/if}}
+
+🏆 TEST DETAILS:
+✓ Test: {{testTitle}}
+{{#if testDescription}}
+✓ Description: {{testDescription}}
+{{/if}}
+{{#if timeLimit}}
+✓ Time Limit: {{timeLimit}} minutes
+{{/if}}
+{{#if totalQuestions}}
+✓ Questions: {{totalQuestions}}
+{{/if}}
+{{#if passingScore}}
+✓ Passing Score: {{passingScore}}%
+{{/if}}
+{{#if availableUntil}}
+✓ Available Until: {{availableUntil}}
+{{/if}}
+
+📧 YOUR ACCOUNT INFORMATION:
+✓ Email: {{recipientEmail}}
+{{#if temporaryPassword}}
+✓ Temporary Password: {{temporaryPassword}}
+{{/if}}
+
+🚀 READY TO BEGIN?
+Start your test here: {{testUrl}}
+
+{{#if loginUrl}}
+💡 Login first at: {{loginUrl}}
+{{/if}}
+
+⏰ IMPORTANT REMINDERS:
+{{#if timeLimit}}
+• You have {{timeLimit}} minutes to complete the test
+{{/if}}
+• Make sure you have a stable internet connection
+• Find a quiet place where you won't be interrupted
+• Read each question carefully before answering
+{{#if availableUntil}}
+• This test expires on {{availableUntil}}
+{{/if}}
+
+🤝 NEED HELP?
+We're here to support your success! If you have any questions about accessing the test or technical issues, reach out to our support team at {{supportEmail}}.
+
+Best of luck! We believe in your ability to succeed! 🌟
+
+---
+{{#if inviterName}}
+This invitation was sent by {{inviterName}}{{#if inviterEmail}} ({{inviterEmail}}){{/if}}
+{{/if}}
+{{#if organizationName}}
+Organization: {{organizationName}}
+{{/if}}
+Need assistance? Contact us at {{supportEmail}}
+{{companyName}} - Empowering Learning, Driving Success 

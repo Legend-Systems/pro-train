@@ -6,13 +6,22 @@
     <title>Welcome to {{companyName}}</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
             max-width: 600px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f8fafc;
         }
+        
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
         .header {
             background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
             color: white;
@@ -43,11 +52,12 @@
             position: relative;
             z-index: 1;
         }
+        
         .content {
-            background-color: #f8f9fa;
-            padding: 30px;
-            border-radius: 0 0 8px 8px;
+            background-color: #ffffff;
+            padding: 40px 30px;
         }
+        
         .button {
             display: inline-block;
             background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
@@ -64,79 +74,282 @@
         .button:hover {
             transform: translateY(-2px);
         }
+        
         .footer {
+            background-color: #f8fafc;
+            padding: 30px;
             text-align: center;
-            margin-top: 30px;
+            border-top: 1px solid #e5e7eb;
             color: #666;
             font-size: 14px;
         }
-        .user-info {
-            background-color: #e9ecef;
+        
+        .footer a {
+            color: #06b6d4;
+            text-decoration: none;
+        }
+        
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "🔐";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+        
+        .password-instructions {
+            background-color: #dcfce7;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #16a34a;
+        }
+        
+        .password-instructions p {
+            color: #15803d;
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .user-info {
+            background-color: #f1f5f9;
+            padding: 20px;
+            border-radius: 8px;
             margin: 20px 0;
         }
+        
+        .user-info h3 {
+            color: #1e293b;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .user-info p {
+            margin: 5px 0;
+            color: #475569;
+        }
+        
         .avatar {
             width: 60px;
             height: 60px;
             border-radius: 50%;
             float: right;
             margin-left: 15px;
+            border: 3px solid #06b6d4;
+        }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .quick-link-button.secondary {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+            
+            .button {
+                padding: 14px 28px;
+                font-size: 15px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Welcome to {{companyName}}!</h1>
-    </div>
-    
-    <div class="content">
-        {{#if avatar}}
-        <img src="{{avatar}}" alt="Profile Picture" class="avatar">
-        {{/if}}
-        
-        <h2>Welcome to your learning adventure, {{firstName}}! 🎉</h2>
-        
-        <p>This is such an exciting moment! Your {{companyName}} account is ready, and you're about to embark on a personalized learning journey designed just for you. We're not just another platform - we're your partners in growth, ready to help you unlock skills you didn't even know you had.</p>
-        
-        <div class="user-info">
-            <h3>Your Account Details</h3>
-            <p><strong>Name:</strong> {{firstName}} {{lastName}}</p>
-            <p><strong>Email:</strong> {{recipientEmail}}</p>
-            {{#if organizationName}}
-            <p><strong>Organization:</strong> {{organizationName}}</p>
-            {{/if}}
-            {{#if branchName}}
-            <p><strong>Branch:</strong> {{branchName}}</p>
-            {{/if}}
+    <div class="container">
+        <div class="header">
+            <h1>Welcome to {{companyName}}!</h1>
+            <p>Your learning journey starts now</p>
         </div>
         
-        <h3>Your Learning Superpowers Await</h3>
-        <ul>
-            <li>Tackle engaging tests and quizzes that adapt to your learning style</li>
-            <li>Watch your progress unfold with detailed analytics and achievements</li>
-            <li>Explore a rich library of learning materials curated for your success</li>
-            <li>Customize your experience to match your goals and preferences</li>
-            <li>Connect with fellow learners and expert mentors in your organization</li>
-            <li>Celebrate milestones and track your continuous growth journey</li>
-        </ul>
-        
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{{dashboardUrl}}" class="button">Go to Dashboard</a>
-            <a href="{{profileUrl}}" class="button" style="background-color: #6c757d;">Edit Profile</a>
+        <div class="content">
+            {{#if avatar}}
+            <img src="{{avatar}}" alt="Profile Picture" class="avatar">
+            {{/if}}
+            
+            <h2>Welcome to your learning adventure, {{firstName}}! 🎉</h2>
+            
+            <p>This is such an exciting moment! Your {{companyName}} account is ready, and you're about to embark on a personalized learning journey designed just for you. We're not just another platform - we're your partners in growth, ready to help you unlock skills you didn't even know you had.</p>
+            
+            <div class="account-info">
+                <h3>Your Account Information</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Sign-in Email</div>
+                    <div class="account-detail-value">{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</div>
+                </div>
+                <div class="password-instructions">
+                    <p><strong>🔑 Sign-in Details:</strong> You can sign in using your email address ending in <strong>{{#if recipientEmail}}{{recipientEmail}}{{else}}****@domain.com{{/if}}</strong> and the password you set during account creation. If you forgot your password or need to reset it, simply contact your HR department or our support team for assistance.</p>
+                </div>
+            </div>
+            
+            <div class="user-info">
+                <h3>Your Profile Summary</h3>
+                <p><strong>Name:</strong> {{firstName}} {{lastName}}</p>
+                <p><strong>Email:</strong> {{recipientEmail}}</p>
+                {{#if organizationName}}
+                <p><strong>Organization:</strong> {{organizationName}}</p>
+                {{/if}}
+                {{#if branchName}}
+                <p><strong>Branch:</strong> {{branchName}}</p>
+                {{/if}}
+            </div>
+            
+            <h3>Your Learning Superpowers Await</h3>
+            <ul>
+                <li>Tackle engaging tests and quizzes that adapt to your learning style</li>
+                <li>Watch your progress unfold with detailed analytics and achievements</li>
+                <li>Explore a rich library of learning materials curated for your success</li>
+                <li>Customize your experience to match your goals and preferences</li>
+                <li>Connect with fellow learners and expert mentors in your organization</li>
+                <li>Celebrate milestones and track your continuous growth journey</li>
+            </ul>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{dashboardUrl}}" class="button">Go to Dashboard</a>
+                <a href="{{profileUrl}}" class="button" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">Edit Profile</a>
+            </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{dashboardUrl}}" class="quick-link-button primary">Dashboard</a>
+                    <a href="{{loginUrl}}" class="quick-link-button primary">Sign In</a>
+                    <a href="{{profileUrl}}" class="quick-link-button secondary">Edit Profile</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Get Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button">Unsubscribe</a>
+                    {{/if}}
+                </div>
+            </div>
+            
+            <p>Ready to transform your potential into expertise? <a href="{{loginUrl}}">Log in to your account</a> and discover a learning experience that's both powerful and enjoyable. Every click forward is a step toward the professional you're becoming!</p>
+            
+            <p>Questions? Excitement? Curiosity? We're here for all of it! Our friendly support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> loves helping learners succeed.</p>
+            
+            <p>Here's to your success and growth! 🚀<br>
+            Your Learning Champions at {{companyName}}</p>
         </div>
         
-        <p>Ready to transform your potential into expertise? <a href="{{loginUrl}}">Log in to your account</a> and discover a learning experience that's both powerful and enjoyable. Every click forward is a step toward the professional you're becoming!</p>
-        
-        <p>Questions? Excitement? Curiosity? We're here for all of it! Our friendly support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a> loves helping learners succeed.</p>
-        
-        <p>Here's to your success and growth! 🚀<br>
-        Your Learning Champions at {{companyName}}</p>
-    </div>
-    
-    <div class="footer">
-        <p>This email was sent to {{recipientEmail}}</p>
-        <p>{{companyName}} | <a href="{{companyUrl}}">{{companyUrl}}</a></p>
+        <div class="footer">
+            <p>This email was sent to {{recipientEmail}}</p>
+            <p>{{companyName}} | <a href="{{companyUrl}}">{{companyUrl}}</a></p>
+            <p>{{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications{{/if}}</p>
+        </div>
     </div>
 </body>
 </html> 

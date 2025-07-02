@@ -54,6 +54,40 @@
             font-weight: 600;
             color: #1f2937;
             margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 3px solid #667eea;
+            object-fit: cover;
+        }
+        
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
         }
         
         .message {
@@ -168,8 +202,26 @@
         
         <div class="content">
             <div class="greeting">
-                Welcome to the family{{#if recipientName}}, {{recipientName}}{{/if}}! 🎉
+                {{#if recipientAvatar}}
+                <img src="{{recipientAvatar.url}}" alt="{{recipientName}}" class="user-avatar">
+                {{/if}}
+                <span>Welcome to the family{{#if recipientName}}, {{recipientName}}{{/if}}! 🎉</span>
             </div>
+            
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">Welcome to {{organizationName}}</div>
+                <div style="font-size: 14px; color: #6b7280;">
+                    Powered by {{companyName}}
+                    {{#if organizationWebsite}}
+                    • <a href="{{organizationWebsite}}" style="color: #667eea; text-decoration: none;">{{organizationWebsite}}</a>
+                    {{/if}}
+                </div>
+            </div>
+            {{/if}}
             
             <div class="message">
                 Your learning adventure starts now! We're absolutely thrilled to have you join our community of passionate learners. Your account isn't just created - it's your gateway to unlocking potential you didn't even know you had. Every feature, every course, every interaction has been designed with one goal in mind: <strong>your success</strong>.
@@ -214,7 +266,7 @@
         <div class="footer">
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
             <p>
-                {{companyName}} | 
+                {{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} | 
                 {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
             </p>
         </div>

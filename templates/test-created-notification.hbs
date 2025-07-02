@@ -5,174 +5,454 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>New Test Available - {{testTitle}}</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
+            background-color: #f8fafc;
+        }
+        
+        .container {
             max-width: 600px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
             background-color: #ffffff;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
         }
+        
         .header {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(29, 78, 216, 0.1) 100%);
+            opacity: 0.5;
+        }
+        
+        .header-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header p {
+            font-size: 18px;
+            opacity: 0.95;
+            font-weight: 500;
+        }
+        
+        .content {
+            padding: 40px 30px;
+        }
+        
+        .greeting {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .introduction {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 30px;
+            line-height: 1.7;
+        }
+        
+        .organization-section {
             text-align: center;
             margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #007bff;
-        }
-        .logo {
-            color: #007bff;
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .test-info {
-            background-color: #f8f9fa;
             padding: 20px;
-            border-radius: 6px;
-            margin: 20px 0;
-            border-left: 4px solid #007bff;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
         }
-        .test-title {
-            color: #007bff;
+        
+        .org-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
             font-size: 20px;
-            font-weight: bold;
-            margin-bottom: 10px;
+            font-weight: 700;
         }
+        
+        .org-name {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 5px;
+        }
+        
+        .org-website {
+            font-size: 14px;
+            color: #6b7280;
+        }
+        
+        .test-info {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .test-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
         .test-details {
-            margin: 15px 0;
+            display: grid;
+            gap: 15px;
         }
+        
         .detail-item {
-            margin: 8px 0;
             display: flex;
             justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(59, 130, 246, 0.1);
         }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
         .detail-label {
-            font-weight: bold;
-            color: #555;
+            font-weight: 600;
+            color: #374151;
+            font-size: 16px;
         }
+        
         .detail-value {
-            color: #333;
+            color: #1e40af;
+            font-weight: 600;
+            font-size: 16px;
         }
-        .cta-button {
-            display: inline-block;
-            background-color: #007bff;
-            color: white;
-            padding: 12px 30px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            margin: 20px 0;
+        
+        .status-section {
             text-align: center;
+            margin: 25px 0;
         }
-        .cta-button:hover {
-            background-color: #0056b3;
-        }
+        
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
+            padding: 8px 20px;
             border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-        .status-active {
-            background-color: #28a745;
-            color: white;
-        }
-        .status-inactive {
-            background-color: #6c757d;
-            color: white;
-        }
-        .footer {
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            text-align: center;
-            color: #666;
             font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-        .support-info {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
+        
+        .status-active {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+        
+        .status-inactive {
+            background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+            color: #374151;
+            border: 2px solid #6b7280;
+        }
+        
+        .cta-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            padding: 16px 32px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+        }
+        
+        .inactive-notice {
+            background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #f59e0b;
+            text-align: center;
+        }
+        
+        .inactive-notice p {
+            color: #92400e;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .active-message {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #10b981;
+        }
+        
+        .active-message p {
+            color: #065f46;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .dashboard-link {
+            text-align: center;
+            margin: 25px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        .dashboard-link p {
+            color: #4b5563;
+            font-size: 15px;
+            margin: 0;
+        }
+        
+        .dashboard-link a {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .dashboard-link a:hover {
+            text-decoration: underline;
+        }
+        
+        .footer {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .footer-logo {
+            margin-bottom: 15px;
+        }
+        
+        .footer-company {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        
+        .footer p {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .footer a {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .footer-links {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #d1d5db;
+        }
+        
+        .footer-links a {
+            margin: 0 10px;
+            font-size: 13px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                border-radius: 8px;
+            }
+            
+            .content {
+                padding: 30px 20px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 28px;
+            }
+            
+            .test-info {
+                padding: 20px;
+            }
+            
+            .test-title {
+                font-size: 20px;
+            }
+            
+            .detail-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">{{companyName}}</div>
-            <h1>New Test Available</h1>
-        </div>
-
-        <p>Hello,</p>
-        
-        <p>A new test has been created and is now available for your course:</p>
-
-        <div class="test-info">
-            <div class="test-title">{{testTitle}}</div>
-            
-            <div class="test-details">
-                <div class="detail-item">
-                    <span class="detail-label">Course:</span>
-                    <span class="detail-value">{{courseTitle}}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Test Type:</span>
-                    <span class="detail-value">{{testType}}</span>
-                </div>
-                {{#if durationMinutes}}
-                <div class="detail-item">
-                    <span class="detail-label">Duration:</span>
-                    <span class="detail-value">{{durationMinutes}} minutes</span>
-                </div>
-                {{/if}}
-                {{#if maxAttempts}}
-                <div class="detail-item">
-                    <span class="detail-label">Max Attempts:</span>
-                    <span class="detail-value">{{maxAttempts}}</span>
-                </div>
-                {{/if}}
-                <div class="detail-item">
-                    <span class="detail-label">Status:</span>
-                    <span class="detail-value">
-                        {{#if isActive}}
-                            <span class="status-badge status-active">Active</span>
-                        {{else}}
-                            <span class="status-badge status-inactive">Inactive</span>
-                        {{/if}}
-                    </span>
-                </div>
+            <div class="header-content">
+                <h1>📚 New Test Available</h1>
+                <p>A new assessment has been created for your course</p>
             </div>
         </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Hello{{#if recipientName}} {{recipientName}}{{/if}},
+            </div>
+            
+            <div class="introduction">
+                A new test has been created and is now available for your course. Below are the details of this assessment.
+            </div>
 
-        {{#if isActive}}
-        <div style="text-align: center;">
-            <a href="{{testUrl}}" class="cta-button">View Test Details</a>
+            {{#if organizationName}}
+            <div class="organization-section">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="org-logo">
+                {{else}}
+                <div class="org-logo">{{substring organizationName 0 1}}</div>
+                {{/if}}
+                <div class="org-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div class="org-website">{{organizationWebsite}}</div>
+                {{/if}}
+            </div>
+            {{/if}}
+
+            <div class="test-info">
+                <div class="test-title">{{testTitle}}</div>
+                
+                <div class="test-details">
+                    {{#if courseTitle}}
+                    <div class="detail-item">
+                        <span class="detail-label">Course:</span>
+                        <span class="detail-value">{{courseTitle}}</span>
+                    </div>
+                    {{/if}}
+                    <div class="detail-item">
+                        <span class="detail-label">Test Type:</span>
+                        <span class="detail-value">{{testType}}</span>
+                    </div>
+                    {{#if durationMinutes}}
+                    <div class="detail-item">
+                        <span class="detail-label">Duration:</span>
+                        <span class="detail-value">{{durationMinutes}} minutes</span>
+                    </div>
+                    {{/if}}
+                    {{#if maxAttempts}}
+                    <div class="detail-item">
+                        <span class="detail-label">Max Attempts:</span>
+                        <span class="detail-value">{{maxAttempts}}</span>
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+
+            <div class="status-section">
+                {{#if isActive}}
+                <span class="status-badge status-active">✅ Active</span>
+                {{else}}
+                <span class="status-badge status-inactive">⏳ Inactive</span>
+                {{/if}}
+            </div>
+
+            {{#if isActive}}
+            <div class="active-message">
+                <p><strong>Ready to start?</strong> This test is now active and available for you to take.</p>
+            </div>
+            
+            <div class="cta-section">
+                <a href="{{testUrl}}" class="cta-button">View Test Details</a>
+            </div>
+            {{else}}
+            <div class="inactive-notice">
+                <p><strong>Note:</strong> This test is currently inactive. You will receive another notification when it becomes available for taking.</p>
+            </div>
+            {{/if}}
+
+            <div class="dashboard-link">
+                <p>You can also access all your tests from your <a href="{{dashboardUrl}}">dashboard</a>.</p>
+            </div>
         </div>
         
-        <p><strong>Ready to start?</strong> Click the button above to view the test details and begin when you're ready.</p>
-        {{else}}
-        <div class="support-info">
-            <p><strong>Note:</strong> This test is currently inactive. You will receive another notification when it becomes available for taking.</p>
-        </div>
-        {{/if}}
-
-        <p>You can also access all your tests from your <a href="{{dashboardUrl}}">dashboard</a>.</p>
-
         <div class="footer">
+            {{#if organizationName}}
+            <div class="footer-logo">
+                <div class="footer-company">{{organizationName}}</div>
+            </div>
+            {{/if}}
+            
             <p>Need help? Contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>© {{companyName}} - All rights reserved</p>
-            <p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>
+            <p>© {{#if organizationName}}{{organizationName}}{{else}}{{companyName}}{{/if}} - All rights reserved</p>
+            
+            <div class="footer-links">
+                {{#if unsubscribeUrl}}
+                <a href="{{unsubscribeUrl}}">Unsubscribe</a>
+                {{/if}}
+                {{#if organizationWebsite}}
+                <a href="{{organizationWebsite}}" target="_blank">Visit Website</a>
+                {{/if}}
+            </div>
         </div>
     </div>
 </body>

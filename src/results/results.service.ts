@@ -1573,6 +1573,7 @@ export class ResultsService {
                 percentage: Number(result.percentage) || 0,
                 completionTime: completionTime || 'Not available',
                 resultsUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/results/${result.resultId}`,
+                organizationId: attempt.orgId?.id || result.orgId?.id,
             };
 
             this.logger.debug(

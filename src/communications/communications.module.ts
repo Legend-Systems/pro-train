@@ -9,9 +9,13 @@ import { TemplateTestingService } from './services/template-testing.service';
 import { EmailSMTPService } from './services/email-smtp.service';
 import { EmailQueueService } from './services/email-queue.service';
 import { EmailListener } from './listeners/email.listener';
+import { OrgModule } from '../org/org.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Communication])],
+    imports: [
+        TypeOrmModule.forFeature([Communication]),
+        OrgModule,
+    ],
     controllers: [CommunicationsController],
     providers: [
         CommunicationsService,

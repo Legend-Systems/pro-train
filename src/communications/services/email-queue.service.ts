@@ -134,8 +134,13 @@ export class EmailQueueService implements OnModuleInit, OnModuleDestroy {
                 job.status = 'processing';
                 this.logger.log(`Processing email job ${job.id}...`);
 
+                // Extract sender info from metadata if available
+                const senderInfo = job.metadata?.senderInfo;
+                
                 const result = await this.emailSMTPService.sendEmail(
                     job.emailOptions,
+                    0, // retryCount
+                    senderInfo,
                 );
 
                 if (result.success) {
