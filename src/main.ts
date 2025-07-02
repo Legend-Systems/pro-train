@@ -56,62 +56,6 @@ async function bootstrap() {
         .setDescription(
             `🚀 **trainpro api playground** - Interactive Learning Management & Assessment Platform
 
-      ## 🎯 **How to Test the API**
-
-      ### **Getting Started**
-      1. **Authentication Required**: Most endpoints require JWT authentication
-      2. **Sign In First**: Use \`POST /auth/signin\` to get your access token
-      3. **Authorize**: Click the 🔒 **Authorize** button above and enter your Bearer token
-      4. **Explore**: All endpoints are now accessible with your authenticated session
-
-      ### **📋 Complete Testing Workflow**
-
-      #### **1. 🏢 Organization Setup (Admin Flow)**
-      - **Create Organization**: \`POST /org\` - Set up your company/institution
-      - **Add Branches**: \`POST /branch\` - Create departments or locations
-      - **Send Invitations**: \`POST /auth/send-invitation\` - Invite users with org/branch assignment
-      - **Manage Users**: \`GET /users\` - View and manage organizational users
-
-      #### **2. 👤 User Registration & Authentication**
-      - **Register Account**: \`POST /auth/signup\` - Create new user account (with or without invitation)
-      - **Sign In**: \`POST /auth/signin\` - Authenticate and receive comprehensive session data
-      - **Manage Profile**: \`PUT /users/profile\` - Update user information and avatar
-      - **Change Password**: \`PUT /users/change-password\` - Secure password updates
-
-      #### **3. 📚 Course & Content Management**
-      - **Create Courses**: \`POST /courses\` - Build learning content containers
-      - **Upload Materials**: \`POST /course-materials\` - Add course files and resources
-      - **Manage Content**: \`GET /courses\` - Browse and organize courses by organization/branch
-
-      #### **4. 📝 Assessment Creation & Management**
-      - **Create Tests**: \`POST /tests\` - Design exams, quizzes, and assessments
-      - **Add Questions**: \`POST /questions\` - Build question banks with multiple choice, essay, etc.
-      - **Manage Options**: \`POST /questions-options\` - Set up answer choices and correct answers
-      - **Activate Tests**: \`PUT /tests/:id\` - Publish assessments for learners
-
-      #### **5. ✍️ Test Taking Experience**
-      - **Browse Available Tests**: \`GET /tests\` - View accessible assessments
-      - **Start Test Session**: \`POST /test-attempts\` - Begin timed test attempt
-      - **Submit Answers**: \`POST /answers\` - Provide responses with auto-grading
-      - **Complete Assessment**: \`PUT /test-attempts/:id/complete\` - Finalize and get results
-
-      #### **6. 📊 Results & Analytics**
-      - **View Results**: \`GET /results\` - See detailed test performance and scores
-      - **Check Leaderboards**: \`GET /leaderboard\` - View rankings and achievements
-      - **Track Progress**: \`GET /training-progress\` - Monitor learning completion
-      - **Generate Reports**: \`GET /reports\` - Create performance analytics
-
-      #### **7. 📁 File Management**
-      - **Upload Files**: \`POST /media-manager/upload\` - Upload images and documents
-      - **Manage Media**: \`GET /media-manager\` - Browse uploaded files with auto-generated variants
-      - **Set Avatars**: Link uploaded images to user profiles
-
-      #### **8. 💬 Communication Features**
-      - **Email Notifications**: Automatic emails for registration, test completion, invitations
-      - **System Messages**: Built-in communication and notification system
-
-      ---
-
       ## 🔄 **Recommended Testing Scenarios**
 
       ### **Scenario 1: Organization Admin Setup**

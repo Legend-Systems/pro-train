@@ -1,0 +1,75 @@
+🚀 Test Now Available - {{testTitle}}
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}}! 👋
+
+✅ GREAT NEWS! Your test is now active and ready to take!
+
+{{#if organizationName}}
+📢 From: {{organizationName}}
+{{#if organizationWebsite}}
+🌐 Website: {{organizationWebsite}}
+{{/if}}
+{{/if}}
+
+🏆 TEST ACTIVATED:
+The test "{{testTitle}}" is now available for you to complete.
+
+📋 TEST DETAILS:
+✓ Test: {{testTitle}}
+{{#if courseTitle}}
+✓ Course: {{courseTitle}}
+{{/if}}
+✓ Type: {{testType}}
+{{#if durationMinutes}}
+✓ Time Limit: {{durationMinutes}} minutes
+{{/if}}
+{{#if maxAttempts}}
+✓ Attempts Allowed: {{maxAttempts}}
+{{/if}}
+
+🚀 READY TO BEGIN?
+Start your test here: {{startTestUrl}}
+
+{{#if durationMinutes}}
+⏰ IMPORTANT TIME REMINDER:
+You have {{durationMinutes}} minutes to complete this test once you start. Make sure you have enough time and a stable internet connection before beginning.
+{{/if}}
+
+📝 BEFORE YOU START:
+• Ensure you have a stable internet connection
+• Find a quiet space to concentrate  
+• Have any necessary materials ready
+{{#if durationMinutes}}
+• Set aside at least {{durationMinutes}} minutes of uninterrupted time
+{{/if}}
+• Close unnecessary browser tabs and applications
+• Make sure your device is fully charged or plugged in
+
+🔗 QUICK LINKS:
+{{#if testUrl}}
+• View Test Details: {{testUrl}}
+{{/if}}
+{{#if courseUrl}}
+• Go to Course: {{courseUrl}}
+{{/if}}
+• Your Dashboard: {{dashboardUrl}}
+
+🤝 NEED HELP?
+If you encounter any issues or have questions, our support team is here to help at {{supportEmail}}.
+
+Good luck with your test! We believe in your success! 🌟
+
+---
+{{#if organizationName}}
+{{organizationName}}
+{{#if organizationWebsite}}
+{{organizationWebsite}}
+{{/if}}
+{{else}}
+{{companyName}}
+{{/if}}
+
+Need assistance? Contact us at {{supportEmail}}
+{{#if unsubscribeUrl}}
+Unsubscribe: {{unsubscribeUrl}}
+{{/if}} 
