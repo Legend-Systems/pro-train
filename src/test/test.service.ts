@@ -37,7 +37,6 @@ import {
     TestCreatedEvent,
     TestActivatedEvent,
     TestAttemptStartedEvent,
-    TestCompletedEvent,
     TestResultsReadyEvent,
 } from '../common/events';
 
