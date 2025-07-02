@@ -98,7 +98,7 @@ export class LeaderboardReportsService {
         // Average points across all participants
         const avgPointsResult = await this.leaderboardRepository
             .createQueryBuilder('l')
-            .select('AVG(l.points)', 'avgPoints')
+            .select('AVG(l.totalPoints)', 'avgPoints')
             .getRawOne();
 
         const averagePoints = Number(avgPointsResult?.avgPoints || 0);
@@ -110,10 +110,10 @@ export class LeaderboardReportsService {
             .select('u.userId', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
-            .addSelect('SUM(l.points)', 'totalPoints')
+            .addSelect('SUM(l.totalPoints)', 'totalPoints')
             .addSelect('COUNT(DISTINCT l.courseId)', 'coursesParticipated')
             .groupBy('u.userId, u.firstName, u.lastName')
-            .orderBy('SUM(l.points)', 'DESC')
+            .orderBy('SUM(l.totalPoints)', 'DESC')
             .limit(10)
             .getRawMany();
 
@@ -124,8 +124,8 @@ export class LeaderboardReportsService {
             .select('c.courseId', 'courseId')
             .addSelect('c.title', 'title')
             .addSelect('COUNT(DISTINCT l.userId)', 'participants')
-            .addSelect('AVG(l.points)', 'averagePoints')
-            .addSelect('MAX(l.points)', 'topScore')
+            .addSelect('AVG(l.totalPoints)', 'averagePoints')
+            .addSelect('MAX(l.totalPoints)', 'topScore')
             .groupBy('c.courseId, c.title')
             .orderBy('COUNT(DISTINCT l.userId)', 'DESC')
             .limit(5)
@@ -188,7 +188,7 @@ export class LeaderboardReportsService {
             .select('u.userId', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
-            .addSelect('l.points', 'points')
+            .addSelect('l.totalPoints', 'points')
             .addSelect('l.rank', 'rank')
             .addSelect('l.courseId', 'courseId');
 
@@ -197,7 +197,7 @@ export class LeaderboardReportsService {
         }
 
         const performers = await query
-            .orderBy('l.points', 'DESC')
+            .orderBy('l.totalPoints', 'DESC')
             .limit(limit)
             .getRawMany();
 
@@ -242,7 +242,7 @@ export class LeaderboardReportsService {
             .select('u.userId', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
-            .addSelect('l.points', 'currentPoints')
+            .addSelect('l.totalPoints', 'currentPoints')
             .addSelect('l.rank', 'currentRank')
             .addSelect('l.lastUpdated', 'lastUpdated');
 
@@ -296,9 +296,9 @@ export class LeaderboardReportsService {
 
         // Calculate competitive intensity metrics
         const leaderboardData = await query
-            .select('l.points', 'points')
+            .select('l.totalPoints', 'points')
             .addSelect('l.rank', 'rank')
-            .orderBy('l.points', 'DESC')
+            .orderBy('l.totalPoints', 'DESC')
             .getRawMany();
 
         const points = leaderboardData.map(entry => Number(entry.points));
@@ -368,9 +368,9 @@ export class LeaderboardReportsService {
         // User's current rankings
         const userRankings = await query
             .select('l.rank', 'rank')
-            .addSelect('l.points', 'points')
+            .addSelect('l.totalPoints', 'points')
             .addSelect('l.courseId', 'courseId')
-            .orderBy('l.points', 'DESC')
+            .orderBy('l.totalPoints', 'DESC')
             .getRawMany();
 
         const totalRankings = userRankings.length;
@@ -430,7 +430,7 @@ export class LeaderboardReportsService {
         let query = this.leaderboardRepository
             .createQueryBuilder('l')
             .select('DATE(l.lastUpdated)', 'date')
-            .addSelect('AVG(l.points)', 'averagePoints')
+            .addSelect('AVG(l.totalPoints)', 'averagePoints')
             .addSelect('AVG(l.rank)', 'averageRank')
             .groupBy('DATE(l.lastUpdated)')
             .orderBy('DATE(l.lastUpdated)', 'ASC')
@@ -455,9 +455,9 @@ export class LeaderboardReportsService {
             .innerJoin('l.course', 'c')
             .select('c.title', 'courseName')
             .addSelect('l.rank', 'rank')
-            .addSelect('l.points', 'points')
+            .addSelect('l.totalPoints', 'points')
             .addSelect('c.courseId', 'courseId')
-            .orderBy('l.points', 'DESC');
+            .orderBy('l.totalPoints', 'DESC');
 
         if (userId) {
             courseQuery = courseQuery.where('l.userId = :userId', { userId });

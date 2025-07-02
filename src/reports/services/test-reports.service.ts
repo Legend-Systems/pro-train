@@ -104,7 +104,7 @@ export class TestReportsService {
             })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
             )
             .getRawOne();
@@ -268,7 +268,7 @@ export class TestReportsService {
             })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
             )
             .getRawOne();
@@ -380,7 +380,7 @@ export class TestReportsService {
             })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
             )
             .getRawOne();
@@ -398,7 +398,7 @@ export class TestReportsService {
             })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime))',
+                'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
                 'duration',
             )
             .getRawMany();
@@ -521,9 +521,9 @@ export class TestReportsService {
         // Peak testing hours
         const hourlyStats = await this.testAttemptRepository
             .createQueryBuilder('ta')
-            .select('EXTRACT(HOUR FROM ta.startTime)', 'hour')
+            .select('HOUR(ta.startTime)', 'hour')
             .addSelect('COUNT(*)', 'count')
-            .groupBy('EXTRACT(HOUR FROM ta.startTime)')
+            .groupBy('HOUR(ta.startTime)')
             .orderBy('count', 'DESC')
             .limit(3)
             .getRawMany();

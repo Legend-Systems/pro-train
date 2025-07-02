@@ -42,7 +42,6 @@ import {
 import {
     ResultsAnalyticsReportDto,
     GlobalResultsStatsReportDto,
-    PerformanceTrendReportDto,
     EnhancedPerformanceTrendReportDto,
     TrendFilterDto,
     BranchPerformanceComparisonDto,
@@ -1594,237 +1593,15 @@ export class ReportsController {
         }
     }
 
+
+
     @Get('results/performance-trends')
     @ApiOperation({
         summary: '📈 Performance Trends Analysis Dashboard',
         description: `
-      **Analyzes performance trends over time with advanced filtering capabilities**
-      
-      This endpoint provides comprehensive performance trend analysis including:
-      - Time-series performance data with trend identification
-      - User and course-specific performance tracking
-      - Comparative analysis across different time periods
-      - Predictive performance modeling and forecasting
-      
-      **Trend Analysis Features:**
-      - Daily, weekly, and monthly performance aggregations
-      - Moving averages and trend line calculations
-      - Seasonal pattern identification and analysis
-      - Performance variance and consistency metrics
-      
-      **Filtering Capabilities:**
-      - **User-specific**: Individual user performance tracking
-      - **Course-specific**: Course performance evolution
-      - **Date ranges**: Custom time period analysis
-      - **Performance segments**: High/medium/low performer trends
-      
-      **Advanced Analytics:**
-      - Statistical significance testing for trend changes
-      - Correlation analysis between different performance metrics
-      - Outlier detection and anomaly identification
-      - Performance prediction and forecasting models
-      
-      **Business Applications:**
-      - Learning effectiveness measurement over time
-      - Course content optimization based on performance trends
-      - Student intervention timing and strategy development
-      - Platform improvement impact assessment
-      
-      **Use Cases:**
-      - Educational research and trend analysis
-      - Student progress monitoring and early warning systems
-      - Course effectiveness evaluation and improvement
-      - Platform performance optimization
-      - Academic intervention planning and timing
-    `,
-        operationId: 'getPerformanceTrends',
-    })
-    @ApiQuery({
-        name: 'userId',
-        required: false,
-        description:
-            'Filter trends by specific user UUID for personalized analysis',
-        example: '123e4567-e89b-12d3-a456-426614174000',
-        type: 'string',
-    })
-    @ApiQuery({
-        name: 'courseId',
-        required: false,
-        description:
-            'Filter trends by specific course ID for course-level analysis',
-        example: 1,
-        type: 'number',
-    })
-    @ApiQuery({
-        name: 'startDate',
-        required: false,
-        description: 'Start date for trend analysis (ISO 8601 format)',
-        example: '2025-01-01',
-        type: 'string',
-    })
-    @ApiQuery({
-        name: 'endDate',
-        required: false,
-        description: 'End date for trend analysis (ISO 8601 format)',
-        example: '2025-12-31',
-        type: 'string',
-    })
-    @ApiQuery({
-        name: 'granularity',
-        required: false,
-        description: 'Data aggregation granularity',
-        enum: ['daily', 'weekly', 'monthly'],
-        example: 'weekly',
-    })
-    @ApiResponse({
-        status: HttpStatus.OK,
-        description: '✅ Performance trends retrieved successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: {
-                    type: 'boolean',
-                    example: true,
-                    description: 'Operation success indicator',
-                },
-                message: {
-                    type: 'string',
-                    example: 'Performance trends retrieved successfully',
-                    description: 'Human-readable success message',
-                },
-                data: {
-                    type: 'object',
-                    description: 'Performance trends analysis data',
-                    properties: {
-                        trends: {
-                            type: 'array',
-                            description: 'Time-series performance data points',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    date: {
-                                        type: 'string',
-                                        format: 'date',
-                                        example: '2025-01-15',
-                                        description: 'Data point date',
-                                    },
-                                    averageScore: {
-                                        type: 'number',
-                                        example: 84.7,
-                                        description:
-                                            'Average score for this period',
-                                    },
-                                    attempts: {
-                                        type: 'number',
-                                        example: 23,
-                                        description:
-                                            'Number of attempts in period',
-                                    },
-                                    passRate: {
-                                        type: 'number',
-                                        example: 78.3,
-                                        description:
-                                            'Pass rate percentage for period',
-                                    },
-                                    trendDirection: {
-                                        type: 'string',
-                                        example: 'improving',
-                                        description:
-                                            'Trend direction: improving, declining, stable',
-                                    },
-                                },
-                            },
-                        },
-                        summary: {
-                            type: 'object',
-                            properties: {
-                                overallTrend: {
-                                    type: 'string',
-                                    example: 'improving',
-                                    description:
-                                        'Overall trend across entire period',
-                                },
-                                averageImprovement: {
-                                    type: 'number',
-                                    example: 5.2,
-                                    description:
-                                        'Average improvement percentage',
-                                },
-                                bestPeriod: {
-                                    type: 'string',
-                                    example: '2025-01-22',
-                                    description: 'Date of best performance',
-                                },
-                                consistency: {
-                                    type: 'number',
-                                    example: 0.85,
-                                    description:
-                                        'Performance consistency score (0-1)',
-                                },
-                            },
-                        },
-                    },
-                },
-                meta: {
-                    type: 'object',
-                    properties: {
-                        timestamp: {
-                            type: 'string',
-                            example: '2025-01-15T10:30:00Z',
-                            description: 'Analysis generation timestamp',
-                        },
-                        dataPoints: {
-                            type: 'number',
-                            example: 52,
-                            description: 'Number of data points in analysis',
-                        },
-                        filters: {
-                            type: 'object',
-                            description: 'Applied filters for this analysis',
-                        },
-                    },
-                },
-            },
-        },
-    })
-    async getPerformanceTrends(
-        @Query('userId') userId?: string,
-        @Query('courseId') courseId?: number,
-    ): Promise<StandardApiResponse<PerformanceTrendReportDto[]>> {
-        try {
-            this.logger.log(
-                `Retrieving performance trends for userId: ${userId}, courseId: ${courseId}`,
-            );
-
-            const trends =
-                await this.resultsReportsService.getPerformanceTrends(
-                    userId,
-                    courseId,
-                );
-
-            this.logger.log('Performance trends retrieved successfully');
-
-            return {
-                success: true,
-                message: 'Performance trends retrieved successfully',
-                data: trends,
-                meta: {
-                    timestamp: new Date().toISOString(),
-                },
-            };
-        } catch (error) {
-            this.logger.error('Error retrieving performance trends:', error);
-            throw error;
-        }
-    }
-
-    @Get('results/enhanced-performance-trends')
-    @ApiOperation({
-        summary: '🚀 Enhanced Multi-Dimensional Performance Trends',
-        description: `
-        **Advanced performance trends with comprehensive filtering and analytics**
+        **Comprehensive performance trends with advanced filtering and analytics**
         
-        This enhanced endpoint provides multi-dimensional performance analysis with:
+        This endpoint provides multi-dimensional performance analysis with:
         - **Branch-level filtering** for organizational insights
         - **Monthly/weekly/daily aggregation** for flexible time analysis
         - **User, test, and course specific trends** for targeted insights
@@ -1846,7 +1623,7 @@ export class ReportsController {
         - Course performance evaluation with trend analysis
         - Organizational KPI reporting and analytics
         `,
-        operationId: 'getEnhancedPerformanceTrends',
+        operationId: 'getPerformanceTrends',
     })
     @ApiQuery({
         name: 'branchId',
@@ -1913,10 +1690,10 @@ export class ReportsController {
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Enhanced performance trends retrieved successfully',
+        description: '✅ Performance trends retrieved successfully',
         type: [EnhancedPerformanceTrendReportDto],
     })
-    async getEnhancedPerformanceTrends(
+    async getPerformanceTrends(
         @Query('branchId') branchId?: string,
         @Query('userId') userId?: string,
         @Query('testId') testId?: number,
@@ -1929,7 +1706,7 @@ export class ReportsController {
     ): Promise<StandardApiResponse<EnhancedPerformanceTrendReportDto[]>> {
         try {
             this.logger.log(
-                'Retrieving enhanced performance trends with filters:',
+                'Retrieving performance trends with filters:',
                 {
                     branchId,
                     userId,
@@ -1961,17 +1738,17 @@ export class ReportsController {
                 );
 
             this.logger.log(
-                `Enhanced performance trends retrieved: ${trends.length} data points`,
+                `Performance trends retrieved: ${trends.length} data points`,
             );
 
             return {
                 success: true,
-                message: 'Enhanced performance trends retrieved successfully',
+                message: 'Performance trends retrieved successfully',
                 data: trends,
             };
         } catch (error) {
             this.logger.error(
-                'Error retrieving enhanced performance trends:',
+                'Error retrieving performance trends:',
                 error,
             );
             throw error;

@@ -113,7 +113,7 @@ export class UserReportsService {
             .where('ta.userId = :userId', { userId })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'SUM(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'SUM(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'totalSeconds',
             )
             .getRawOne();
@@ -127,7 +127,7 @@ export class UserReportsService {
             .where('ta.userId = :userId', { userId })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime))',
+                'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
                 'duration',
             )
             .getRawMany();
@@ -222,9 +222,9 @@ export class UserReportsService {
         const hourlyActivity = await this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.userId = :userId', { userId })
-            .select('EXTRACT(HOUR FROM ta.startTime)', 'hour')
+            .select('HOUR(ta.startTime)', 'hour')
             .addSelect('COUNT(*)', 'count')
-            .groupBy('EXTRACT(HOUR FROM ta.startTime)')
+            .groupBy('HOUR(ta.startTime)')
             .orderBy('count', 'DESC')
             .limit(1)
             .getRawOne();
@@ -237,9 +237,9 @@ export class UserReportsService {
         const dailyActivity = await this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.userId = :userId', { userId })
-            .select('EXTRACT(DOW FROM ta.startTime)', 'dayOfWeek')
+            .select('DAYOFWEEK(ta.startTime)', 'dayOfWeek')
             .addSelect('COUNT(*)', 'count')
-            .groupBy('EXTRACT(DOW FROM ta.startTime)')
+            .groupBy('DAYOFWEEK(ta.startTime)')
             .orderBy('count', 'DESC')
             .limit(1)
             .getRawOne();
@@ -372,7 +372,7 @@ export class UserReportsService {
             .where('ta.userId = :userId', { userId })
             .andWhere('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgTime',
             )
             .getRawOne();
@@ -381,7 +381,7 @@ export class UserReportsService {
             .createQueryBuilder('ta')
             .where('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgTime',
             )
             .getRawOne();
@@ -466,7 +466,7 @@ export class UserReportsService {
             .createQueryBuilder('ta')
             .where('ta.submitTime IS NOT NULL')
             .select(
-                'AVG(EXTRACT(EPOCH FROM (ta.submitTime - ta.startTime)))',
+                'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
             )
             .getRawOne();

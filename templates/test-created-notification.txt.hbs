@@ -1,0 +1,46 @@
+📚 New Test Available
+
+Hello{{#if recipientName}} {{recipientName}}{{/if}},
+
+A new test has been created and is now available for your course. Below are the details of this assessment.
+
+{{#if organizationName}}
+ORGANIZATION: {{organizationName}}
+{{#if organizationWebsite}}Website: {{organizationWebsite}}{{/if}}
+{{/if}}
+
+TEST DETAILS:
+{{testTitle}}
+
+{{#if courseTitle}}Course: {{courseTitle}}{{/if}}
+Test Type: {{testType}}
+{{#if durationMinutes}}Duration: {{durationMinutes}} minutes{{/if}}
+{{#if maxAttempts}}Max Attempts: {{maxAttempts}}{{/if}}
+
+STATUS:
+{{#if isActive}}
+✅ ACTIVE - This test is now available for you to take.
+
+Ready to start? View the test details and begin your assessment.
+
+View Test: {{testUrl}}
+{{else}}
+⏳ INACTIVE - This test is currently inactive. You will receive another notification when it becomes available for taking.
+{{/if}}
+
+QUICK ACCESS:
+Dashboard: {{dashboardUrl}}
+
+{{#if isActive}}
+IMPORTANT REMINDERS:
+• Make sure you have a stable internet connection
+• Complete the test in one session if possible
+• Review the test details before starting
+• Contact support if you experience any technical issues
+{{/if}}
+
+Need help? Contact us at {{supportEmail}}
+
+{{#if organizationName}}{{organizationName}}{{else}}{{companyName}}{{/if}}
+{{#if unsubscribeUrl}}
+Unsubscribe: {{unsubscribeUrl}}{{/if}} 
