@@ -420,12 +420,16 @@ export class TestService {
                                   courseId: test.course.courseId,
                                   title: test.course.title,
                                   description: test.course.description,
-                                  creator: test.course.creator ? {
-                                      id: test.course.creator.id,
-                                      firstName: test.course.creator.firstName,
-                                      lastName: test.course.creator.lastName,
-                                      email: test.course.creator.email,
-                                  } : undefined,
+                                  creator: test.course.creator
+                                      ? {
+                                            id: test.course.creator.id,
+                                            firstName:
+                                                test.course.creator.firstName,
+                                            lastName:
+                                                test.course.creator.lastName,
+                                            email: test.course.creator.email,
+                                        }
+                                      : undefined,
                                   orgId: test.course.orgId?.id,
                                   branchId: test.course.branchId?.id,
                               }
@@ -434,20 +438,22 @@ export class TestService {
                         attemptCount,
                         userAttemptData,
                         statistics,
-                        questions: test.questions?.map(q => ({
-                            questionId: q.questionId,
-                            questionText: q.questionText,
-                            questionType: q.questionType,
-                            points: q.points,
-                            orderIndex: q.orderIndex,
-                            difficulty: q.difficulty,
-                            options: q.options?.map(option => ({
-                                optionId: option.optionId,
-                                optionText: option.optionText,
-                                isCorrect: option.isCorrect,
-                                orderIndex: option.orderIndex,
+                        questions:
+                            test.questions?.map(q => ({
+                                questionId: q.questionId,
+                                questionText: q.questionText,
+                                questionType: q.questionType,
+                                points: q.points,
+                                orderIndex: q.orderIndex,
+                                difficulty: q.difficulty,
+                                options:
+                                    q.options?.map(option => ({
+                                        optionId: option.optionId,
+                                        optionText: option.optionText,
+                                        isCorrect: option.isCorrect,
+                                        orderIndex: option.orderIndex,
+                                    })) || [],
                             })) || [],
-                        })) || [],
                     };
                 }),
             );
@@ -652,13 +658,15 @@ export class TestService {
             const statistics = await this.calculateTestStatistics(id);
 
             // Get questions with proper ordering if not already loaded
-            const questions = test.questions?.length 
-                ? test.questions.sort((a, b) => (a.orderIndex || 0) - (b.orderIndex || 0))
+            const questions = test.questions?.length
+                ? test.questions.sort(
+                      (a, b) => (a.orderIndex || 0) - (b.orderIndex || 0),
+                  )
                 : await this.questionRepository.find({
-                    where: { testId: id },
-                    relations: ['options', 'mediaFile'],
-                    order: { orderIndex: 'ASC', createdAt: 'ASC' },
-                });
+                      where: { testId: id },
+                      relations: ['options', 'mediaFile'],
+                      order: { orderIndex: 'ASC', createdAt: 'ASC' },
+                  });
 
             return {
                 ...test,
@@ -667,12 +675,14 @@ export class TestService {
                           courseId: test.course.courseId,
                           title: test.course.title,
                           description: test.course.description,
-                          creator: test.course.creator ? {
-                              id: test.course.creator.id,
-                              firstName: test.course.creator.firstName,
-                              lastName: test.course.creator.lastName,
-                              email: test.course.creator.email,
-                          } : undefined,
+                          creator: test.course.creator
+                              ? {
+                                    id: test.course.creator.id,
+                                    firstName: test.course.creator.firstName,
+                                    lastName: test.course.creator.lastName,
+                                    email: test.course.creator.email,
+                                }
+                              : undefined,
                           organization: test.course.orgId,
                           branch: test.course.branchId,
                       }
@@ -690,14 +700,16 @@ export class TestService {
                     hint: q.hint,
                     difficulty: q.difficulty,
                     tags: q.tags,
-                    mediaFile: q.mediaFile ? {
-                        id: q.mediaFile.id,
-                        originalName: q.mediaFile.originalName,
-                        url: q.mediaFile.url,
-                        type: q.mediaFile.type,
-                        mimeType: q.mediaFile.mimeType,
-                        size: q.mediaFile.size,
-                    } : undefined,
+                    mediaFile: q.mediaFile
+                        ? {
+                              id: q.mediaFile.id,
+                              originalName: q.mediaFile.originalName,
+                              url: q.mediaFile.url,
+                              type: q.mediaFile.type,
+                              mimeType: q.mediaFile.mimeType,
+                              size: q.mediaFile.size,
+                          }
+                        : undefined,
                     options:
                         q.options?.map(option => ({
                             optionId: option.optionId,
@@ -706,37 +718,43 @@ export class TestService {
                             orderIndex: option.orderIndex,
                         })) || [],
                 })),
-                testAttempts: test.testAttempts?.map(attempt => ({
-                    attemptId: attempt.attemptId,
-                    userId: attempt.userId,
-                    attemptNumber: attempt.attemptNumber,
-                    status: attempt.status,
-                    startTime: attempt.startTime,
-                    submitTime: attempt.submitTime,
-                    progressPercentage: attempt.progressPercentage,
-                    user: attempt.user ? {
-                        id: attempt.user.id,
-                        firstName: attempt.user.firstName,
-                        lastName: attempt.user.lastName,
-                        email: attempt.user.email,
-                    } : undefined,
-                })) || [],
-                results: test.results?.map(result => ({
-                    resultId: result.resultId,
-                    attemptId: result.attemptId,
-                    userId: result.userId,
-                    score: result.score,
-                    percentage: result.percentage,
-                    passed: result.passed,
-                    maxScore: result.maxScore,
-                    calculatedAt: result.calculatedAt,
-                    user: result.user ? {
-                        id: result.user.id,
-                        firstName: result.user.firstName,
-                        lastName: result.user.lastName,
-                        email: result.user.email,
-                    } : undefined,
-                })) || [],
+                testAttempts:
+                    test.testAttempts?.map(attempt => ({
+                        attemptId: attempt.attemptId,
+                        userId: attempt.userId,
+                        attemptNumber: attempt.attemptNumber,
+                        status: attempt.status,
+                        startTime: attempt.startTime,
+                        submitTime: attempt.submitTime,
+                        progressPercentage: attempt.progressPercentage,
+                        user: attempt.user
+                            ? {
+                                  id: attempt.user.id,
+                                  firstName: attempt.user.firstName,
+                                  lastName: attempt.user.lastName,
+                                  email: attempt.user.email,
+                              }
+                            : undefined,
+                    })) || [],
+                results:
+                    test.results?.map(result => ({
+                        resultId: result.resultId,
+                        attemptId: result.attemptId,
+                        userId: result.userId,
+                        score: result.score,
+                        percentage: result.percentage,
+                        passed: result.passed,
+                        maxScore: result.maxScore,
+                        calculatedAt: result.calculatedAt,
+                        user: result.user
+                            ? {
+                                  id: result.user.id,
+                                  firstName: result.user.firstName,
+                                  lastName: result.user.lastName,
+                                  email: result.user.email,
+                              }
+                            : undefined,
+                    })) || [],
             };
         });
     }
@@ -1039,10 +1057,10 @@ export class TestService {
 
             this.logger.debug(
                 `Validating course access: courseId=${courseId}, userId=${userId}, ` +
-                `courseCreatedBy=${course.createdBy}, courseOrgId=${course.orgId?.id}, ` +
-                `courseBranchId=${course.branchId?.id}, userOrgId=${scope?.orgId}, ` +
-                `userBranchId=${scope?.branchId}, userRole=${scope?.userRole}, ` +
-                `isWriteOperation=${isWriteOperation}`,
+                    `courseCreatedBy=${course.createdBy}, courseOrgId=${course.orgId?.id}, ` +
+                    `courseBranchId=${course.branchId?.id}, userOrgId=${scope?.orgId}, ` +
+                    `userBranchId=${scope?.branchId}, userRole=${scope?.userRole}, ` +
+                    `isWriteOperation=${isWriteOperation}`,
             );
 
             // If user is the creator, they always have access
@@ -1084,7 +1102,7 @@ export class TestService {
 
                         this.logger.warn(
                             `Write access denied - User ${userId} with role ${scope.userRole} ` +
-                            `in org ${scope.orgId} attempted to modify course ${courseId} in org ${courseOrgId}`,
+                                `in org ${scope.orgId} attempted to modify course ${courseId} in org ${courseOrgId}`,
                         );
                     } else {
                         this.logger.warn(
@@ -1108,7 +1126,7 @@ export class TestService {
                 if (scope.orgId && course.orgId?.id !== scope.orgId) {
                     this.logger.warn(
                         `Read access denied - User ${userId} in org ${scope.orgId} ` +
-                        `attempted to access course ${courseId} in org ${course.orgId?.id}`,
+                            `attempted to access course ${courseId} in org ${course.orgId?.id}`,
                     );
                     throw new ForbiddenException(
                         'Access denied: Course belongs to different organization',
@@ -1119,7 +1137,7 @@ export class TestService {
                 if (scope.branchId && course.branchId?.id !== scope.branchId) {
                     this.logger.warn(
                         `Read access denied - User ${userId} in branch ${scope.branchId} ` +
-                        `attempted to access course ${courseId} in branch ${course.branchId?.id}`,
+                            `attempted to access course ${courseId} in branch ${course.branchId?.id}`,
                     );
                     throw new ForbiddenException(
                         'Access denied: Course belongs to different branch',
@@ -1136,7 +1154,7 @@ export class TestService {
             // If no scope provided or doesn't match, deny access
             this.logger.warn(
                 `Access denied - User ${userId} has no valid scope to access course ${courseId}. ` +
-                `User scope: orgId=${scope?.orgId}, branchId=${scope?.branchId}`,
+                    `User scope: orgId=${scope?.orgId}, branchId=${scope?.branchId}`,
             );
             throw new ForbiddenException(
                 'You do not have permission to access this course',

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome Back to {{companyName}}</title>
+    <title>Account Restored - Welcome Back!</title>
     <style>
         * {
             margin: 0;
@@ -55,9 +55,30 @@
             color: #1f2937;
             margin-bottom: 20px;
         }
+
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+        }
         
         .welcome-back-card {
-            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
             padding: 30px;
             border-radius: 12px;
             margin: 30px 0;
@@ -79,10 +100,54 @@
         
         .welcome-message {
             font-size: 16px;
-            color: #064e3b;
+            color: #047857;
             line-height: 1.6;
         }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
         
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "👤";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
         .cta-section {
             text-align: center;
             margin: 40px 0;
@@ -97,6 +162,7 @@
             border-radius: 8px;
             font-weight: 600;
             font-size: 16px;
+            margin: 8px;
             transition: transform 0.2s ease;
             box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
         }
@@ -104,70 +170,107 @@
         .cta-button:hover {
             transform: translateY(-2px);
         }
-        
-        .info-section {
-            background-color: #f8fafc;
-            padding: 25px;
-            border-radius: 8px;
-            margin: 25px 0;
+
+        .cta-button.primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            box-shadow: 0 4px 6px rgba(99, 102, 241, 0.3);
+        }
+
+        .benefits {
+            background-color: #f0f9ff;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #0ea5e9;
         }
         
-        .info-section h4 {
-            color: #1f2937;
+        .benefits h4 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0c4a6e;
             margin-bottom: 15px;
-            font-size: 18px;
+            text-align: center;
         }
         
-        .info-item {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        
-        .info-label {
-            font-weight: 600;
-            color: #374151;
-            width: 140px;
-            flex-shrink: 0;
-        }
-        
-        .info-value {
-            color: #4b5563;
-        }
-        
-        .features-section {
-            background-color: #ecfdf5;
-            padding: 25px;
-            border-radius: 8px;
-            margin: 25px 0;
-            border-left: 4px solid #10b981;
-        }
-        
-        .features-section h4 {
-            color: #047857;
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        
-        .features-list {
+        .benefits ul {
             list-style: none;
+            padding: 0;
         }
         
-        .features-list li {
+        .benefits li {
             padding: 8px 0;
-            color: #065f46;
-            padding-left: 25px;
+            color: #0f172a;
             position: relative;
+            padding-left: 25px;
         }
         
-        .features-list li:before {
+        .benefits li:before {
             content: "✓";
             position: absolute;
             left: 0;
             color: #10b981;
             font-weight: bold;
-            font-size: 16px;
+        }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .quick-link-button.warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
         }
         
         .message {
@@ -182,12 +285,12 @@
             padding: 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
+            color: #666;
+            font-size: 14px;
         }
         
         .footer p {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 10px;
+            margin: 5px 0;
         }
         
         .footer a {
@@ -215,14 +318,14 @@
             .welcome-title {
                 font-size: 20px;
             }
-            
-            .info-item {
-                flex-direction: column;
-                gap: 5px;
+
+            .links-grid {
+                grid-template-columns: 1fr;
             }
-            
-            .info-label {
-                width: auto;
+
+            .cta-button {
+                padding: 14px 28px;
+                font-size: 15px;
             }
         }
     </style>
@@ -230,86 +333,124 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Welcome Back!</h1>
-            <p>Your account has been restored</p>
+            <h1>🎉 Welcome Back!</h1>
+            <p>Your account has been successfully restored</p>
         </div>
         
         <div class="content">
             <div class="greeting">
                 Hello {{firstName}},
             </div>
+
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div style="font-size: 14px; color: #6b7280;">
+                    <a href="{{organizationWebsite}}" style="color: #6366f1; text-decoration: none;">{{organizationWebsite}}</a>
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
             
             <div class="message">
-                🎉 What an amazing day this is! We're absolutely thrilled to welcome you back to the {{companyName}} learning community. Your account has been fully restored, and we couldn't be more excited to see you return to your learning journey. The entire team has been looking forward to this moment!
+                Great news! 🌟 Your {{companyName}} account has been successfully restored and is now active again. We're thrilled to welcome you back to our learning community and can't wait to see you continue your educational journey with us.
             </div>
             
             <div class="welcome-back-card">
                 <div class="welcome-icon">🚀</div>
-                <div class="welcome-title">Account Successfully Restored!</div>
+                <div class="welcome-title">Account Successfully Restored</div>
                 <div class="welcome-message">
-                    Your learning adventure continues! Everything is exactly as you left it - your progress, achievements, and all the knowledge you've gained. It's time to pick up where you left off and keep building toward your goals.
+                    You now have full access to all your courses, progress, achievements, and learning materials. Everything is exactly as you left it - your hard work and progress have been safely preserved.
                 </div>
             </div>
-            
-            <div class="info-section">
-                <h4>Your Account Details</h4>
-                <div class="info-item">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{firstName}} {{lastName}}</span>
+
+            <div class="account-info">
+                <h3>Account Details</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Full Name</div>
+                    <div class="account-detail-value">{{firstName}} {{lastName}}</div>
                 </div>
-                <div class="info-item">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{{userEmail}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Email Address</div>
+                    <div class="account-detail-value">{{userEmail}}</div>
                 </div>
                 {{#if organizationName}}
-                <div class="info-item">
-                    <span class="info-label">Organization:</span>
-                    <span class="info-value">{{organizationName}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Organization</div>
+                    <div class="account-detail-value">{{organizationName}}</div>
                 </div>
                 {{/if}}
                 {{#if branchName}}
-                <div class="info-item">
-                    <span class="info-label">Branch:</span>
-                    <span class="info-value">{{branchName}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Branch</div>
+                    <div class="account-detail-value">{{branchName}}</div>
+                </div>
+                {{/if}}
+                {{#if restoredBy}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Restored By</div>
+                    <div class="account-detail-value">{{restoredBy}}</div>
                 </div>
                 {{/if}}
             </div>
-            
-            <div class="cta-section">
-                <a href="{{dashboardUrl}}" class="cta-button">Access Your Dashboard</a>
-            </div>
-            
-            <div class="features-section">
-                <h4>What's Waiting for You</h4>
-                <ul class="features-list">
-                    <li>All your course progress and achievements are intact</li>
-                    <li>Access to your personalized learning dashboard</li>
-                    <li>New courses and learning materials may have been added</li>
-                    <li>Enhanced features and improvements to your learning experience</li>
-                    <li>Full access to tests, quizzes, and assessments</li>
-                    <li>Community discussions and collaboration tools</li>
+
+            <div class="benefits">
+                <h4>🎯 What's Available to You Now</h4>
+                <ul>
+                    <li>Access to all your enrolled courses and learning materials</li>
+                    <li>Your complete learning progress and achievement history</li>
+                    <li>Ability to take tests and assessments</li>
+                    <li>Full dashboard functionality and reporting</li>
+                    <li>Community features and collaboration tools</li>
+                    <li>All your certificates and accomplishments</li>
                 </ul>
             </div>
             
             <div class="message">
-                <strong>Ready to dive back in?</strong> Your learning momentum is about to be rekindled! Whether you want to review previous materials, explore new courses, or jump straight into assessments, your personalized dashboard has everything organized and ready for you.
+                <strong>Ready to dive back in?</strong> Your learning journey continues right where you left off. Whether you want to complete courses you were working on or explore new learning opportunities, we're here to support your growth and success every step of the way.
+            </div>
+
+            <div class="cta-section">
+                <a href="{{dashboardUrl}}" class="cta-button">Access Dashboard</a>
+                <a href="{{profileUrl}}" class="cta-button primary">Update Profile</a>
+            </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    <a href="{{dashboardUrl}}" class="quick-link-button primary">Dashboard</a>
+                    <a href="{{profileUrl}}" class="quick-link-button">Profile</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Contact Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button warning">Unsubscribe</a>
+                    {{/if}}
+                </div>
             </div>
             
             <div class="message">
-                <strong>What makes your return special:</strong> You're coming back with experience, knowledge, and a fresh perspective. This isn't just a restart - it's a continuation of your growth story with added wisdom and renewed motivation. We're confident you'll achieve even greater things this time around!
+                If you have any questions or need assistance getting back into your learning routine, our support team is always here to help. We're genuinely excited to have you back and look forward to supporting your continued growth and success! 💪
             </div>
             
             <div class="message">
-                Welcome back to the family! Our support team is here and excited to help you succeed. Don't hesitate to reach out if you need any assistance getting back into the rhythm of learning. Your success is our priority, and we're here to support you every step of the way! 🌟
+                Welcome back to the {{companyName}} community! Let's make this next chapter of your learning journey even more amazing than the last. 🌟
             </div>
         </div>
         
         <div class="footer">
+            <p>This notification was sent to {{userEmail}}{{#if restoredBy}} by {{restoredBy}}{{/if}}{{#if organizationName}} from {{organizationName}}{{/if}}</p>
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>
-                {{companyName}} | 
-                {{#if unsubscribeUrl}}<a href="{{unsubscribeUrl}}">Unsubscribe</a>{{/if}}
-            </p>
+            <p>{{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} - Empowering Learning Through Assessment</p>
+            {{#if unsubscribeUrl}}<p><a href="{{unsubscribeUrl}}">Unsubscribe</a> from these notifications</p>{{/if}}
         </div>
     </div>
 </body>

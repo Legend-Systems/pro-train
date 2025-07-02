@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Alert: New Sign-In</title>
+    <title>Login Activity Notification</title>
     <style>
         * {
             margin: 0;
@@ -28,7 +28,7 @@
         }
         
         .header {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             padding: 40px 20px;
             text-align: center;
             color: white;
@@ -55,74 +55,140 @@
             color: #1f2937;
             margin-bottom: 20px;
         }
-        
-        .message {
-            font-size: 16px;
-            color: #4b5563;
-            margin-bottom: 30px;
-            line-height: 1.7;
-        }
-        
-        .alert-notice {
-            background-color: #fef2f2;
-            padding: 25px;
-            border-radius: 12px;
-            margin: 30px 0;
-            border-left: 4px solid #ef4444;
-        }
-        
-        .alert-notice h3 {
-            color: #991b1b;
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        
-        .alert-notice p {
-            color: #7f1d1d;
-            margin: 0;
-            line-height: 1.6;
-        }
-        
-        .login-details {
+
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
             background-color: #f8fafc;
-            padding: 25px;
-            border-radius: 12px;
-            margin: 30px 0;
+            border-radius: 8px;
         }
         
-        .login-details h3 {
-            color: #1f2937;
-            margin-bottom: 20px;
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
             font-size: 18px;
-        }
-        
-        .detail-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            padding: 12px 0;
-            border-bottom: 1px solid #e5e7eb;
-            font-size: 16px;
-        }
-        
-        .detail-row:last-child {
-            border-bottom: none;
-        }
-        
-        .detail-label {
             font-weight: 600;
             color: #374151;
-            width: 120px;
-            flex-shrink: 0;
+            margin-bottom: 5px;
+        }
+
+        .login-notice {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border-left: 4px solid #0ea5e9;
+            text-align: center;
         }
         
-        .detail-value {
-            color: #4b5563;
-            text-align: right;
-            flex: 1;
-            word-break: break-all;
+        .login-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
         }
         
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #0c4a6e;
+            margin-bottom: 15px;
+        }
+        
+        .login-message {
+            font-size: 16px;
+            color: #0369a1;
+            line-height: 1.6;
+        }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "🔐";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        .security-info {
+            background-color: #fef3c7;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .security-info h4 {
+            color: #92400e;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .security-info h4:before {
+            content: "🛡️";
+            margin-right: 8px;
+        }
+        
+        .security-info ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .security-info li {
+            padding: 8px 0;
+            color: #78350f;
+            position: relative;
+            padding-left: 25px;
+        }
+        
+        .security-info li:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #f59e0b;
+            font-weight: bold;
+        }
+
         .cta-section {
             text-align: center;
             margin: 40px 0;
@@ -130,60 +196,93 @@
         
         .cta-button {
             display: inline-block;
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             color: white;
             padding: 16px 32px;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
             font-size: 16px;
+            margin: 8px;
             transition: transform 0.2s ease;
-            margin: 5px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        
-        .cta-button.primary {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        }
-        
-        .cta-button.security {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 6px rgba(14, 165, 233, 0.3);
         }
         
         .cta-button:hover {
             transform: translateY(-2px);
         }
-        
-        .security-tips {
-            background-color: #eff6ff;
-            padding: 25px;
+
+        .cta-button.warning {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 6px rgba(239, 68, 68, 0.3);
+        }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
             border-radius: 12px;
             margin: 30px 0;
-            border-left: 4px solid #3b82f6;
+            text-align: center;
+            border: 1px solid #e2e8f0;
         }
         
-        .security-tips h4 {
-            color: #1e40af;
-            margin-bottom: 15px;
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
             font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .security-tips ul {
-            list-style: none;
-            padding: 0;
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
         }
         
-        .security-tips li {
-            padding: 8px 0;
-            color: #1e3a8a;
-            padding-left: 25px;
-            position: relative;
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
         }
         
-        .security-tips li:before {
-            content: "🛡️";
-            position: absolute;
-            left: 0;
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
             font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .quick-link-button.warning {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        }
+        
+        .message {
+            font-size: 16px;
+            color: #4b5563;
+            margin-bottom: 20px;
+            line-height: 1.7;
         }
         
         .footer {
@@ -191,16 +290,16 @@
             padding: 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
+            color: #666;
+            font-size: 14px;
         }
         
         .footer p {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 10px;
+            margin: 5px 0;
         }
         
         .footer a {
-            color: #ef4444;
+            color: #0ea5e9;
             text-decoration: none;
         }
         
@@ -217,27 +316,21 @@
                 font-size: 24px;
             }
             
-            .greeting {
-                font-size: 18px;
+            .login-notice {
+                padding: 20px;
             }
             
-            .detail-row {
-                flex-direction: column;
-                gap: 5px;
-                align-items: flex-start;
+            .login-title {
+                font-size: 20px;
             }
-            
-            .detail-label {
-                width: auto;
+
+            .links-grid {
+                grid-template-columns: 1fr;
             }
-            
-            .detail-value {
-                text-align: left;
-            }
-            
+
             .cta-button {
-                display: block;
-                margin: 10px 0;
+                padding: 14px 28px;
+                font-size: 15px;
             }
         }
     </style>
@@ -245,83 +338,140 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔐 Security Alert</h1>
-            <p>New sign-in detected on your account</p>
+            <h1>🔐 Login Activity</h1>
+            <p>Security notification for your account</p>
         </div>
         
         <div class="content">
             <div class="greeting">
-                Hello {{recipientName}},
+                Hello{{#if firstName}} {{firstName}}{{/if}},
             </div>
+
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div style="font-size: 14px; color: #6b7280;">
+                    <a href="{{organizationWebsite}}" style="color: #6366f1; text-decoration: none;">{{organizationWebsite}}</a>
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
             
             <div class="message">
-                We detected a new sign-in to your {{companyName}} account. If this was you, you can safely ignore this email. If you don't recognize this activity, please secure your account immediately by reviewing your security settings and changing your password.
+                We're writing to let you know that there was a successful sign-in to your {{companyName}} account. As part of our commitment to keeping your account secure, we send you these notifications whenever someone accesses your account.
             </div>
             
-            <div class="alert-notice">
-                <h3>⚠️ Account Access Alert</h3>
-                <p>A new sign-in was detected on your account. Please verify that this activity was authorized by you. If you did not sign in, take immediate action to secure your account.</p>
-            </div>
-            
-            <div class="login-details">
-                <h3>Sign-In Details</h3>
-                <div class="detail-row">
-                    <span class="detail-label">Date & Time:</span>
-                    <span class="detail-value">{{loginDateTime}}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">IP Address:</span>
-                    <span class="detail-value">{{ipAddress}}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Location:</span>
-                    <span class="detail-value">{{location}}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Device:</span>
-                    <span class="detail-value">{{deviceInfo}}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">Browser:</span>
-                    <span class="detail-value">{{userAgent}}</span>
+            <div class="login-notice">
+                <div class="login-icon">🚀</div>
+                <div class="login-title">Successful Login Detected</div>
+                <div class="login-message">
+                    Your account was accessed successfully. If this was you, no action is needed. If you don't recognize this activity, please secure your account immediately.
                 </div>
             </div>
-            
+
+            <div class="account-info">
+                <h3>Login Activity Details</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Email Address</div>
+                    <div class="account-detail-value">{{recipientEmail}}</div>
+                </div>
+                {{#if organizationName}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Organization</div>
+                    <div class="account-detail-value">{{organizationName}}</div>
+                </div>
+                {{/if}}
+                {{#if branchName}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Branch</div>
+                    <div class="account-detail-value">{{branchName}}</div>
+                </div>
+                {{/if}}
+                {{#if loginTime}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Login Time</div>
+                    <div class="account-detail-value">{{loginTime}}</div>
+                </div>
+                {{/if}}
+                {{#if ipAddress}}
+                <div class="account-detail">
+                    <div class="account-detail-label">IP Address</div>
+                    <div class="account-detail-value">{{ipAddress}}</div>
+                </div>
+                {{/if}}
+                {{#if userAgent}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Device/Browser</div>
+                    <div class="account-detail-value">{{userAgent}}</div>
+                </div>
+                {{/if}}
+                {{#if location}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Location</div>
+                    <div class="account-detail-value">{{location}}</div>
+                </div>
+                {{/if}}
+            </div>
+
+            <div class="message">
+                <strong>Was this you?</strong> If you recognize this login activity, you can safely ignore this email. Your account remains secure and no further action is needed.
+            </div>
+
+            <div class="message">
+                <strong>Don't recognize this activity?</strong> If you didn't sign in at this time or from this location, your account may have been compromised. We recommend taking immediate action to secure your account.
+            </div>
+
             <div class="cta-section">
-                <a href="{{dashboardUrl}}" class="cta-button primary">Go to Dashboard</a>
-                <a href="{{securityUrl}}" class="cta-button security">Review Security Settings</a>
+                <a href="{{securityUrl}}" class="cta-button">Review Security Settings</a>
+                <a href="{{changePasswordUrl}}" class="cta-button warning">Change Password</a>
             </div>
-            
-            <div class="security-tips">
-                <h4>🛡️ Security Best Practices</h4>
+
+            <div class="security-info">
+                <h4>Recommended Security Actions</h4>
                 <ul>
-                    <li>Always log out from shared or public computers</li>
-                    <li>Use strong, unique passwords for your account</li>
-                    <li>Enable two-factor authentication if available</li>
-                    <li>Regularly review your account activity and sessions</li>
-                    <li>Never share your login credentials with anyone</li>
-                    <li>Keep your browser and devices updated</li>
+                    <li>Change your password immediately if you don't recognize this activity</li>
+                    <li>Review your recent account activity for any suspicious access</li>
+                    <li>Enable two-factor authentication for enhanced security</li>
+                    <li>Sign out of all devices and sign back in with your new password</li>
+                    <li>Contact our support team if you need assistance securing your account</li>
+                    <li>Use unique, strong passwords for all your online accounts</li>
                 </ul>
             </div>
-            
-            <div class="message">
-                <strong>Didn't recognize this sign-in?</strong><br>
-                If you did not authorize this sign-in, please secure your account immediately by changing your password and reviewing your security settings. Contact our support team if you need assistance or have concerns about unauthorized access.
+
+            <div class="quick-links">
+                <h3>Quick Security Actions</h3>
+                <div class="links-grid">
+                    <a href="{{securityUrl}}" class="quick-link-button primary">Security Settings</a>
+                    <a href="{{changePasswordUrl}}" class="quick-link-button warning">Change Password</a>
+                    <a href="{{dashboardUrl}}" class="quick-link-button">Dashboard</a>
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Contact Support</a>
+                </div>
             </div>
             
             <div class="message">
-                <strong>Account Security:</strong> We take your security seriously and monitor all account activity. This notification is sent as a precaution to ensure your account remains protected. Thank you for helping us keep your account secure.
+                <strong>Need help?</strong> If you have any concerns about your account security or need assistance with any of these steps, our support team is here to help. We take account security seriously and are committed to protecting your information.
+            </div>
+            
+            <div class="message">
+                <strong>Stay secure!</strong> 🛡️ Regular security notifications like this help keep your {{companyName}} account safe. We appreciate your attention to account security and your continued trust in our platform.
             </div>
         </div>
         
         <div class="footer">
-            <p>This sign-in notification was sent to {{recipientEmail}} for security purposes.</p>
-            <p>If you have concerns about this activity, please contact our support team at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>{{companyName}} Security Team</p>
-            <p style="margin-top: 15px; font-size: 12px; color: #9ca3af;">
-                This is an automated security notification. Please do not reply to this email.
-            </p>
-            {{#if unsubscribeUrl}}<p><a href="{{unsubscribeUrl}}">Unsubscribe from notifications</a></p>{{/if}}
+            <p>This security notification was sent to {{recipientEmail}}{{#if organizationName}} from {{organizationName}}{{/if}}</p>
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>{{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} - Empowering Learning Through Assessment</p>
+            <p><small>This is an automated security notification. Please do not reply to this email.</small></p>
         </div>
     </div>
 </body>

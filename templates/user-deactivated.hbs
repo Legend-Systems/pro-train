@@ -55,6 +55,27 @@
             color: #1f2937;
             margin-bottom: 20px;
         }
+
+        .organization-branding {
+            text-align: center;
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 8px;
+        }
+        
+        .organization-logo {
+            max-width: 150px;
+            max-height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .organization-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+        }
         
         .status-card {
             background: linear-gradient(135deg, #fefbf3 0%, #fef3c7 100%);
@@ -81,6 +102,50 @@
             font-size: 16px;
             color: #78350f;
             line-height: 1.6;
+        }
+
+        .account-info {
+            background-color: #eff6ff;
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .account-info h3 {
+            color: #1e40af;
+            margin-bottom: 15px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .account-info h3:before {
+            content: "👤";
+            margin-right: 8px;
+        }
+        
+        .account-detail {
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid #cbd5e1;
+        }
+        
+        .account-detail-label {
+            font-size: 12px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .account-detail-value {
+            font-size: 16px;
+            color: #1e293b;
+            font-weight: 600;
+            font-family: monospace;
         }
         
         .info-section {
@@ -113,6 +178,67 @@
         .info-value {
             color: #4b5563;
         }
+
+        .quick-links {
+            background-color: #f8fafc;
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .quick-links h3 {
+            color: #1e293b;
+            margin-bottom: 20px;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .quick-links h3:before {
+            content: "🔗";
+            margin-right: 8px;
+        }
+        
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .quick-link-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+            padding: 12px 16px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .quick-link-button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        .quick-link-button.primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        }
+        
+        .quick-link-button.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .quick-link-button.warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
         
         .message {
             font-size: 16px;
@@ -126,12 +252,12 @@
             padding: 30px;
             text-align: center;
             border-top: 1px solid #e5e7eb;
+            color: #666;
+            font-size: 14px;
         }
         
         .footer p {
-            color: #6b7280;
-            font-size: 14px;
-            margin-bottom: 10px;
+            margin: 5px 0;
         }
         
         .footer a {
@@ -168,13 +294,17 @@
             .info-label {
                 width: auto;
             }
+
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Account Status Update</h1>
+            <h1>⏸️ Account Status Update</h1>
             <p>Important information about your account</p>
         </div>
         
@@ -182,6 +312,20 @@
             <div class="greeting">
                 Hello {{firstName}},
             </div>
+
+            {{#if organizationName}}
+            <div class="organization-branding">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="organization-logo">
+                {{/if}}
+                <div class="organization-name">{{organizationName}}</div>
+                {{#if organizationWebsite}}
+                <div style="font-size: 14px; color: #6b7280;">
+                    <a href="{{organizationWebsite}}" style="color: #6366f1; text-decoration: none;">{{organizationWebsite}}</a>
+                </div>
+                {{/if}}
+            </div>
+            {{/if}}
             
             <div class="message">
                 We hope this message finds you well. We're reaching out to inform you about an important update to your {{companyName}} account status. We understand that changes like this can feel overwhelming, and we want you to know that we're here to support you through this transition.
@@ -194,33 +338,39 @@
                     Your learning account has been temporarily deactivated. While this means you won't be able to access courses or take tests for now, this is a temporary status that can be changed when circumstances allow.
                 </div>
             </div>
-            
-            <div class="info-section">
-                <h4>Account Details</h4>
-                <div class="info-item">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{firstName}} {{lastName}}</span>
+
+            <div class="account-info">
+                <h3>Account Details</h3>
+                <div class="account-detail">
+                    <div class="account-detail-label">Full Name</div>
+                    <div class="account-detail-value">{{firstName}} {{lastName}}</div>
                 </div>
-                <div class="info-item">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{{userEmail}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Email Address</div>
+                    <div class="account-detail-value">{{userEmail}}</div>
                 </div>
                 {{#if organizationName}}
-                <div class="info-item">
-                    <span class="info-label">Organization:</span>
-                    <span class="info-value">{{organizationName}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Organization</div>
+                    <div class="account-detail-value">{{organizationName}}</div>
                 </div>
                 {{/if}}
                 {{#if branchName}}
-                <div class="info-item">
-                    <span class="info-label">Branch:</span>
-                    <span class="info-value">{{branchName}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Branch</div>
+                    <div class="account-detail-value">{{branchName}}</div>
                 </div>
                 {{/if}}
                 {{#if reason}}
-                <div class="info-item">
-                    <span class="info-label">Reason:</span>
-                    <span class="info-value">{{reason}}</span>
+                <div class="account-detail">
+                    <div class="account-detail-label">Reason</div>
+                    <div class="account-detail-value">{{reason}}</div>
+                </div>
+                {{/if}}
+                {{#if deactivatedBy}}
+                <div class="account-detail">
+                    <div class="account-detail-label">Deactivated By</div>
+                    <div class="account-detail-value">{{deactivatedBy}}</div>
                 </div>
                 {{/if}}
             </div>
@@ -231,6 +381,22 @@
             
             <div class="message">
                 <strong>Looking forward:</strong> We believe in the power of learning to transform lives and careers. This pause in your learning journey doesn't diminish the progress you've already made or the potential you have to achieve great things. When you're ready to return, we'll be here to welcome you back with open arms.
+            </div>
+
+            <div class="quick-links">
+                <h3>Quick Access Links</h3>
+                <div class="links-grid">
+                    {{#if organizationWebsite}}
+                    <a href="{{organizationWebsite}}" class="quick-link-button primary">{{organizationName}}</a>
+                    {{/if}}
+                    {{#if companyUrl}}
+                    <a href="{{companyUrl}}" class="quick-link-button">Visit {{companyName}}</a>
+                    {{/if}}
+                    <a href="mailto:{{supportEmail}}" class="quick-link-button success">Contact Support</a>
+                    {{#if unsubscribeUrl}}
+                    <a href="{{unsubscribeUrl}}" class="quick-link-button warning">Unsubscribe</a>
+                    {{/if}}
+                </div>
             </div>
             
             <div class="message">
@@ -243,8 +409,9 @@
         </div>
         
         <div class="footer">
+            <p>This notification was sent to {{userEmail}}{{#if deactivatedBy}} by {{deactivatedBy}}{{/if}}{{#if organizationName}} from {{organizationName}}{{/if}}</p>
             <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
-            <p>{{companyName}} Support Team</p>
+            <p>{{#if organizationName}}{{organizationName}} - {{/if}}{{companyName}} - Empowering Learning Through Assessment</p>
         </div>
     </div>
 </body>
