@@ -5,6 +5,7 @@ import {
     ForbiddenException,
     Inject,
     Logger,
+    forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -22,6 +23,7 @@ import {
 } from '../test_attempts/entities/test_attempt.entity';
 import { Question, QuestionType } from '../questions/entities/question.entity';
 import { QuestionOption } from '../questions_options/entities/questions_option.entity';
+import { QuestionsService } from '../questions/questions.service';
 import { RetryService } from '../common/services/retry.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardResponse } from '../common/types';
@@ -76,6 +78,8 @@ export class AnswersService {
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
+        @Inject(forwardRef(() => QuestionsService))
+        private readonly questionsService: QuestionsService,
     ) {}
 
     async create(
@@ -86,7 +90,7 @@ export class AnswersService {
             // Validate attempt ownership and status - include org/branch relations
             const attempt = await this.testAttemptRepository.findOne({
                 where: { attemptId: createAnswerDto.attemptId },
-                relations: ['user', 'orgId', 'branchId'],
+                relations: ['user'],
             });
 
             if (!attempt) {
@@ -172,9 +176,10 @@ export class AnswersService {
                 attempt: attempt,
                 question: question,
                 selectedOption: selectedOption,
-                // Inherit org/branch from the test attempt
-                orgId: attempt.orgId,
-                branchId: attempt.branchId,
+                // Set org/branch from scope
+                orgId: scope.orgId ? Number(scope.orgId) : undefined,
+                branchId: scope.branchId ? Number(scope.branchId) : undefined,
+                userId: scope.userId,
             });
 
             const savedAnswer = await this.answerRepository.save(answer);
@@ -208,8 +213,8 @@ export class AnswersService {
             const answerQuery = this.answerRepository
                 .createQueryBuilder('answer')
                 .leftJoinAndSelect('answer.attempt', 'attempt')
-                .leftJoinAndSelect('answer.orgId', 'orgId')
-                .leftJoinAndSelect('answer.branchId', 'branchId')
+                .leftJoinAndSelect('answer.organization', 'organization')
+                .leftJoinAndSelect('answer.branch', 'branch')
                 .where('answer.answerId = :id', { id });
 
             // Apply org/branch scoping
@@ -299,8 +304,8 @@ export class AnswersService {
                 .createQueryBuilder('answer')
                 .leftJoinAndSelect('answer.attempt', 'attempt')
                 .leftJoinAndSelect('answer.question', 'question')
-                .leftJoinAndSelect('answer.orgId', 'orgId')
-                .leftJoinAndSelect('answer.branchId', 'branchId')
+                .leftJoinAndSelect('answer.organization', 'organization')
+                .leftJoinAndSelect('answer.branch', 'branch')
                 .where('answer.answerId = :id', { id });
 
             // Apply org/branch scoping
@@ -497,12 +502,13 @@ export class AnswersService {
     }
 
     /**
-     * Bulk create answers and return both DTOs and entities
+     * Bulk create answers with transaction safety, comprehensive validation, and enhanced error handling
      * This is used internally to avoid timing issues with auto-marking
      */
     async bulkCreateWithEntities(
         bulkAnswersDto: BulkAnswersDto,
         scope: OrgBranchScope,
+        context?: { testId?: number; attemptId?: number; userId?: string },
     ): Promise<{
         success: boolean;
         message: string;
@@ -511,56 +517,310 @@ export class AnswersService {
             entities: Answer[];
         };
         errors?: string[];
+        validationResult?: {
+            questionsValidated: number;
+            validQuestions: number;
+            invalidQuestions: number;
+            validationTime: number;
+        };
     }> {
-        return this.retryService.executeDatabase(async () => {
-            const resultDtos: AnswerResponseDto[] = [];
-            const resultEntities: Answer[] = [];
-            const errors: string[] = [];
+        const startTime = new Date();
+        const logContext = context
+            ? `[Test: ${context.testId}, Attempt: ${context.attemptId}, User: ${context.userId}]`
+            : '[Bulk Creation]';
 
-            for (const answerDto of bulkAnswersDto.answers) {
+        this.logger.log(
+            `${logContext} Starting bulk creation of ${bulkAnswersDto.answers.length} answers`,
+        );
+
+        return this.retryService.executeDatabase(
+            async () => {
+                const queryRunner = this.dataSource.createQueryRunner();
+                await queryRunner.connect();
+                await queryRunner.startTransaction();
+
                 try {
-                    const result = await this.create(answerDto, scope);
-                    if (result.success && result.data) {
-                        resultDtos.push(result.data);
+                    // Step 1: Pre-validation - Check all question IDs exist
+                    const questionIds = bulkAnswersDto.answers.map(
+                        a => a.questionId,
+                    );
+                    const uniqueQuestionIds = [...new Set(questionIds)];
 
-                        // Fetch the actual entity with question loaded for auto-marking
-                        const answerEntity = await this.answerRepository
-                            .createQueryBuilder('answer')
-                            .innerJoinAndSelect('answer.question', 'question')
-                            .leftJoinAndSelect('answer.orgId', 'orgId')
-                            .leftJoinAndSelect('answer.branchId', 'branchId')
-                            .where('answer.answerId = :answerId', {
-                                answerId: result.data.answerId,
-                            })
-                            .getOne();
+                    this.logger.log(
+                        `${logContext} Validating ${uniqueQuestionIds.length} unique question IDs`,
+                    );
 
-                        if (answerEntity) {
-                            resultEntities.push(answerEntity);
+                    const validationResult =
+                        await this.questionsService.validateQuestionsExist(
+                            uniqueQuestionIds,
+                            scope,
+                            context,
+                        );
+
+                    if (!validationResult.valid) {
+                        await queryRunner.rollbackTransaction();
+
+                        const errorMessage = `Pre-validation failed: ${validationResult.invalidQuestionIds.length} invalid question IDs detected`;
+                        this.logger.error(`${logContext} ${errorMessage}`, {
+                            invalidQuestionIds:
+                                validationResult.invalidQuestionIds,
+                            errors: validationResult.errors,
+                        });
+
+                        return {
+                            success: false,
+                            message: errorMessage,
+                            data: { dtos: [], entities: [] },
+                            errors: validationResult.errors,
+                            validationResult: {
+                                questionsValidated: uniqueQuestionIds.length,
+                                validQuestions:
+                                    validationResult.validQuestionIds.length,
+                                invalidQuestions:
+                                    validationResult.invalidQuestionIds.length,
+                                validationTime:
+                                    validationResult.timing.durationMs,
+                            },
+                        };
+                    }
+
+                    this.logger.log(
+                        `${logContext} Pre-validation passed in ${validationResult.timing.durationMs}ms`,
+                    );
+
+                    // Step 2: Validate test attempt
+                    if (context?.attemptId) {
+                        const attempt = await queryRunner.manager.findOne(
+                            TestAttempt,
+                            {
+                                where: { attemptId: context.attemptId },
+                                relations: ['test'],
+                            },
+                        );
+
+                        if (!attempt) {
+                            await queryRunner.rollbackTransaction();
+                            throw new NotFoundException(
+                                `Test attempt ${context.attemptId} not found`,
+                            );
+                        }
+
+                        if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+                            await queryRunner.rollbackTransaction();
+                            throw new BadRequestException(
+                                `Cannot create answers for attempt with status: ${attempt.status}`,
+                            );
+                        }
+
+                        if (attempt.userId !== context.userId) {
+                            await queryRunner.rollbackTransaction();
+                            throw new ForbiddenException(
+                                "Cannot create answers for another user's attempt",
+                            );
                         }
                     }
+
+                // Step 3: Process answers in transaction
+                const resultDtos: AnswerResponseDto[] = [];
+                const resultEntities: Answer[] = [];
+                const errors: string[] = [];
+                const createdAnswerIds: number[] = [];
+
+                for (const answerDto of bulkAnswersDto.answers) {
+                    try {
+                        // Check for existing answer
+                        const existingAnswer = await queryRunner.manager.findOne(Answer, {
+                            where: {
+                                attemptId: answerDto.attemptId,
+                                questionId: answerDto.questionId,
+                            }
+                        });
+
+                        if (existingAnswer) {
+                                // Update existing answer instead of creating new one
+                                Object.assign(existingAnswer, {
+                                    selectedOptionId:
+                                        answerDto.selectedOptionId,
+                                    textAnswer: answerDto.textAnswer,
+                                    timeSpent: answerDto.timeSpent,
+                                    updatedAt: new Date(),
+                                });
+
+                                await queryRunner.manager.save(
+                                    Answer,
+                                    existingAnswer,
+                                );
+                                createdAnswerIds.push(existingAnswer.answerId);
+                            } else {
+                                // Create new answer
+                                const newAnswer = queryRunner.manager.create(
+                                    Answer,
+                                    {
+                                        ...answerDto,
+                                        orgId: scope.orgId
+                                            ? Number(scope.orgId)
+                                            : undefined,
+                                        branchId: scope.branchId
+                                            ? Number(scope.branchId)
+                                            : undefined,
+                                        userId: scope.userId || context?.userId,
+                                    },
+                                );
+
+                                const savedAnswer =
+                                    await queryRunner.manager.save(
+                                        Answer,
+                                        newAnswer,
+                                    );
+                                createdAnswerIds.push(savedAnswer.answerId);
+                    }
                 } catch (error) {
-                    // Continue with other answers even if one fails
-                    const errorMessage = `Failed to create answer for question ${answerDto.questionId}: ${
-                        error instanceof Error ? error.message : 'Unknown error'
+                            const errorMessage = `Failed to process answer for question ${answerDto.questionId}: ${
+                                error instanceof Error
+                                    ? error.message
+                                    : 'Unknown error'
                     }`;
                     errors.push(errorMessage);
-                    this.logger.error(errorMessage, error);
-                }
-            }
+                            this.logger.error(
+                                `${logContext} ${errorMessage}`,
+                                error,
+                            );
+
+                            // For critical errors, rollback the entire transaction
+                            if (
+                                error instanceof NotFoundException ||
+                                error instanceof ForbiddenException ||
+                                (error instanceof Error &&
+                                    error.message.includes('constraint'))
+                            ) {
+                                await queryRunner.rollbackTransaction();
+                                throw error;
+                            }
+                        }
+                    }
+
+                    // Step 4: If we have errors but some successes, decide whether to commit or rollback
+                    if (
+                        errors.length > 0 &&
+                        errors.length === bulkAnswersDto.answers.length
+                    ) {
+                        // All failed - rollback
+                        await queryRunner.rollbackTransaction();
+                        this.logger.error(
+                            `${logContext} All answer creations failed, transaction rolled back`,
+                        );
+
+                        return {
+                            success: false,
+                            message: 'All answer creations failed',
+                            data: { dtos: [], entities: [] },
+                            errors,
+                            validationResult: {
+                                questionsValidated: uniqueQuestionIds.length,
+                                validQuestions:
+                                    validationResult.validQuestionIds.length,
+                                invalidQuestions:
+                                    validationResult.invalidQuestionIds.length,
+                                validationTime:
+                                    validationResult.timing.durationMs,
+                            },
+                        };
+                    } else if (errors.length > 0) {
+                        // Partial success - log warning but continue
+                        this.logger.warn(
+                            `${logContext} Partial success: ${createdAnswerIds.length} answers created, ${errors.length} failed`,
+                        );
+                    }
+
+                    // Step 5: Fetch created entities with relations for response
+                    if (createdAnswerIds.length > 0) {
+                        const fetchedEntities = await queryRunner.manager
+                            .createQueryBuilder(Answer, 'answer')
+                            .leftJoinAndSelect('answer.question', 'question')
+                            .leftJoinAndSelect(
+                                'answer.selectedOption',
+                                'selectedOption',
+                            )
+                            .leftJoinAndSelect(
+                                'answer.organization',
+                                'organization',
+                            )
+                            .leftJoinAndSelect('answer.branch', 'branch')
+                            .where('answer.answerId IN (:...answerIds)', {
+                                answerIds: createdAnswerIds,
+                            })
+                            .getMany();
+
+                        resultEntities.push(...fetchedEntities);
+
+                        // Convert to DTOs
+                        for (const entity of fetchedEntities) {
+                            resultDtos.push(this.mapToResponseDto(entity));
+                        }
+                    }
+
+                    // Step 6: Commit transaction
+                    await queryRunner.commitTransaction();
+
+                    const endTime = new Date();
+                    const totalDuration =
+                        endTime.getTime() - startTime.getTime();
+
+                    this.logger.log(
+                        `${logContext} Bulk creation completed in ${totalDuration}ms: ` +
+                            `${resultDtos.length} answers created successfully` +
+                            (errors.length > 0
+                                ? `, ${errors.length} errors`
+                                : ''),
+                    );
 
             return {
                 success: errors.length === 0,
                 message:
                     errors.length === 0
-                        ? 'All answers created successfully'
+                                ? `All ${resultDtos.length} answers created successfully`
                         : `Created ${resultDtos.length} answers with ${errors.length} errors`,
                 data: {
                     dtos: resultDtos,
                     entities: resultEntities,
                 },
                 ...(errors.length > 0 && { errors }),
-            };
-        });
+                        validationResult: {
+                            questionsValidated: uniqueQuestionIds.length,
+                            validQuestions:
+                                validationResult.validQuestionIds.length,
+                            invalidQuestions:
+                                validationResult.invalidQuestionIds.length,
+                            validationTime: validationResult.timing.durationMs,
+                        },
+                    };
+                } catch (error) {
+                    // Rollback on any unhandled error
+                    if (queryRunner.isTransactionActive) {
+                        await queryRunner.rollbackTransaction();
+                    }
+
+                    const endTime = new Date();
+                    const totalDuration =
+                        endTime.getTime() - startTime.getTime();
+
+                    this.logger.error(
+                        `${logContext} Bulk creation failed after ${totalDuration}ms:`,
+                        error,
+                    );
+
+                    throw error;
+                } finally {
+                    await queryRunner.release();
+                }
+            },
+            {
+                testId: context?.testId,
+                attemptId: context?.attemptId,
+                userId: context?.userId,
+                operation: 'bulk_create_answers',
+            },
+        );
     }
 
     async autoMark(attemptId: number, scope: OrgBranchScope): Promise<number> {

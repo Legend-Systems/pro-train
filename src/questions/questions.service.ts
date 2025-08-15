@@ -533,6 +533,97 @@ export class QuestionsService {
     /**
      * Find a single question by ID with comprehensive caching
      */
+    /**
+     * Validate that all question IDs exist and are accessible within the given scope
+     * Returns validation results with detailed error information
+     */
+    async validateQuestionsExist(
+        questionIds: number[],
+        scope: OrgBranchScope,
+        context?: { testId?: number; attemptId?: number; userId?: string }
+    ): Promise<{
+        valid: boolean;
+        validQuestionIds: number[];
+        invalidQuestionIds: number[];
+        errors: string[];
+        timing: { startTime: Date; endTime: Date; durationMs: number };
+    }> {
+        const startTime = new Date();
+        const logContext = context ? 
+            `[Test: ${context.testId}, Attempt: ${context.attemptId}, User: ${context.userId}]` : 
+            '[Bulk Validation]';
+
+        this.logger.log(`${logContext} Validating ${questionIds.length} question IDs: [${questionIds.join(', ')}]`);
+
+        return this.retryService.executeDatabase(async () => {
+            const validQuestionIds: number[] = [];
+            const invalidQuestionIds: number[] = [];
+            const errors: string[] = [];
+
+            try {
+                // Build query to check all questions at once for efficiency
+                const query = this.questionRepository
+                    .createQueryBuilder('question')
+                    .select(['question.questionId', 'question.testId'])
+                    .where('question.questionId IN (:...questionIds)', { questionIds });
+
+                // Apply org/branch scoping
+                if (scope.orgId) {
+                    query.andWhere('question.orgId = :orgId', { orgId: scope.orgId });
+                }
+                if (scope.branchId) {
+                    query.andWhere('question.branchId = :branchId', { branchId: scope.branchId });
+                }
+
+                const existingQuestions = await query.getMany();
+                const foundQuestionIds = existingQuestions.map(q => q.questionId);
+
+                // Categorize question IDs
+                questionIds.forEach(questionId => {
+                    if (foundQuestionIds.includes(questionId)) {
+                        validQuestionIds.push(questionId);
+                    } else {
+                        invalidQuestionIds.push(questionId);
+                        errors.push(`Question ID ${questionId} not found or not accessible in current scope`);
+                    }
+                });
+
+                const endTime = new Date();
+                const durationMs = endTime.getTime() - startTime.getTime();
+
+                this.logger.log(
+                    `${logContext} Question validation completed in ${durationMs}ms: ` +
+                    `${validQuestionIds.length} valid, ${invalidQuestionIds.length} invalid`
+                );
+
+                if (invalidQuestionIds.length > 0) {
+                    this.logger.warn(
+                        `${logContext} Invalid question IDs detected: [${invalidQuestionIds.join(', ')}]`
+                    );
+                }
+
+                return {
+                    valid: invalidQuestionIds.length === 0,
+                    validQuestionIds,
+                    invalidQuestionIds,
+                    errors,
+                    timing: { startTime, endTime, durationMs }
+                };
+
+            } catch (error) {
+                const endTime = new Date();
+                const durationMs = endTime.getTime() - startTime.getTime();
+                
+                this.logger.error(
+                    `${logContext} Question validation failed after ${durationMs}ms:`,
+                    error
+                );
+                
+                throw error;
+            }
+        });
+    }
+
     async findOne(
         id: number,
         scope: OrgBranchScope,
@@ -796,12 +887,17 @@ export class QuestionsService {
     }
 
     /**
-     * Delete a question with comprehensive cache invalidation
+     * Delete a question with comprehensive validation, logging, and cache invalidation
      */
     async remove(
         id: number,
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
+        const startTime = new Date();
+        const logContext = `[Question: ${id}, User: ${scope.userId}]`;
+        
+        this.logger.log(`${logContext} Initiating question deletion process`);
+
         return this.retryService.executeDatabase(async () => {
             const query = this.questionRepository
                 .createQueryBuilder('question')
@@ -825,24 +921,84 @@ export class QuestionsService {
             const question = await query.getOne();
 
             if (!question) {
+                this.logger.warn(`${logContext} Question not found or not accessible`);
                 throw new NotFoundException(`Question with ID ${id} not found`);
             }
+
+            this.logger.log(
+                `${logContext} Found question "${question.questionText.substring(0, 50)}..." ` +
+                `in test ${question.testId}, order ${question.orderIndex}`
+            );
 
             // Validate test access with scope
             await this.validateTestAccessWithScope(question.testId, scope);
 
-            // Check if question has answers
+            // Step 1: Check for active test attempts that might reference this question
+            const activeAttemptsQuery = this.dataSource
+                .createQueryBuilder()
+                .select(['attempt.attemptId', 'attempt.userId', 'attempt.startTime', 'attempt.status'])
+                .from('test_attempts', 'attempt')
+                .where('attempt.testId = :testId', { testId: question.testId })
+                .andWhere('attempt.status = :status', { status: 'in_progress' });
+
+            const activeAttempts = await activeAttemptsQuery.getRawMany();
+
+            if (activeAttempts.length > 0) {
+                this.logger.error(
+                    `${logContext} DELETION BLOCKED: ${activeAttempts.length} active test attempts detected ` +
+                    `for test ${question.testId}. Active attempts: ${activeAttempts.map(a => a.attemptId).join(', ')}`
+                );
+                
+                // Log detailed information about each active attempt
+                for (const attempt of activeAttempts) {
+                    this.logger.warn(
+                        `${logContext} Active attempt ${attempt.attemptId} by user ${attempt.userId}, ` +
+                        `started: ${attempt.startTime}, status: ${attempt.status}`
+                    );
+                }
+
+                throw new ConflictException(
+                    `Cannot delete question: ${activeAttempts.length} active test attempts in progress. ` +
+                    `Please wait for all attempts to complete or contact users to finish their tests.`
+                );
+            }
+
+            this.logger.log(`${logContext} No active test attempts found for test ${question.testId}`);
+
+            // Step 2: Check if question has submitted answers (existing check)
             const answersCount = await this.answersService.countByQuestion(
                 id,
                 scope,
             );
+            
             if (answersCount > 0) {
+                this.logger.error(
+                    `${logContext} DELETION BLOCKED: Question has ${answersCount} submitted answers`
+                );
                 throw new ConflictException(
-                    'Cannot delete question that has submitted answers',
+                    `Cannot delete question that has ${answersCount} submitted answers. ` +
+                    `Consider archiving the question instead.`
                 );
             }
 
+            this.logger.log(`${logContext} No submitted answers found, proceeding with deletion`);
+
+            // Step 3: Log detailed deletion information for audit trail
+            this.logger.log(
+                `${logContext} DELETING QUESTION: ` +
+                `Text: "${question.questionText.substring(0, 100)}${question.questionText.length > 100 ? '...' : ''}", ` +
+                `Type: ${question.questionType}, Points: ${question.points}, Order: ${question.orderIndex}, ` +
+                `Test: ${question.testId}, HasMedia: ${question.hasMedia}`
+            );
+
+            // Step 4: Perform the deletion
+            const deletionStart = new Date();
             await this.questionRepository.remove(question);
+            const deletionDuration = new Date().getTime() - deletionStart.getTime();
+
+            this.logger.log(
+                `${logContext} Question successfully deleted from database in ${deletionDuration}ms`
+            );
 
             // Comprehensive cache invalidation
             await Promise.all([
@@ -867,10 +1023,16 @@ export class QuestionsService {
                 ),
             ]);
 
-            this.logger.log(`Question ${id} deleted successfully`);
+            const endTime = new Date();
+            const totalDuration = endTime.getTime() - startTime.getTime();
+
+            this.logger.log(
+                `${logContext} Question deletion process completed successfully in ${totalDuration}ms. ` +
+                `Cache invalidation completed.`
+            );
 
             return {
-                message: 'Question deleted successfully',
+                message: `Question deleted successfully in ${totalDuration}ms`,
                 status: 'success',
                 code: 200,
             };

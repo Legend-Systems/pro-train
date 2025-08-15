@@ -564,11 +564,18 @@ export class TestAttemptsService {
                         await this.answersService.bulkCreateWithEntities(
                             bulkAnswersDto,
                             scope,
+                            {
+                                testId: attempt.testId,
+                                attemptId: attemptId,
+                                userId: userId
+                            }
                         );
                     if (bulkResult.success) {
                         createdAnswerEntities = bulkResult.data.entities;
                         this.logger.log(
-                            `Successfully created ${submitData.answers.length} answers for attempt ${attemptId}`,
+                            `Successfully created ${submitData.answers.length} answers for attempt ${attemptId} ` +
+                            `(validation: ${bulkResult.validationResult?.validQuestions}/${bulkResult.validationResult?.questionsValidated} questions valid, ` +
+                            `${bulkResult.validationResult?.validationTime}ms validation time)`
                         );
                         this.logger.log(
                             `🔍 DEBUG: Created ${createdAnswerEntities.length} answer entities for auto-marking`,
@@ -580,10 +587,23 @@ export class TestAttemptsService {
                                 `🔍 DEBUG: First entity - ID: ${firstEntity.answerId}, Question: ${firstEntity.questionId}, HasQuestion: ${!!firstEntity.question}`,
                             );
                         }
+                        
+                        // Log any errors that occurred during creation
+                        if (bulkResult.errors && bulkResult.errors.length > 0) {
+                            this.logger.warn(
+                                `Partial success in answer creation: ${bulkResult.errors.length} errors occurred`,
+                                bulkResult.errors
+                            );
+                        }
                     } else {
-                        throw new Error(
-                            `Bulk create failed: ${bulkResult.message}`,
-                        );
+                        const errorMessage = `Bulk create failed: ${bulkResult.message}`;
+                        if (bulkResult.errors && bulkResult.errors.length > 0) {
+                            this.logger.error(
+                                `${errorMessage}. Detailed errors:`,
+                                bulkResult.errors
+                            );
+                        }
+                        throw new Error(errorMessage);
                     }
                 } catch (error) {
                     this.logger.error(

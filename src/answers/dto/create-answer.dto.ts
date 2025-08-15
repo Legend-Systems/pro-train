@@ -35,4 +35,13 @@ export class CreateAnswerDto {
     @IsOptional()
     @IsString()
     textAnswer?: string;
+
+    @ApiProperty({
+        description: 'Time spent on this question in seconds',
+        example: 45,
+        required: false,
+    })
+    @IsOptional()
+    @IsNumber()
+    timeSpent?: number;
 }
