@@ -868,6 +868,7 @@ export class CommunicationsService {
         recipientEmail: string;
         testTitle: string;
         score: number;
+        maxScore?: number;
         totalQuestions: number;
         correctAnswers: number;
         percentage: number;
@@ -875,6 +876,8 @@ export class CommunicationsService {
         resultsUrl: string;
         feedback?: string;
         organizationId?: string;
+        scoreDisplay?: string;
+        isPassed?: boolean;
     }): Promise<void> {
         try {
             const baseData = this.getBaseTemplateData(

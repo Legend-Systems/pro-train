@@ -84,12 +84,15 @@ export interface TestNotificationTemplateData extends BaseTemplateData {
 export interface ResultsSummaryTemplateData extends BaseTemplateData {
     testTitle: string;
     score: number;
+    maxScore?: number;
     totalQuestions: number;
     correctAnswers: number;
     percentage: number;
     completionTime: string;
     resultsUrl: string;
     feedback?: string;
+    scoreDisplay?: string;
+    isPassed?: boolean;
 }
 
 // Course enrollment template data

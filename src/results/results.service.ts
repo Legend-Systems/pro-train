@@ -1531,21 +1531,25 @@ export class ResultsService {
 
             const allAnswers = await answersQuery.getMany();
 
-            // Calculate correct answers count properly
+            // Calculate correct answers count properly - matching the main calculation logic
             let correctAnswersCount = 0;
             for (const answer of allAnswers) {
-                // Check if answer has been marked with points
+                let isCorrect = false;
+                
+                // Check if answer has been marked with points (including 0 points)
                 if (
                     answer.pointsAwarded !== null &&
-                    answer.pointsAwarded !== undefined &&
-                    answer.pointsAwarded > 0
+                    answer.pointsAwarded !== undefined
                 ) {
-                    correctAnswersCount++;
+                    // Count as correct if points awarded > 0
+                    isCorrect = Number(answer.pointsAwarded) > 0;
                 } else if (answer.selectedOption && answer.question) {
                     // For auto-marked questions, check if the selected option is correct
-                    if (answer.selectedOption.isCorrect) {
-                        correctAnswersCount++;
-                    }
+                    isCorrect = answer.selectedOption.isCorrect;
+                }
+                
+                if (isCorrect) {
+                    correctAnswersCount++;
                 }
             }
 
@@ -1556,7 +1560,9 @@ export class ResultsService {
                     totalAnswers: allAnswers.length,
                     correctAnswersCount,
                     resultScore: result.score,
+                    resultMaxScore: result.maxScore,
                     resultPercentage: result.percentage,
+                    calculatedPercentage: questionCount > 0 ? Math.round((correctAnswersCount / questionCount) * 100) : 0,
                 },
             );
 
@@ -1568,12 +1574,16 @@ export class ResultsService {
                 recipientEmail: attempt.user.email || '',
                 testTitle: attempt.test?.title || 'Test',
                 score: Number(result.score) || 0,
+                maxScore: Number(result.maxScore) || questionCount,
                 totalQuestions: questionCount || 1,
                 correctAnswers: correctAnswersCount || 0,
                 percentage: Number(result.percentage) || 0,
                 completionTime: completionTime || 'Not available',
                 resultsUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/results/${result.resultId}`,
                 organizationId: attempt.orgId?.id || result.orgId?.id,
+                // Additional data for better display
+                scoreDisplay: `${Number(result.score) || 0}/${Number(result.maxScore) || questionCount}`,
+                isPassed: (Number(result.percentage) || 0) >= 60,
             };
 
             this.logger.debug(

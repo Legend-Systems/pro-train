@@ -508,7 +508,7 @@
                 <div class="test-details">
                     <div class="detail-item">
                         <div class="detail-label">Score</div>
-                        <div class="detail-value">{{percentage}}%</div>
+                        <div class="detail-value">{{#if scoreDisplay}}{{scoreDisplay}} ({{percentage}}%){{else}}{{percentage}}%{{/if}}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Correct Answers</div>
@@ -520,33 +520,31 @@
                         <div class="detail-value">{{completionTime}}</div>
                     </div>
                     {{/if}}
-                    {{#if passingScore}}
                     <div class="detail-item">
-                        <div class="detail-label">Passing Score</div>
-                        <div class="detail-value">{{passingScore}}%</div>
+                        <div class="detail-label">Status</div>
+                        <div class="detail-value">{{#if isPassed}}✅ Passed{{else}}❌ Needs Improvement{{/if}}</div>
                     </div>
-                    {{/if}}
                 </div>
             </div>
             
             <div class="score-display">
                 <div class="score-circle">
                     <div class="score-text">
-                        <div class="score-percentage">{{percentage}}%</div>
+                        <div class="score-percentage">{{#if percentage}}{{percentage}}{{else}}0{{/if}}%</div>
                         <div class="score-label">SCORE</div>
                     </div>
                 </div>
                 <div class="score-description">
-                    {{#ifCond percentage ">=" 90}}
+                    {{#ifCond (or percentage 0) ">=" 90}}
                     Exceptional Performance
                     {{else}}
-                        {{#ifCond percentage ">=" 80}}
+                        {{#ifCond (or percentage 0) ">=" 80}}
                         Outstanding Achievement
                         {{else}}
-                            {{#ifCond percentage ">=" 70}}
+                            {{#ifCond (or percentage 0) ">=" 70}}
                             Great Performance
                             {{else}}
-                                {{#ifCond percentage ">=" 60}}
+                                {{#ifCond (or percentage 0) ">=" 60}}
                                 Good Progress
                                 {{else}}
                                 Keep Learning
@@ -555,6 +553,19 @@
                         {{/ifCond}}
                     {{/ifCond}}
                 </div>
+                
+                {{#if scoreDisplay}}
+                <div class="score-details">
+                    <div class="score-item">
+                        <div class="score-item-value">{{scoreDisplay}}</div>
+                        <div class="score-item-label">Points Earned</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-item-value">{{correctAnswers}}/{{totalQuestions}}</div>
+                        <div class="score-item-label">Questions Correct</div>
+                    </div>
+                </div>
+                {{/if}}
             </div>
             
             {{#if feedback}}
@@ -565,10 +576,10 @@
             {{/if}}
             
             <div class="message">
-                {{#ifCond percentage ">=" 80}}
+                {{#ifCond (or percentage 0) ">=" 80}}
                 🌟 Outstanding achievement! You've not just learned the material - you've mastered it. This score reflects your dedication, focus, and natural ability to absorb and apply knowledge. You're setting a fantastic example for other learners and proving that excellence is within reach when you commit to growth.
                 {{else}}
-                  {{#ifCond percentage ">=" 60}}
+                  {{#ifCond (or percentage 0) ">=" 60}}
                   👏 Solid performance! You've grasped the core concepts and shown real understanding. The areas where you can improve aren't weaknesses - they're your next opportunities for growth. With your foundation this strong, focusing on those specific areas will take you to the next level quickly.
                   {{else}}
                   💪 Every expert was once a beginner, and every master was once a disaster! Your score shows you're in the learning process, which is exactly where growth happens. This isn't about where you are - it's about where you're going. Use this feedback as your roadmap, and remember that persistence always pays off.

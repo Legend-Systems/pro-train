@@ -71,6 +71,7 @@ export class TemplateTestingService {
                     ...baseData,
                     testTitle: 'JavaScript Fundamentals Quiz',
                     score: 85,
+                    maxScore: 100,
                     totalQuestions: 20,
                     correctAnswers: 17,
                     percentage: 85,
@@ -79,6 +80,8 @@ export class TemplateTestingService {
                         'https://trainpro.com/results/javascript-fundamentals-123',
                     feedback:
                         'Great job! You have a solid understanding of JavaScript fundamentals. Consider reviewing array methods for improvement.',
+                    scoreDisplay: '85/100',
+                    isPassed: true,
                 } as ResultsSummaryTemplateData;
 
             case EmailType.COURSE_ENROLLMENT:
