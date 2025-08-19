@@ -223,6 +223,26 @@ export class CourseListResponseDto {
 
 export class CourseDetailDto extends CourseResponseDto {
     @ApiProperty({
+        description: 'User-specific progress in this course',
+        type: 'object',
+        properties: {
+            completionPercentage: { type: 'number', example: 75.5 },
+            timeSpentMinutes: { type: 'number', example: 120 },
+            questionsCompleted: { type: 'number', example: 25 },
+            totalQuestions: { type: 'number', example: 30 },
+            lastUpdated: { type: 'string', format: 'date-time' },
+        },
+        nullable: true,
+    })
+    userProgress?: {
+        completionPercentage: number;
+        timeSpentMinutes: number;
+        questionsCompleted: number;
+        totalQuestions: number;
+        lastUpdated: Date;
+    } | null;
+
+    @ApiProperty({
         description: 'Detailed course statistics',
         type: 'object',
         properties: {

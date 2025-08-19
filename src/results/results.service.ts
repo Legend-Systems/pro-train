@@ -1063,9 +1063,7 @@ export class ResultsService {
             .leftJoinAndSelect('user.branchId', 'userBranch')
             // Test relations with comprehensive data
             .leftJoinAndSelect('result.test', 'test')
-            .leftJoinAndSelect('test.creator', 'testInstructor')
-            .leftJoinAndSelect('testInstructor.avatar', 'instructorAvatar')
-            // Course relations with comprehensive data
+            // Course relations with comprehensive data (course has creator, not test)
             .leftJoinAndSelect('result.course', 'course')
             .leftJoinAndSelect('course.creator', 'courseInstructor')
             .leftJoinAndSelect('courseInstructor.avatar', 'courseInstructorAvatar')

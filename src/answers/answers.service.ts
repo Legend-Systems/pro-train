@@ -149,11 +149,15 @@ export class AnswersService {
 
             // Validate selected option if provided and get the option entity
             let selectedOption: QuestionOption | undefined;
-            if (createAnswerDto.selectedOptionId) {
+            const sanitizedSelectedOptionId = createAnswerDto.selectedOptionId && createAnswerDto.selectedOptionId > 0 
+                ? createAnswerDto.selectedOptionId 
+                : undefined;
+
+            if (sanitizedSelectedOptionId) {
                 const foundOption = await this.questionOptionRepository.findOne(
                     {
                         where: {
-                            optionId: createAnswerDto.selectedOptionId,
+                            optionId: sanitizedSelectedOptionId,
                             questionId: createAnswerDto.questionId,
                         },
                     },
@@ -170,6 +174,7 @@ export class AnswersService {
             // Create the answer with inherited org/branch from attempt
             const answer = this.answerRepository.create({
                 ...createAnswerDto,
+                selectedOptionId: sanitizedSelectedOptionId,
                 isMarked: false,
                 isCorrect: false,
                 // Set relationships
@@ -639,8 +644,9 @@ export class AnswersService {
                         if (existingAnswer) {
                                 // Update existing answer instead of creating new one
                                 Object.assign(existingAnswer, {
-                                    selectedOptionId:
-                                        answerDto.selectedOptionId,
+                                    selectedOptionId: answerDto.selectedOptionId && answerDto.selectedOptionId > 0 
+                                        ? answerDto.selectedOptionId 
+                                        : undefined,
                                     textAnswer: answerDto.textAnswer,
                                     timeSpent: answerDto.timeSpent,
                                     updatedAt: new Date(),
@@ -652,11 +658,18 @@ export class AnswersService {
                                 );
                                 createdAnswerIds.push(existingAnswer.answerId);
                             } else {
-                                // Create new answer
+                                // Create new answer - ensure selectedOptionId is undefined if 0 or falsy
+                                const sanitizedAnswerDto = {
+                                    ...answerDto,
+                                    selectedOptionId: answerDto.selectedOptionId && answerDto.selectedOptionId > 0 
+                                        ? answerDto.selectedOptionId 
+                                        : undefined,
+                                };
+
                                 const newAnswer = queryRunner.manager.create(
                                     Answer,
                                     {
-                                        ...answerDto,
+                                        ...sanitizedAnswerDto,
                                         orgId: scope.orgId
                                             ? Number(scope.orgId)
                                             : undefined,

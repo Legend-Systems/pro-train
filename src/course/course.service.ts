@@ -531,6 +531,29 @@ export class CourseService {
             // Get statistics with caching
             const stats = await this.getStats(id);
 
+            // Calculate user-specific progress if userId is provided
+            let userProgress: {
+                completionPercentage: number;
+                timeSpentMinutes: number;
+                questionsCompleted: number;
+                totalQuestions: number;
+                lastUpdated: Date;
+            } | null = null;
+            if (scope?.userId && course.trainingProgress) {
+                const userProgressData = course.trainingProgress.find(
+                    progress => progress.userId === scope.userId && progress.courseId === id
+                );
+                if (userProgressData) {
+                    userProgress = {
+                        completionPercentage: Number(userProgressData.completionPercentage),
+                        timeSpentMinutes: userProgressData.timeSpentMinutes,
+                        questionsCompleted: userProgressData.questionsCompleted,
+                        totalQuestions: userProgressData.totalQuestions,
+                        lastUpdated: userProgressData.lastUpdated,
+                    };
+                }
+            }
+
             const result: CourseDetailDto = {
                 ...course,
                 creator: course.creator,
@@ -560,6 +583,7 @@ export class CourseService {
                 isActive: course.status === CourseStatus.ACTIVE,
                 isPublished: course.status === CourseStatus.ACTIVE,
                 enrollmentCount: stats.uniqueStudents,
+                userProgress: userProgress,
                 statistics: {
                     totalTests: stats.totalTests,
                     activeTests: stats.activeTests,
