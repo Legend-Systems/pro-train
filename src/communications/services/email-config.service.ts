@@ -50,9 +50,7 @@ export class EmailConfigService {
                         'EMAIL_FROM_NAME',
                         'trainpro Platform',
                     ),
-                    address:
-                        this.configService.get<string>('EMAIL_FROM_ADDRESS') ||
-                        '',
+                    address: this.configService.get<string>('SMTP_FROM') || '',
                 },
                 replyTo: this.configService.get<string>('EMAIL_REPLY_TO'),
             },
@@ -88,11 +86,7 @@ export class EmailConfigService {
     }
 
     private validateConfiguration(): void {
-        const requiredFields = [
-            'SMTP_USER',
-            'SMTP_PASSWORD',
-            'EMAIL_FROM_ADDRESS',
-        ];
+        const requiredFields = ['SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM'];
 
         const missingFields = requiredFields.filter(
             field => !this.configService.get(field),
@@ -109,7 +103,7 @@ export class EmailConfigService {
         const fromAddress = this.config.defaults.from.address;
 
         if (!emailRegex.test(fromAddress)) {
-            const error = `Invalid email format for EMAIL_FROM_ADDRESS: ${fromAddress}`;
+            const error = `Invalid email format for SMTP_FROM: ${fromAddress}`;
             this.logger.error(error);
             throw new Error(error);
         }
@@ -152,8 +146,9 @@ export class EmailConfigService {
             await transporter.verify();
             this.logger.log('SMTP connection test successful');
             return true;
-        } catch (error) {
-            this.logger.error('SMTP connection test failed:', error.message);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (error: unknown) {
+            this.logger.error('SMTP connection test failed:');
             return false;
         }
     }
