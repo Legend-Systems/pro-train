@@ -185,7 +185,7 @@ export class LeaderboardReportsService {
         let query = this.leaderboardRepository
             .createQueryBuilder('l')
             .innerJoin('l.user', 'u')
-            .select('u.userId', 'userId')
+            .select('u.id', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
             .addSelect('l.totalPoints', 'points')
