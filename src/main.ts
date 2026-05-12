@@ -19,6 +19,7 @@ async function bootstrap() {
             'https://www.trainpro.co.za',
             'https://trainpro.co.za',
             'https://pro-train.vercel.app',
+            'https://protrain-client.onrender.com'
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [
