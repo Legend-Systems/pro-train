@@ -5,6 +5,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
+    JoinColumn,
     Index,
     Check,
 } from 'typeorm';
@@ -151,9 +152,11 @@ export class Result {
     user: User;
 
     @ManyToOne(() => Test, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'testId', referencedColumnName: 'testId' })
     test: Test;
 
     @ManyToOne(() => Course, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'courseId', referencedColumnName: 'courseId' })
     course: Course;
 
     constructor(partial: Partial<Result>) {
