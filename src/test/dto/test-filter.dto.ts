@@ -9,7 +9,7 @@ import {
     Max,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { TestType } from '../entities/test.entity';
 
 /**
@@ -60,7 +60,11 @@ export class TestFilterDto {
         type: Boolean,
     })
     @IsOptional()
-    @Type(() => Boolean)
+    @Transform(({ value }: { value: unknown }) => {
+        if (value === true || value === 'true') return true;
+        if (value === false || value === 'false') return false;
+        return undefined;
+    })
     @IsBoolean({ message: 'Active status must be a boolean' })
     isActive?: boolean;
 

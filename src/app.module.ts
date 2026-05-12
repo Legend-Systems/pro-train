@@ -97,7 +97,7 @@ import { CommonModule } from './common/common.module';
                     TrainingProgress,
                     User,
                 ],
-                synchronize: true,
+                synchronize: false,
                 logging: false,
                 autoLoadEntities: true,
                 // Enhanced connection pool configuration

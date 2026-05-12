@@ -7,6 +7,7 @@ import {
     ManyToOne,
     OneToMany,
     Index,
+    JoinColumn,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -149,8 +150,8 @@ export class Test {
     })
     branchId?: Branch;
 
-    // Relations
     @ManyToOne(() => Course, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'courseId', referencedColumnName: 'courseId' })
     course: Course;
 
     @OneToMany(() => Question, 'test')
