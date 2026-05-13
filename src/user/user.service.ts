@@ -1145,7 +1145,7 @@ export class UserService {
             userRole?: string;
         },
     ): Promise<StandardOperationResponse> {
-        const { avatar, branchId, ...updateData } = updateUserDto;
+        const { avatar, branchId, password, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
         // Get user first to know email for cache invalidation
@@ -1198,6 +1198,13 @@ export class UserService {
             }
         }
 
+        let didUpdatePassword = false;
+        if (password !== undefined && password.length > 0) {
+            const saltRounds = 12;
+            dataToUpdate.password = await bcrypt.hash(password, saltRounds);
+            didUpdatePassword = true;
+        }
+
         await this.userRepository.update(id, dataToUpdate);
 
         // Get updated user data for comprehensive cache invalidation
@@ -1248,6 +1255,22 @@ export class UserService {
         this.logger.log(
             `✅ User Update - Cache invalidation completed for user: ${id}`,
         );
+
+        if (didUpdatePassword && updatedUser) {
+            this.eventEmitter.emit(
+                'user.password.changed',
+                new UserPasswordChangedEvent(
+                    id,
+                    updatedUser.email,
+                    updatedUser.firstName,
+                    updatedUser.lastName,
+                    updatedUser.orgId?.id,
+                    updatedUser.orgId?.name,
+                    updatedUser.branchId?.id,
+                    updatedUser.branchId?.name,
+                ),
+            );
+        }
 
         return {
             message: 'User updated successfully',
