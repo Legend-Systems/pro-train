@@ -40,7 +40,7 @@ export class CommunicationsService {
             companyName: appName,
             companyUrl: clientUrl,
             supportEmail,
-            unsubscribeUrl: `${clientUrl}/unsubscribe`,
+            unsubscribeUrl: `${clientUrl}/auth/unsubscribe`,
         };
     }
 
@@ -66,7 +66,7 @@ export class CommunicationsService {
                 organizationName,
                 organizationId,
                 dashboardUrl: `${clientUrl}/dashboard`,
-                loginUrl: `${clientUrl}/login`,
+                loginUrl: `${clientUrl}/auth/login`,
                 logoUrl,
                 website,
                 setupGuideUrl: `${clientUrl}/setup-guide`,

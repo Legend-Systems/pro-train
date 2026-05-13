@@ -481,7 +481,7 @@ export class UserController {
       
       **Security Features:**
       - Email uniqueness validation
-      - Password updates blocked (use dedicated endpoint)
+      - Optional password reset (same complexity rules as registration)
       - Input validation for all fields
       
       **Use Cases:**
@@ -513,19 +513,6 @@ export class UserController {
         try {
             this.logger.log(`Admin updating user: ${id}`);
 
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { password, ...updateData } = updateUserDto;
-
-            // Prevent password updates through this endpoint
-            if (password) {
-                this.logger.warn(
-                    `Password update attempted through admin update for user: ${id}`,
-                );
-                throw new BadRequestException(
-                    'Use /user/change-password endpoint to update password',
-                );
-            }
-
             // Use organization and branch from the authenticated user's scope
             const userScope = {
                 orgId: scope.orgId,
@@ -534,7 +521,7 @@ export class UserController {
                 userRole: scope.userRole,
             };
 
-            await this.userService.update(id, updateData, userScope);
+            await this.userService.update(id, updateUserDto, userScope);
 
             this.logger.log(`User updated successfully: ${id}`);
 

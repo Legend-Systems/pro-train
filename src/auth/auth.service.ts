@@ -922,7 +922,7 @@ export class AuthService {
                 firstName: userData.user.firstName,
                 lastName: userData.user.lastName,
                 avatar: userData.user.avatar,
-                loginUrl: `${baseUrl}/login`,
+                loginUrl: `${baseUrl}/auth/login`,
                 dashboardUrl: `${baseUrl}/dashboard`,
                 profileUrl: `${baseUrl}/profile`,
                 companyName: appName,
@@ -931,7 +931,7 @@ export class AuthService {
                     'SUPPORT_EMAIL',
                     'support@trainpro.com',
                 ),
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization data
                 organizationName: userData.organization?.name,
                 organizationLogo: userData.organization?.logoUrl,
@@ -984,7 +984,8 @@ export class AuthService {
                 'APP_NAME',
                 'trainpro Platform',
             );
-            const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+            const resetPasswordUrl = `${baseUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
+            const loginUrl = `${baseUrl}/auth/login`;
 
             // Get complete user data including avatar and organization details
             const userData = await this.getCompleteUserDataForEmail(user);
@@ -995,7 +996,9 @@ export class AuthService {
                 firstName: userData.user.firstName,
                 lastName: userData.user.lastName,
                 avatar: userData.user.avatar,
-                resetUrl,
+                resetUrl: resetPasswordUrl,
+                resetPasswordUrl,
+                loginUrl,
                 resetToken: token,
                 expiryTime: '15 minutes',
                 companyName: appName,
@@ -1004,7 +1007,7 @@ export class AuthService {
                     'SUPPORT_EMAIL',
                     'support@trainpro.com',
                 ),
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization data
                 organizationName: userData.organization?.name,
                 organizationLogo: userData.organization?.logoUrl,
@@ -1058,7 +1061,7 @@ export class AuthService {
                 'APP_NAME',
                 'trainpro Platform',
             );
-            const verificationUrl = `${baseUrl}/verify-email?token=${token}`;
+            const verificationUrl = `${baseUrl}/auth/verify-email?token=${encodeURIComponent(token)}`;
 
             // Get complete user data including avatar and organization details
             const userData = await this.getCompleteUserDataForEmail(user);
@@ -1078,7 +1081,7 @@ export class AuthService {
                     'SUPPORT_EMAIL',
                     'support@trainpro.com',
                 ),
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization data
                 organizationName: userData.organization?.name,
                 organizationLogo: userData.organization?.logoUrl,
@@ -1244,7 +1247,7 @@ export class AuthService {
                     'SUPPORT_EMAIL',
                     'support@trainpro.com',
                 ),
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization data
                 organizationName: userData.organization?.name,
                 organizationLogo: userData.organization?.logoUrl,
@@ -1346,7 +1349,7 @@ export class AuthService {
                     minute: '2-digit',
                     timeZoneName: 'short',
                 }),
-                loginUrl: `${baseUrl}/login`,
+                loginUrl: `${baseUrl}/auth/login`,
                 dashboardUrl: `${baseUrl}/dashboard`,
                 profileUrl: `${baseUrl}/profile`,
                 companyName: appName,
@@ -1357,7 +1360,7 @@ export class AuthService {
                 ),
                 ipAddress,
                 userAgent,
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization data
                 organizationName: userData.organization?.name,
                 organizationLogo: userData.organization?.logoUrl,
@@ -1432,7 +1435,7 @@ export class AuthService {
                         recipientName: userData.user.fullName,
                         recipientEmail: userData.user.email,
                         recipientAvatar: userData.user.avatar,
-                        loginUrl: `${baseUrl}/login`,
+                        loginUrl: `${baseUrl}/auth/login`,
                         dashboardUrl: `${baseUrl}/dashboard`,
                         profileUrl: `${baseUrl}/profile`,
                         coursesUrl: `${baseUrl}/courses`,
@@ -1444,7 +1447,7 @@ export class AuthService {
                             'SUPPORT_EMAIL',
                             'support@exxam.com',
                         ),
-                        unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                        unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                         currentYear: new Date().getFullYear(),
                         // Organization branding
                         organizationName: userData.organization?.name || 'Your Organization',
@@ -1530,7 +1533,7 @@ export class AuthService {
                 'APP_NAME',
                 'trainpro Platform',
             );
-            const invitationUrl = `${baseUrl}/signup?invitation=${token}`;
+            const invitationUrl = `${baseUrl}/auth/register?invitation=${encodeURIComponent(token)}`;
 
             const templateData = {
                 recipientEmail,
@@ -1551,7 +1554,7 @@ export class AuthService {
                     'SUPPORT_EMAIL',
                     'support@trainpro.com',
                 ),
-                unsubscribeUrl: `${baseUrl}/unsubscribe`,
+                unsubscribeUrl: `${baseUrl}/auth/unsubscribe`,
                 // Organization branding
                 organizationName: inviterData.organization?.name,
                 organizationLogo: inviterData.organization?.logoUrl,

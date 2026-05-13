@@ -5,6 +5,7 @@ import {
     IsString,
     MinLength,
     IsEnum,
+    Matches,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PartialType } from '@nestjs/mapped-types';
@@ -80,4 +81,28 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     @IsOptional()
     @IsEnum(UserRole, { message: 'Role must be a valid user role' })
     role?: UserRole;
+
+    @ApiProperty({
+        description:
+            'Optional new password (admin reset). Must meet the same complexity rules as account creation when provided.',
+        example: 'SecurePass123!',
+        required: false,
+        minLength: 8,
+        type: String,
+        title: 'New Password',
+        format: 'password',
+        pattern:
+            '^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?])',
+    })
+    @IsOptional()
+    @IsString()
+    @MinLength(8, { message: 'Password must be at least 8 characters long' })
+    @Matches(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?])/,
+        {
+            message:
+                'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+        },
+    )
+    password?: string;
 }
