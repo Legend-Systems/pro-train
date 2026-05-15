@@ -30,6 +30,8 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { CourseLearnerProgressPayloadDto } from './dto/course-learner-progress.dto';
+import { UserRole } from '../user/entities/user.entity';
 import { CourseService } from './course.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
@@ -421,6 +423,72 @@ export class CourseController {
             );
             throw error;
         }
+    }
+
+    @Get(':courseId/learner-progress')
+    @ApiOperation({
+        summary: '📊 Learner progress (completion + knowledge)',
+        description: `
+      Returns **course completion** (Section 1.1) and **personal knowledge %** (Section 1.2) derived from
+      \`tests\` + \`results\`, not from averaged \`training_progress\` rows.
+
+      - **userId** defaults to the authenticated user; admins/owners/brandon may pass another learner id.
+    `,
+        operationId: 'getCourseLearnerProgress',
+    })
+    @ApiParam({
+        name: 'courseId',
+        description: 'Course whose learner metrics are evaluated',
+        example: 1,
+    })
+    @ApiQuery({
+        name: 'userId',
+        required: false,
+        description:
+            'Learner user UUID. When omitted, uses the JWT subject. Elevated roles may query other users.',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Learner metrics computed successfully',
+        schema: {
+            allOf: [{ $ref: '#/components/schemas/StandardApiResponse' }],
+        },
+    })
+    async getCourseLearnerProgress(
+        @Param('courseId', ParseIntPipe) courseId: number,
+        @Query('userId') learnerUserIdQuery: string | undefined,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse<CourseLearnerProgressPayloadDto>> {
+        const resolvedLearnerUserId = learnerUserIdQuery ?? scope.userId;
+        const isElevatedCourseProgressRole =
+            scope.userRole === UserRole.ADMIN ||
+            scope.userRole === UserRole.BRANDON ||
+            scope.userRole === UserRole.OWNER;
+
+        if (
+            resolvedLearnerUserId !== scope.userId &&
+            !isElevatedCourseProgressRole
+        ) {
+            throw new ForbiddenException(
+                'You can only request learner progress for your own user unless you have an elevated role.',
+            );
+        }
+
+        const learnerProgress =
+            await this.courseService.getCourseLearnerProgress(
+                courseId,
+                resolvedLearnerUserId,
+            );
+
+        return {
+            success: true,
+            message: 'Course learner progress retrieved successfully',
+            data: learnerProgress,
+            meta: {
+                timestamp: new Date().toISOString(),
+            },
+        };
     }
 
     @Get(':id')

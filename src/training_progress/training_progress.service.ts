@@ -2,9 +2,10 @@ import {
     Injectable,
     NotFoundException,
     InternalServerErrorException,
+    BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, Not } from 'typeorm';
 import { TrainingProgress } from './entities/training_progress.entity';
 import { Course } from '../course/entities/course.entity';
 import { CreateTrainingProgressDto } from './dto/create-training_progress.dto';
@@ -31,7 +32,9 @@ export class TrainingProgressService {
                 .leftJoinAndSelect('progress.user', 'user')
                 .leftJoinAndSelect('progress.course', 'course')
                 .leftJoinAndSelect('progress.test', 'test')
-                .where('progress.userId = :userId', { userId });
+                .where('progress.userId = :userId', { userId })
+                // Course-level rows (testId null) break naive averages; UI uses per-test rows only.
+                .andWhere('progress.testId IS NOT NULL');
 
             if (courseId) {
                 queryBuilder.andWhere('progress.courseId = :courseId', {
@@ -51,6 +54,142 @@ export class TrainingProgressService {
         } catch (error) {
             throw new InternalServerErrorException(
                 'Failed to fetch user progress',
+            );
+        }
+    }
+
+    /**
+     * Writes or replaces the per-test materialized row when a result is scored (Section 1.3).
+     * Unlike {@link updateProgress}, time and question counts are replaced so retakes do not
+     * accumulate duplicate minutes when syncing from the latest attempt snapshot.
+     */
+    async upsertPerTestSnapshotFromScoredResult(input: {
+        readonly userId: string;
+        readonly courseId: number;
+        readonly testId: number;
+        readonly completionPercentage: number;
+        readonly timeSpentMinutes: number;
+        readonly questionsCompleted: number;
+        readonly totalQuestions: number;
+    }): Promise<TrainingProgressResponseDto> {
+        try {
+            const course = await this.courseRepository.findOne({
+                where: { courseId: input.courseId },
+                relations: ['orgId', 'branchId'],
+            });
+            if (!course) {
+                throw new NotFoundException(
+                    `Course with ID ${input.courseId} not found`,
+                );
+            }
+
+            let progressEntry = await this.progressRepository.findOne({
+                where: {
+                    userId: input.userId,
+                    courseId: input.courseId,
+                    testId: input.testId,
+                },
+                relations: ['user', 'course', 'test', 'orgId', 'branchId'],
+            });
+
+            if (progressEntry) {
+                progressEntry.completionPercentage = input.completionPercentage;
+                progressEntry.timeSpentMinutes = input.timeSpentMinutes;
+                progressEntry.questionsCompleted = input.questionsCompleted;
+                progressEntry.totalQuestions = input.totalQuestions;
+                progressEntry.lastUpdated = new Date();
+            } else {
+                progressEntry = this.progressRepository.create({
+                    userId: input.userId,
+                    courseId: input.courseId,
+                    testId: input.testId,
+                    completionPercentage: input.completionPercentage,
+                    timeSpentMinutes: input.timeSpentMinutes,
+                    questionsCompleted: input.questionsCompleted,
+                    totalQuestions: input.totalQuestions,
+                    orgId: course.orgId,
+                    branchId: course.branchId,
+                });
+            }
+
+            const savedProgress =
+                await this.progressRepository.save(progressEntry);
+            const fullProgress = await this.progressRepository.findOne({
+                where: { progressId: savedProgress.progressId },
+                relations: ['user', 'course', 'test'],
+            });
+
+            return plainToClass(TrainingProgressResponseDto, fullProgress, {
+                excludeExtraneousValues: true,
+            });
+        } catch (error) {
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new InternalServerErrorException(
+                'Failed to upsert training progress snapshot',
+            );
+        }
+    }
+
+    /**
+     * One-off reconciliation: replay latest scored result per (user,course,test) into training_progress.
+     */
+    async backfillFromLatestResults(): Promise<{ syncedRowCount: number }> {
+        type RankedLatestRow = {
+            userId: string;
+            courseId: number;
+            testId: number;
+            percentage: string;
+            attemptId: number;
+        };
+
+        try {
+            const rankedRows: RankedLatestRow[] =
+                await this.progressRepository.manager.query(
+                    `
+          SELECT ranked.userId AS userId,
+                 ranked.courseId AS courseId,
+                 ranked.testId AS testId,
+                 ranked.percentage AS percentage,
+                 ranked.attemptId AS attemptId
+          FROM (
+                 SELECT r.userId AS userId,
+                        r.courseId AS courseId,
+                        r.testId AS testId,
+                        r.percentage AS percentage,
+                        r.attemptId AS attemptId,
+                        ROW_NUMBER() OVER (
+                          PARTITION BY r.userId, r.courseId, r.testId
+                          ORDER BY r.calculatedAt DESC, r.createdAt DESC, r.resultId DESC
+                          ) AS rn
+                 FROM results r
+               ) ranked
+          WHERE ranked.rn = 1
+          `,
+                );
+
+            let syncedRowCount = 0;
+            for (const rankedRow of rankedRows) {
+                await this.upsertPerTestSnapshotFromScoredResult({
+                    userId: rankedRow.userId,
+                    courseId: rankedRow.courseId,
+                    testId: rankedRow.testId,
+                    completionPercentage:
+                        Math.round(Number(rankedRow.percentage) * 100) / 100,
+                    timeSpentMinutes: 0,
+                    questionsCompleted: 0,
+                    totalQuestions: 0,
+                });
+                syncedRowCount++;
+            }
+
+            return { syncedRowCount };
+        } catch (error) {
+            throw new InternalServerErrorException(
+                `Failed to backfill training_progress from results: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
             );
         }
     }
@@ -105,6 +244,16 @@ export class TrainingProgressService {
                     );
                 }
 
+                /**
+                 * Omitting legacy course rollup rows (`testId` undefined) keeps one row per
+                 * learner/test and avoids polluted averages (Section 4).
+                 */
+                if (testId === undefined || testId === null) {
+                    throw new BadRequestException(
+                        'Course-level progress rows (without testId) are not supported; use per-test snapshots.',
+                    );
+                }
+
                 // Create new progress entry with inherited org/branch
                 const createDto: CreateTrainingProgressDto = {
                     userId,
@@ -156,6 +305,8 @@ export class TrainingProgressService {
                 queryBuilder.andWhere('progress.userId = :userId', { userId });
             }
 
+            queryBuilder.andWhere('progress.testId IS NOT NULL');
+
             const progressEntries = await queryBuilder
                 .orderBy('progress.lastUpdated', 'DESC')
                 .getMany();
@@ -178,10 +329,14 @@ export class TrainingProgressService {
     ): Promise<{ overallCompletion: number; testCompletions: any[] }> {
         try {
             const progressEntries = await this.progressRepository.find({
-                where: { userId, courseId },
+                where: { userId, courseId, testId: Not(IsNull()) },
                 relations: ['test'],
             });
 
+            /**
+             * Averages completion % across per-test materialized rows only.
+             * Prefer {@link CourseService.getCourseLearnerProgress} for compliance completion and knowledge %.
+             */
             if (progressEntries.length === 0) {
                 return { overallCompletion: 0, testCompletions: [] };
             }
@@ -225,7 +380,8 @@ export class TrainingProgressService {
         try {
             const queryBuilder = this.progressRepository
                 .createQueryBuilder('progress')
-                .where('progress.userId = :userId', { userId });
+                .where('progress.userId = :userId', { userId })
+                .andWhere('progress.testId IS NOT NULL');
 
             if (courseId) {
                 queryBuilder.andWhere('progress.courseId = :courseId', {
@@ -233,6 +389,10 @@ export class TrainingProgressService {
                 });
             }
 
+            /**
+             * Legacy dashboard stats derived from training_progress snapshots.
+             * Course completion gates and headline knowledge belong on results-backed APIs.
+             */
             const progressEntries = await queryBuilder.getMany();
 
             const stats = {

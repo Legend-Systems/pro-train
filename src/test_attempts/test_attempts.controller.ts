@@ -590,6 +590,32 @@ export class TestAttemptsController {
         }
     }
 
+    @Post(':id/sync-training-progress')
+    @ApiOperation({
+        summary: '📈 Sync scored attempt → training_progress',
+        description:
+            'Upserts per-test training_progress using the stored result snapshot (requires a scored result row).',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Snapshot written successfully',
+    })
+    async syncTrainingProgress(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Req() req: AuthenticatedRequest,
+    ): Promise<StandardApiResponse> {
+        await this.testAttemptsService.syncTrainingProgressSnapshot(
+            id,
+            scope,
+            req.user.id,
+        );
+        return {
+            success: true,
+            message: 'Training progress snapshot synced successfully',
+        };
+    }
+
     @Delete(':id/cancel')
     @ApiOperation({
         summary: '❌ Cancel Test Attempt',
