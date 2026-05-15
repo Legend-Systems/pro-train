@@ -25,6 +25,7 @@ import { AttemptStatus } from '../test_attempts/entities/test_attempt.entity';
 import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { CommunicationsService } from '../communications/communications.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { TrainingProgressService } from '../training_progress/training_progress.service';
 
 @Injectable()
 export class ResultsService {
@@ -81,6 +82,7 @@ export class ResultsService {
         private readonly testRepository: Repository<Test>,
         private readonly leaderboardService: LeaderboardService,
         private readonly communicationsService: CommunicationsService,
+        private readonly trainingProgressService: TrainingProgressService,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
 
@@ -192,7 +194,7 @@ export class ResultsService {
 
             // Calculate the score
             this.logger.debug(`Calculating score for attempt ${attemptId}`);
-            const { score, maxScore, percentage } =
+            const { score, maxScore, percentage, totalQuestions, questionsAnswered } =
                 await this.calculateScore(attemptId);
 
             this.logger.debug(`Score calculated for attempt ${attemptId}:`, {
@@ -288,6 +290,21 @@ export class ResultsService {
             this.logger.log(
                 `Result created successfully for attempt ${attemptId}: ${savedResult.resultId}`,
             );
+
+            try {
+                await this.syncTrainingProgressSnapshotForAttempt(attempt, {
+                    percentage,
+                    totalQuestions,
+                    questionsAnswered,
+                });
+            } catch (progressError) {
+                this.logger.error(
+                    `Training progress snapshot failed after creating result ${savedResult.resultId} for attempt ${attemptId}`,
+                    progressError instanceof Error
+                        ? progressError.stack
+                        : String(progressError),
+                );
+            }
 
             // Phase 1: Enhanced Logging & Validation for Leaderboard Update
             this.logger.debug(`=== PHASE 1: Preparing Leaderboard Update ===`);
@@ -881,9 +898,8 @@ export class ResultsService {
             }
 
             // Recalculate the score
-            const { score, maxScore, percentage } = await this.calculateScore(
-                result.attemptId,
-            );
+            const { score, maxScore, percentage, totalQuestions, questionsAnswered } =
+                await this.calculateScore(result.attemptId);
 
             // Update the result
             await this.resultRepository.update(resultId, {
@@ -893,6 +909,21 @@ export class ResultsService {
                 passed: percentage >= 60, // Assuming 60% pass rate
                 calculatedAt: new Date(),
             });
+
+            try {
+                await this.syncTrainingProgressSnapshotForAttempt(attempt, {
+                    percentage,
+                    totalQuestions,
+                    questionsAnswered,
+                });
+            } catch (progressError) {
+                this.logger.error(
+                    `Training progress snapshot failed after recalculating result ${resultId} for attempt ${result.attemptId}`,
+                    progressError instanceof Error
+                        ? progressError.stack
+                        : String(progressError),
+                );
+            }
 
             // Return the updated result
             return this.findOne(resultId, scope, userId);
@@ -907,10 +938,83 @@ export class ResultsService {
         }
     }
 
+    /**
+     * Idempotent hook for the client route; requires an existing `results` row for the attempt.
+     */
+    async syncTrainingProgressForAttemptId(attemptId: number): Promise<void> {
+        const resultRow = await this.resultRepository.findOne({
+            where: { attemptId },
+        });
+        if (!resultRow) {
+            throw new BadRequestException(
+                'No scored result exists for this attempt yet; create a result first.',
+            );
+        }
+        const attemptEntity = await this.testAttemptRepository.findOne({
+            where: { attemptId },
+            relations: ['test'],
+        });
+        if (!attemptEntity?.test?.courseId) {
+            throw new NotFoundException(
+                `Attempt ${attemptId} is missing course context for progress sync`,
+            );
+        }
+        const scoring = await this.calculateScore(attemptId);
+        await this.syncTrainingProgressSnapshotForAttempt(attemptEntity, {
+            percentage: scoring.percentage,
+            totalQuestions: scoring.totalQuestions,
+            questionsAnswered: scoring.questionsAnswered,
+        });
+    }
+
+    private computeAttemptElapsedMinutes(attempt: TestAttempt): number {
+        const endTime = attempt.submitTime ?? attempt.updatedAt ?? new Date();
+        const elapsedMs = Math.max(
+            0,
+            new Date(endTime).getTime() -
+                new Date(attempt.startTime).getTime(),
+        );
+        return Math.round(elapsedMs / 60000);
+    }
+
+    /**
+     * Keeps per-test `training_progress` aligned with the latest scored attempt percentage.
+     */
+    private async syncTrainingProgressSnapshotForAttempt(
+        attempt: TestAttempt,
+        scoring: {
+            percentage: number;
+            totalQuestions: number;
+            questionsAnswered: number;
+        },
+    ): Promise<void> {
+        const courseId = attempt.test?.courseId;
+        if (!courseId) {
+            throw new BadRequestException(
+                'Cannot sync training progress without a course on the test',
+            );
+        }
+        const timeSpentMinutes = this.computeAttemptElapsedMinutes(attempt);
+        await this.trainingProgressService.upsertPerTestSnapshotFromScoredResult(
+            {
+                userId: attempt.userId,
+                courseId,
+                testId: attempt.testId,
+                completionPercentage:
+                    Math.round(scoring.percentage * 100) / 100,
+                timeSpentMinutes,
+                questionsCompleted: scoring.questionsAnswered,
+                totalQuestions: scoring.totalQuestions,
+            },
+        );
+    }
+
     private async calculateScore(attemptId: number): Promise<{
         score: number;
         maxScore: number;
         percentage: number;
+        totalQuestions: number;
+        questionsAnswered: number;
     }> {
         this.logger.debug(
             `Starting score calculation for attempt ${attemptId}`,
@@ -1047,6 +1151,8 @@ export class ResultsService {
             score: totalScore,
             maxScore,
             percentage,
+            totalQuestions: questions.length,
+            questionsAnswered: answers.length,
         };
     }
 

@@ -7,7 +7,7 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -21,13 +21,18 @@ import {
     StandardOperationResponse,
 } from './dto/course-response.dto';
 import { Course, CourseStatus } from './entities/course.entity';
-import { Test } from '../test/entities/test.entity';
+import { Test, TestType } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
 import { UserService } from '../user/user.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
+import {
+    CourseLearnerProgressPayloadDto,
+    KnowledgeTestContributionDto,
+    MandatoryExamCompletionItemDto,
+} from './dto/course-learner-progress.dto';
 
 @Injectable()
 export class CourseService {
@@ -1215,6 +1220,150 @@ export class CourseService {
             });
 
             return courses;
+        });
+    }
+
+    /**
+     * Aggregates learner completion (Section 1.1) and personal knowledge % (Section 1.2) from tests + results.
+     * Does not rely on training_progress averages.
+     *
+     * @param courseId - Course being evaluated.
+     * @param learnerUserId - User whose attempts and results are read.
+     */
+    async getCourseLearnerProgress(
+        courseId: number,
+        learnerUserId: string,
+    ): Promise<CourseLearnerProgressPayloadDto> {
+        return this.retryService.executeDatabase(async () => {
+            const courseExists = await this.courseRepository.exist({
+                where: { courseId },
+            });
+            if (!courseExists) {
+                throw new NotFoundException(
+                    `Course with ID ${courseId} not found`,
+                );
+            }
+
+            const testsInCourse = await this.testRepository.find({
+                where: { courseId },
+                select: {
+                    testId: true,
+                    title: true,
+                    testType: true,
+                    isActive: true,
+                },
+            });
+            const courseTestIds = new Set(
+                testsInCourse.map(courseTest => courseTest.testId),
+            );
+            const testMetaById = new Map(
+                testsInCourse.map(courseTest => [courseTest.testId, courseTest]),
+            );
+
+            const mandatoryExams = testsInCourse.filter(
+                courseTest =>
+                    courseTest.testType === TestType.EXAM && courseTest.isActive,
+            );
+            const mandatoryExamIds = mandatoryExams.map(
+                courseTest => courseTest.testId,
+            );
+
+            let passedMandatoryTestIds = new Set<number>();
+            if (mandatoryExamIds.length > 0) {
+                const passingRows = await this.resultRepository.find({
+                    where: {
+                        userId: learnerUserId,
+                        courseId,
+                        passed: true,
+                        testId: In(mandatoryExamIds),
+                    },
+                    select: { testId: true },
+                });
+                passedMandatoryTestIds = new Set(
+                    passingRows.map(passingRow => passingRow.testId),
+                );
+            }
+
+            const mandatoryExamItems: MandatoryExamCompletionItemDto[] =
+                mandatoryExams.map(mandatoryExam => ({
+                    testId: mandatoryExam.testId,
+                    title: mandatoryExam.title,
+                    everPassed: passedMandatoryTestIds.has(mandatoryExam.testId),
+                }));
+
+            const passedMandatoryCount = mandatoryExamIds.filter(id =>
+                passedMandatoryTestIds.has(id),
+            ).length;
+
+            const mandatoryExamCount = mandatoryExamIds.length;
+            const isCourseComplete =
+                mandatoryExamCount === 0 ||
+                passedMandatoryCount === mandatoryExamCount;
+
+            const resultsDescendingChronological = await this.resultRepository.find(
+                {
+                    where: { userId: learnerUserId, courseId },
+                    order: {
+                        calculatedAt: 'DESC',
+                        createdAt: 'DESC',
+                        resultId: 'DESC',
+                    },
+                    select: { testId: true, percentage: true },
+                },
+            );
+
+            const latestPercentageByTestId = new Map<number, number>();
+            for (const resultRow of resultsDescendingChronological) {
+                if (!latestPercentageByTestId.has(resultRow.testId)) {
+                    latestPercentageByTestId.set(
+                        resultRow.testId,
+                        Number(resultRow.percentage),
+                    );
+                }
+            }
+
+            const testsIncluded: KnowledgeTestContributionDto[] = [];
+            for (const [testIdKey, percentageValue] of latestPercentageByTestId) {
+                if (!courseTestIds.has(testIdKey)) {
+                    continue;
+                }
+                const testRecord = testMetaById.get(testIdKey);
+                if (!testRecord) {
+                    continue;
+                }
+                testsIncluded.push({
+                    testId: testIdKey,
+                    title: testRecord.title,
+                    testType: testRecord.testType,
+                    latestPercentage:
+                        Math.round(percentageValue * 100) / 100,
+                });
+            }
+
+            const attemptedTestCount = testsIncluded.length;
+            const rawKnowledgeAverage =
+                attemptedTestCount > 0
+                    ? testsIncluded.reduce(
+                          (sum, item) => sum + item.latestPercentage,
+                          0,
+                      ) / attemptedTestCount
+                    : 0;
+            const knowledgePercent =
+                Math.round(rawKnowledgeAverage * 100) / 100;
+
+            return {
+                courseCompletion: {
+                    mandatoryExamCount,
+                    passedMandatoryCount,
+                    isCourseComplete,
+                    mandatoryExams: mandatoryExamItems,
+                },
+                personalKnowledge: {
+                    knowledgePercent,
+                    attemptedTestCount,
+                    testsIncluded,
+                },
+            };
         });
     }
 

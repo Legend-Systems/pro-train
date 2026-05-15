@@ -16,7 +16,7 @@ import { SubmitTestAttemptDto } from './dto/submit-test-attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttempt, AttemptStatus } from './entities/test_attempt.entity';
 import { Test } from '../test/entities/test.entity';
-import { User } from '../user/entities/user.entity';
+import { User, UserRole } from '../user/entities/user.entity';
 import { Organization } from '../org/entities/org.entity';
 import { Branch } from '../branch/entities/branch.entity';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
@@ -1252,6 +1252,53 @@ export class TestAttemptsService {
             );
 
             return this.mapToResponseDto(savedAttempt);
+        });
+    }
+
+    /**
+     * Triggers a `training_progress` upsert for attempts that already have a `results` row.
+     */
+    async syncTrainingProgressSnapshot(
+        attemptId: number,
+        scope: OrgBranchScope,
+        requesterUserId: string,
+    ): Promise<void> {
+        return this.retryService.executeDatabase(async () => {
+            const queryBuilder = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .where('attempt.attemptId = :attemptId', { attemptId });
+
+            if (scope.orgId) {
+                queryBuilder.andWhere('attempt.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope.branchId) {
+                queryBuilder.andWhere('attempt.branchId = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            const attemptRecord = await queryBuilder.getOne();
+
+            if (!attemptRecord) {
+                throw new NotFoundException('Test attempt not found');
+            }
+
+            const isElevatedRole =
+                scope.userRole === UserRole.ADMIN ||
+                scope.userRole === UserRole.BRANDON ||
+                scope.userRole === UserRole.OWNER;
+
+            if (attemptRecord.userId !== requesterUserId && !isElevatedRole) {
+                throw new ForbiddenException(
+                    'You can only sync training progress for your own attempts',
+                );
+            }
+
+            await this.resultsService.syncTrainingProgressForAttemptId(
+                attemptId,
+            );
         });
     }
 

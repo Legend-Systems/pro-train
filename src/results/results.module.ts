@@ -10,6 +10,7 @@ import { Question } from '../questions/entities/question.entity';
 import { Test } from '../test/entities/test.entity';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
+import { TrainingProgressModule } from '../training_progress/training_progress.module';
 
 @Module({
     imports: [
@@ -17,6 +18,7 @@ import { CommunicationsModule } from '../communications/communications.module';
         CacheModule.register(),
         LeaderboardModule,
         CommunicationsModule,
+        TrainingProgressModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService],
