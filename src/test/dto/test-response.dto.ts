@@ -53,6 +53,15 @@ export class TestResponseDto {
     maxAttempts: number;
 
     @ApiProperty({
+        description:
+            'Scheduled exam date/time when applicable (null if not set)',
+        example: '2026-05-18T00:00:00.000Z',
+        required: false,
+        nullable: true,
+    })
+    examDate?: Date | null;
+
+    @ApiProperty({
         description: 'Whether the test is currently active',
         example: true,
     })
