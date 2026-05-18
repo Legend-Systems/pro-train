@@ -9,6 +9,7 @@ import {
     IsArray,
     ValidateNested,
     IsBoolean,
+    IsDateString,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -237,6 +238,21 @@ export class CreateTestDto {
     @IsNumber({}, { message: 'Maximum attempts must be a valid number' })
     @Min(1, { message: 'Maximum attempts must be at least 1' })
     maxAttempts?: number;
+
+    @ApiProperty({
+        description:
+            'Date (or date-time) when the exam should be taken; omit if not scheduled',
+        example: '2026-05-18',
+        required: false,
+        nullable: true,
+        type: String,
+    })
+    @IsOptional()
+    @IsDateString(
+        {},
+        { message: 'examDate must be a valid ISO 8601 date string' },
+    )
+    examDate?: string | null;
 
     @ApiProperty({
         description: 'Questions to be created with the test',

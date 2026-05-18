@@ -110,6 +110,17 @@ export class Test {
     @Min(1)
     maxAttempts: number;
 
+    @Column({ type: 'datetime', precision: 6, nullable: true })
+    @ApiProperty({
+        description:
+            'Calendar date/time when the exam should be taken (optional)',
+        example: '2026-05-18T10:30:00.000Z',
+        required: false,
+        nullable: true,
+        type: Date,
+    })
+    examDate?: Date | null;
+
     @Column({ default: true })
     @Index()
     @ApiProperty({

@@ -166,9 +166,17 @@ export class TestService {
 
             try {
                 // Create test entity (excluding questions from the test data)
-                const { questions, ...testData } = createTestDto;
+                const { questions, examDate, ...testData } = createTestDto;
+                const normalizedExamDate =
+                    examDate === undefined
+                        ? undefined
+                        : examDate === null
+                          ? null
+                          : new Date(examDate);
+
                 const test = queryRunner.manager.create(Test, {
                     ...testData,
+                    examDate: normalizedExamDate,
                     maxAttempts: createTestDto.maxAttempts || 1,
                     orgId: course.orgId,
                     branchId: course.branchId,
@@ -791,7 +799,14 @@ export class TestService {
 
             // Exclude questions from update (questions are handled separately)
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { questions, ...testUpdateData } = updateTestDto;
+            const { questions, examDate, ...restUpdateData } = updateTestDto;
+            const testUpdateData = {
+                ...restUpdateData,
+                ...(examDate !== undefined && {
+                    examDate:
+                        examDate === null ? null : new Date(examDate),
+                }),
+            };
             const result = await this.testRepository.update(id, testUpdateData);
 
             if (result.affected === 0) {
