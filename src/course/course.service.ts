@@ -7,7 +7,7 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, SelectQueryBuilder } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -18,6 +18,7 @@ import {
     CourseListResponseDto,
     CourseDetailDto,
     CourseStatsDto,
+    CourseDashboardOverviewDto,
     StandardOperationResponse,
 } from './dto/course-response.dto';
 import { Course, CourseStatus } from './entities/course.entity';
@@ -861,6 +862,235 @@ export class CourseService {
             }
 
             return result;
+        });
+    }
+
+    /**
+     * Scope filters on course alias — matches {@link CourseService.findAll} org/branch behavior.
+     */
+    private applyOrgBranchToCourseQuery(
+        qb: SelectQueryBuilder<object>,
+        alias: string,
+        scope?: OrgBranchScope,
+    ): void {
+        if (scope?.orgId) {
+            qb.andWhere(`${alias}.orgId = :scopeOrgId`, {
+                scopeOrgId: scope.orgId,
+            });
+        }
+        if (scope?.branchId) {
+            qb.andWhere(`${alias}.branchId = :scopeBranchId`, {
+                scopeBranchId: scope.branchId,
+            });
+        }
+    }
+
+    /**
+     * Dashboard aggregates for the course management UI (scoped like {@link CourseService.findAll}).
+     */
+    async getDashboardOverview(
+        scope?: OrgBranchScope,
+    ): Promise<CourseDashboardOverviewDto> {
+        return this.retryService.executeDatabase(async () => {
+            const now = new Date();
+            const startOfThisMonth = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                1,
+            );
+            const startOfPrevMonth = new Date(
+                now.getFullYear(),
+                now.getMonth() - 1,
+                1,
+            );
+            const endOfPrevMonth = new Date(
+                now.getFullYear(),
+                now.getMonth(),
+                0,
+                23,
+                59,
+                59,
+                999,
+            );
+
+            const totalCoursesQb = this.courseRepository
+                .createQueryBuilder('course')
+                .where('course.status = :active', {
+                    active: CourseStatus.ACTIVE,
+                });
+            this.applyOrgBranchToCourseQuery(totalCoursesQb, 'course', scope);
+            const totalCourses = await totalCoursesQb.getCount();
+
+            const testsQb = this.testRepository
+                .createQueryBuilder('test')
+                .innerJoin('test.course', 'course')
+                .where('test.isActive = :ta', { ta: true })
+                .andWhere('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                });
+            this.applyOrgBranchToCourseQuery(testsQb, 'course', scope);
+            const totalActiveTrainingTests = await testsQb.getCount();
+
+            const learnersQb = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .innerJoin('test.course', 'course')
+                .where('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                });
+            this.applyOrgBranchToCourseQuery(learnersQb, 'course', scope);
+            const rawUniqueLearners = await learnersQb
+                .select('COUNT(DISTINCT attempt.userId)', 'cnt')
+                .getRawOne<{ cnt: string }>();
+            const uniqueLearnersWithAttempts = Number(rawUniqueLearners?.cnt ?? 0);
+
+            const resultsAggQb = this.resultRepository
+                .createQueryBuilder('result')
+                .innerJoin('result.course', 'course')
+                .where('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                });
+            this.applyOrgBranchToCourseQuery(resultsAggQb, 'course', scope);
+            const rawAgg = await resultsAggQb
+                .select('AVG(result.percentage)', 'avgPct')
+                .addSelect(
+                    'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0)',
+                    'passRate',
+                )
+                .addSelect('COUNT(*)', 'gradedCount')
+                .getRawOne<{
+                    avgPct: string | null;
+                    passRate: string | null;
+                    gradedCount: string | null;
+                }>();
+
+            const gradedResultsCount = Number(rawAgg?.gradedCount ?? 0);
+            const averageScorePercentRaw = Number(rawAgg?.avgPct ?? 0);
+            const averagePassRateRaw = Number(rawAgg?.passRate ?? 0);
+            const averageScorePercent =
+                gradedResultsCount > 0
+                    ? Math.round(averageScorePercentRaw * 100) / 100
+                    : 0;
+            const averagePassRatePercent =
+                gradedResultsCount > 0
+                    ? Math.round(averagePassRateRaw * 100) / 100
+                    : 0;
+
+            const newCoursesThisMonthQb = this.courseRepository
+                .createQueryBuilder('course')
+                .where('course.status = :active', {
+                    active: CourseStatus.ACTIVE,
+                })
+                .andWhere('course.createdAt >= :startOfThisMonth', {
+                    startOfThisMonth,
+                });
+            this.applyOrgBranchToCourseQuery(
+                newCoursesThisMonthQb,
+                'course',
+                scope,
+            );
+            const newCoursesThisMonth = await newCoursesThisMonthQb.getCount();
+
+            const newCoursesPrevQb = this.courseRepository
+                .createQueryBuilder('course')
+                .where('course.status = :active', {
+                    active: CourseStatus.ACTIVE,
+                })
+                .andWhere('course.createdAt >= :startOfPrevMonth', {
+                    startOfPrevMonth,
+                })
+                .andWhere('course.createdAt <= :endOfPrevMonth', {
+                    endOfPrevMonth,
+                });
+            this.applyOrgBranchToCourseQuery(newCoursesPrevQb, 'course', scope);
+            const newCoursesPreviousMonth = await newCoursesPrevQb.getCount();
+
+            const newTestsThisMonthQb = this.testRepository
+                .createQueryBuilder('test')
+                .innerJoin('test.course', 'course')
+                .where('test.isActive = :ta', { ta: true })
+                .andWhere('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                })
+                .andWhere('test.createdAt >= :startOfThisMonth', {
+                    startOfThisMonth,
+                });
+            this.applyOrgBranchToCourseQuery(
+                newTestsThisMonthQb,
+                'course',
+                scope,
+            );
+            const newTestsThisMonth = await newTestsThisMonthQb.getCount();
+
+            const newTestsPrevQb = this.testRepository
+                .createQueryBuilder('test')
+                .innerJoin('test.course', 'course')
+                .where('test.isActive = :ta', { ta: true })
+                .andWhere('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                })
+                .andWhere('test.createdAt >= :startOfPrevMonth', {
+                    startOfPrevMonth,
+                })
+                .andWhere('test.createdAt <= :endOfPrevMonth', {
+                    endOfPrevMonth,
+                });
+            this.applyOrgBranchToCourseQuery(newTestsPrevQb, 'course', scope);
+            const newTestsPreviousMonth = await newTestsPrevQb.getCount();
+
+            const learnersThisMonthQb = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .innerJoin('test.course', 'course')
+                .where('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                })
+                .andWhere('attempt.createdAt >= :startOfThisMonth', {
+                    startOfThisMonth,
+                });
+            this.applyOrgBranchToCourseQuery(
+                learnersThisMonthQb,
+                'course',
+                scope,
+            );
+            const rawLtm = await learnersThisMonthQb
+                .select('COUNT(DISTINCT attempt.userId)', 'cnt')
+                .getRawOne<{ cnt: string }>();
+            const uniqueLearnersThisMonth = Number(rawLtm?.cnt ?? 0);
+
+            const learnersPrevQb = this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .innerJoin('attempt.test', 'test')
+                .innerJoin('test.course', 'course')
+                .where('course.status = :cs', {
+                    cs: CourseStatus.ACTIVE,
+                })
+                .andWhere('attempt.createdAt >= :startOfPrevMonth', {
+                    startOfPrevMonth,
+                })
+                .andWhere('attempt.createdAt <= :endOfPrevMonth', {
+                    endOfPrevMonth,
+                });
+            this.applyOrgBranchToCourseQuery(learnersPrevQb, 'course', scope);
+            const rawLpm = await learnersPrevQb
+                .select('COUNT(DISTINCT attempt.userId)', 'cnt')
+                .getRawOne<{ cnt: string }>();
+            const uniqueLearnersPreviousMonth = Number(rawLpm?.cnt ?? 0);
+
+            return {
+                totalCourses,
+                totalActiveTrainingTests,
+                uniqueLearnersWithAttempts,
+                averageScorePercent,
+                averagePassRatePercent,
+                gradedResultsCount,
+                newCoursesThisMonth,
+                newCoursesPreviousMonth,
+                newTestsThisMonth,
+                newTestsPreviousMonth,
+                uniqueLearnersThisMonth,
+                uniqueLearnersPreviousMonth,
+            };
         });
     }
 

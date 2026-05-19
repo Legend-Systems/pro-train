@@ -359,6 +359,89 @@ export class CourseStatsDto {
     lastActivityAt?: Date;
 }
 
+/**
+ * Aggregated course dashboard metrics scoped to the caller's organization/branch.
+ */
+export class CourseDashboardOverviewDto {
+    @ApiProperty({
+        description: 'Total active courses visible in this scope',
+        example: 12,
+    })
+    totalCourses: number;
+
+    @ApiProperty({
+        description:
+            'Count of active tests attached to courses in this scope (training assessments)',
+        example: 42,
+    })
+    totalActiveTrainingTests: number;
+
+    @ApiProperty({
+        description:
+            'Distinct learners with at least one test attempt on a course in this scope',
+        example: 156,
+    })
+    uniqueLearnersWithAttempts: number;
+
+    @ApiProperty({
+        description:
+            'Average percentage score across all graded results for tests in this scope (0–100)',
+        example: 81.4,
+    })
+    averageScorePercent: number;
+
+    @ApiProperty({
+        description:
+            'Share of graded results marked as passed (0–100), or 0 when there are no results',
+        example: 76.2,
+    })
+    averagePassRatePercent: number;
+
+    @ApiProperty({
+        description: 'Number of graded results included in the score/pass averages',
+        example: 540,
+    })
+    gradedResultsCount: number;
+
+    @ApiProperty({
+        description: 'Courses whose createdAt falls in the current calendar month',
+        example: 2,
+    })
+    newCoursesThisMonth: number;
+
+    @ApiProperty({
+        description: 'Courses created in the previous calendar month',
+        example: 1,
+    })
+    newCoursesPreviousMonth: number;
+
+    @ApiProperty({
+        description: 'Active tests created in the current calendar month (scoped courses)',
+        example: 5,
+    })
+    newTestsThisMonth: number;
+
+    @ApiProperty({
+        description: 'Active tests created in the previous calendar month',
+        example: 3,
+    })
+    newTestsPreviousMonth: number;
+
+    @ApiProperty({
+        description:
+            'Distinct learners with an attempt in the current calendar month (scoped courses)',
+        example: 48,
+    })
+    uniqueLearnersThisMonth: number;
+
+    @ApiProperty({
+        description:
+            'Distinct learners with an attempt in the previous calendar month',
+        example: 41,
+    })
+    uniqueLearnersPreviousMonth: number;
+}
+
 // Enhanced response types matching user controller pattern
 export class StandardApiResponse<T = unknown> {
     @ApiProperty({

@@ -45,6 +45,7 @@ import {
     CourseCreatedResponse,
     CourseUpdatedResponse,
     CourseDeletedResponse,
+    CourseDashboardOverviewDto,
 } from './dto/course-response.dto';
 
 @ApiTags('🎓 Course Management')
@@ -419,6 +420,42 @@ export class CourseController {
         } catch (error) {
             this.logger.error(
                 `Error getting courses for user ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('dashboard/overview')
+    @ApiOperation({
+        summary: '📊 Course management dashboard overview',
+        description:
+            'Aggregated training metrics for the course dashboard: active courses, linked training tests, learner reach, and graded performance. Scoped to the caller’s organization and branch like the course list.',
+        operationId: 'getCourseDashboardOverview',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Overview metrics retrieved successfully',
+    })
+    async getCourseDashboardOverview(
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse<CourseDashboardOverviewDto>> {
+        try {
+            this.logger.log(
+                `Course dashboard overview for user: ${scope.userId}`,
+            );
+            const data = await this.courseService.getDashboardOverview(scope);
+            return {
+                success: true,
+                message: 'Course dashboard overview retrieved successfully',
+                data,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error getting course dashboard overview for user ${scope.userId}:`,
                 error,
             );
             throw error;
