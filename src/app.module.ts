@@ -100,34 +100,16 @@ import { CommonModule } from './common/common.module';
                 synchronize: false,
                 logging: false,
                 autoLoadEntities: true,
-                // Enhanced connection pool configuration
+                // mysql2 pool options only — unsupported Connection options removed
+                // (acquireTimeout, timeout, reconnect, maxReconnects, handleDisconnects)
                 extra: {
-                    // Connection Pool Settings
-                    connectionLimit: 50, // Increased from 20
-                    acquireTimeout: 60000, // 60 seconds to acquire connection
-                    timeout: 60000, // 60 seconds query timeout
-                    idleTimeout: 300000, // 5 minutes idle timeout (increased from 30s)
-
-                    // Connection Management
-                    reconnect: true,
-                    maxReconnects: 10,
-
-                    // Character set
+                    connectionLimit: 50,
                     charset: 'utf8mb4',
-
-                    // SSL settings (uncomment if using SSL)
-                    // ssl: {
-                    //     rejectUnauthorized: false
-                    // },
-
-                    // Additional MySQL settings for stability
                     supportBigNumbers: true,
                     bigNumberStrings: true,
                     dateStrings: false,
                     debug: false,
-
-                    // Handle connection errors
-                    handleDisconnects: true,
+                    // ssl: { rejectUnauthorized: false },
                 },
                 // Enhanced retry configuration
                 retryAttempts: 5, // Increased from 3

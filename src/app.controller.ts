@@ -1,4 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
+import {
+    Controller,
+    Get,
+    HttpCode,
+    HttpStatus,
+    ServiceUnavailableException,
+} from '@nestjs/common';
 import {
     ApiTags,
     ApiOperation,
@@ -6,15 +12,14 @@ import {
     ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import { AppService } from './app.service';
-import { InjectConnection } from '@nestjs/typeorm';
-import { Connection } from 'typeorm';
+import { DatabaseHealthService } from './common/services/database-health.service';
 
 @ApiTags('📡 System Information & API Documentation')
 @Controller()
 export class AppController {
     constructor(
         private readonly appService: AppService,
-        @InjectConnection() private connection: Connection,
+        private readonly databaseHealthService: DatabaseHealthService,
     ) {}
 
     @Get()
@@ -103,25 +108,31 @@ export class AppController {
     }
 
     @Get('health')
+    @HttpCode(HttpStatus.OK)
     @ApiExcludeEndpoint() // Exclude from Swagger docs as it's internal
-    async getHealth() {
-        try {
-            await this.connection.query('SELECT 1');
-            return {
-                status: 'ok',
-                database: 'connected',
-                timestamp: new Date().toISOString(),
-            };
-        } catch (error: unknown) {
-            return {
-                status: 'error',
+    getHealth() {
+        const healthStatus = this.databaseHealthService.getHealthStatus();
+
+        if (
+            !healthStatus.isHealthy ||
+            healthStatus.circuitState === 'circuit_open'
+        ) {
+            throw new ServiceUnavailableException({
+                status: 'degraded',
                 database: 'disconnected',
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : 'Unknown database error',
+                circuitState: healthStatus.circuitState,
+                consecutiveFailures: healthStatus.consecutiveFailures,
+                nextProbeAt: healthStatus.nextProbeAt?.toISOString() ?? null,
                 timestamp: new Date().toISOString(),
-            };
+            });
         }
+
+        return {
+            status: 'ok',
+            database: 'connected',
+            circuitState: healthStatus.circuitState,
+            lastHealthCheck: healthStatus.lastHealthCheck.toISOString(),
+            timestamp: new Date().toISOString(),
+        };
     }
 }
