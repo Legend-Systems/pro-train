@@ -1,5 +1,6 @@
 import {
     Injectable,
+    Logger,
     UnauthorizedException,
     ConflictException,
     BadRequestException,
@@ -42,6 +43,7 @@ import { OrgService } from '../org/org.service';
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
     private readonly saltRounds = 12;
 
     constructor(
@@ -96,6 +98,40 @@ export class AuthService {
     /**
      * Get accessible organizations and branches based on user's role level
      */
+    /**
+     * Loads leaderboard stats for sign-in. Failures are non-fatal so login still succeeds
+     * when the database connection drops during stats queries (e.g. ECONNRESET on Render).
+     */
+    private async loadSignInLeaderboardStats(
+        userId: string,
+    ): Promise<UserStatsResponseDto> {
+        const emptyStats = {
+            totalPoints: 0,
+            totalTestsCompleted: 0,
+            averageScore: 0,
+            coursesEnrolled: 0,
+            bestRank: null as number | null,
+            recentActivity: [],
+        };
+
+        try {
+            const userStats =
+                await this.leaderboardService.getUserOverallStats(userId);
+            return plainToClass(UserStatsResponseDto, userStats, {
+                excludeExtraneousValues: true,
+            });
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : 'Unknown error';
+            this.logger.warn(
+                `Sign-in leaderboard stats unavailable for user ${userId}: ${message}`,
+            );
+            return plainToClass(UserStatsResponseDto, emptyStats, {
+                excludeExtraneousValues: true,
+            });
+        }
+    }
+
     private async getAccessibleData(user: User): Promise<{
         accessibleOrganizations: {
             id: string;
@@ -546,13 +582,7 @@ export class AuthService {
             },
         );
 
-        // Get user leaderboard stats
-        const userStats = await this.leaderboardService.getUserOverallStats(
-            user.id,
-        );
-        const leaderboardData = plainToClass(UserStatsResponseDto, userStats, {
-            excludeExtraneousValues: true,
-        });
+        const leaderboardData = await this.loadSignInLeaderboardStats(user.id);
 
         // Get accessible organizations and branches based on user's role
         const accessData = await this.getAccessibleData(user);

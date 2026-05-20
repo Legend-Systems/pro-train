@@ -109,6 +109,8 @@ import { CommonModule } from './common/common.module';
                     bigNumberStrings: true,
                     dateStrings: false,
                     debug: false,
+                    enableKeepAlive: true,
+                    keepAliveInitialDelay: 10_000,
                     // ssl: { rejectUnauthorized: false },
                 },
                 // Enhanced retry configuration
