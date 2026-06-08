@@ -47,17 +47,35 @@ MEDIA_MAX_FILE_SIZE=104857600  # 100MB in bytes (configurable upload limit)
 
 ### Google Cloud Storage Setup
 
-1. **Create a GCS Bucket**:
+> **Uniform Bucket-Level Access (UBLA):** Keep UBLA **enabled** on your bucket.
+> This app does not use per-object ACLs (`public: true` / `makePublic()`).
+> Public file access is granted via **bucket-level IAM** instead.
+
+1. **Create a GCS Bucket** (UBLA enabled by default on new buckets):
    ```bash
-   gsutil mb gs://your-bucket-name
+   gsutil mb -l YOUR_REGION gs://your-bucket-name
    ```
 
-2. **Set Bucket Permissions**:
+2. **Enable Uniform Bucket-Level Access** (if not already enabled):
+   ```bash
+   gsutil uniformbucketlevelaccess set on gs://your-bucket-name
+   ```
+
+3. **Grant public read via IAM** (required for direct `storage.googleapis.com` URLs):
    ```bash
    gsutil iam ch allUsers:objectViewer gs://your-bucket-name
    ```
 
-3. **Create Service Account**:
+   Or via Cloud Console: **Bucket → Permissions → Grant access**
+   - Principal: `allUsers`
+   - Role: **Storage Object Viewer**
+
+   Verify the binding:
+   ```bash
+   gsutil iam get gs://your-bucket-name
+   ```
+
+4. **Create Service Account**:
    - Go to Google Cloud Console → IAM & Admin → Service Accounts
    - Create new service account with Storage Admin role
    - Download JSON key file

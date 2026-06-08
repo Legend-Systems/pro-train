@@ -896,15 +896,28 @@ export class MediaManagerService {
 
     private async testGCSConnection(): Promise<void> {
         try {
-            // Test connection by checking if bucket exists and is accessible
             const bucket = this.storage.bucket(this.bucketName);
             const [exists] = await bucket.exists();
 
-            if (exists) {
-                this.logger.log(`✅ GCS`);
-            } else {
+            if (!exists) {
                 this.logger.error(
                     `❌ GCS - ${this.bucketName} does not exist or is not accessible`,
+                );
+                return;
+            }
+
+            const hasPublicReadAccess =
+                await this.verifyBucketPublicReadAccess(bucket);
+
+            if (hasPublicReadAccess) {
+                this.logger.log(
+                    `✅ GCS bucket "${this.bucketName}" connected (UBLA public read via IAM)`,
+                );
+            } else {
+                this.logger.warn(
+                    `⚠️ GCS bucket "${this.bucketName}" is accessible but missing public read IAM. ` +
+                        `Grant Storage Object Viewer to allUsers: ` +
+                        `gsutil iam ch allUsers:objectViewer gs://${this.bucketName}`,
                 );
             }
         } catch (error) {
@@ -912,6 +925,24 @@ export class MediaManagerService {
                 `❌ Google Cloud Storage connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
             );
         }
+    }
+
+    /**
+     * Verifies the bucket grants public read via IAM (required when UBLA is enabled).
+     */
+    private async verifyBucketPublicReadAccess(
+        bucket: ReturnType<Storage['bucket']>,
+    ): Promise<boolean> {
+        const [policy] = await bucket.iam.getPolicy();
+        const objectViewerRole = 'roles/storage.objectViewer';
+
+        return (
+            policy.bindings?.some(
+                (binding) =>
+                    binding.role === objectViewerRole &&
+                    binding.members?.includes('allUsers'),
+            ) ?? false
+        );
     }
 
     private validateFile(file: UploadedFile): void {
@@ -1008,16 +1039,12 @@ export class MediaManagerService {
             const bucket = this.storage.bucket(this.bucketName);
             const gcsFile = bucket.file(filename);
 
-            // Upload file
+            // Upload without per-object ACLs (UBLA buckets use bucket-level IAM instead)
             await gcsFile.save(file.buffer, {
                 metadata: {
                     contentType: file.mimetype,
                 },
-                public: true,
             });
-
-            // Make file publicly accessible
-            await gcsFile.makePublic();
 
             const url = `${this.baseUrl}/${filename}`;
 
