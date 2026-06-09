@@ -29,6 +29,8 @@ import { UserService } from '../user/user.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
+import { CourseMaterialsService } from '../course-materials/course-materials.service';
+import { MaterialType } from '../course-materials/entities/course-material.entity';
 import {
     CourseLearnerProgressPayloadDto,
     KnowledgeTestContributionDto,
@@ -127,6 +129,7 @@ export class CourseService {
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
+        private readonly courseMaterialsService: CourseMaterialsService,
     ) {}
 
     /**
@@ -249,14 +252,43 @@ export class CourseService {
                 );
             }
 
+            const { materials, ...courseFields } = createCourseDto;
+
             const course = this.courseRepository.create({
-                ...createCourseDto,
+                ...courseFields,
                 createdBy: scope.userId,
                 orgId: scope.orgId ? { id: scope.orgId } : undefined,
                 branchId: scope.branchId ? { id: scope.branchId } : undefined,
             });
 
             const savedCourse = await this.courseRepository.save(course);
+
+            if (materials?.length) {
+                this.logger.log(
+                    `Creating ${materials.length} material(s) for course ${savedCourse.courseId}`,
+                );
+
+                for (let index = 0; index < materials.length; index++) {
+                    const material = materials[index];
+                    await this.courseMaterialsService.create(
+                        {
+                            courseId: savedCourse.courseId,
+                            mediaFileId: material.mediaFileId,
+                            title:
+                                material.title?.trim() ||
+                                `Material ${index + 1}`,
+                            description: material.description,
+                            sortOrder: material.sortOrder ?? index + 1,
+                            createdBy: scope.userId,
+                            type: material.type ?? MaterialType.DOCUMENT,
+                        },
+                        {
+                            orgId: scope.orgId,
+                            branchId: scope.branchId,
+                        },
+                    );
+                }
+            }
 
             // Invalidate list caches since a new course was created
             await this.invalidateCourseListCaches(
@@ -290,6 +322,10 @@ export class CourseService {
                 message: 'Course created successfully',
                 status: 'success',
                 code: 201,
+                // Return courseId so clients can attach materials immediately after create
+                data: {
+                    courseId: savedCourse.courseId,
+                },
             };
         });
     }
