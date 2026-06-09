@@ -925,15 +925,6 @@ export class AnswersService {
                     continue;
                 }
 
-                // Check if user provided a selection for objective questions
-                if (!answer.selectedOptionId) {
-                    this.logger.log(
-                        `   ⏭️  SKIPPED: No option selected for objective question`,
-                    );
-                    skippedCount++;
-                    continue;
-                }
-
                 try {
                     // Step 5: Get all options for this question
                     this.logger.log(
@@ -966,20 +957,27 @@ export class AnswersService {
                         );
                     });
 
-                    // Find the user's selected option
-                    const selectedOption = questionOptions.find(
-                        opt => opt.optionId === answer.selectedOptionId,
+                    // Resolve selection: multiple_choice uses selectedOptionId;
+                    // true_false clients may send only textAnswer ("true"/"false").
+                    const selectedOption = this.resolveSelectedOptionForMarking(
+                        answer,
+                        questionOptions,
                     );
 
                     if (!selectedOption) {
-                        this.logger.warn(
-                            `   ❌ SKIPPED: Selected option ${answer.selectedOptionId} not found among available options`,
-                        );
-                        this.logger.warn(
-                            `   Available option IDs: [${questionOptions.map(opt => opt.optionId).join(', ')}]`,
+                        this.logger.log(
+                            `   ⏭️  SKIPPED: No option selected for objective question`,
                         );
                         skippedCount++;
                         continue;
+                    }
+
+                    // Persist resolved option id for true_false text-only submissions
+                    if (
+                        !answer.selectedOptionId &&
+                        questionType === QuestionType.TRUE_FALSE
+                    ) {
+                        answer.selectedOptionId = selectedOption.optionId;
                     }
 
                     // Find all correct options
@@ -1068,6 +1066,35 @@ export class AnswersService {
 
             return markedCount;
         });
+    }
+
+    /**
+     * Resolve the user's selected option for auto-marking.
+     * multiple_choice answers use selectedOptionId; true_false submissions
+     * from the test page may only provide textAnswer ("true"/"false").
+     */
+    private resolveSelectedOptionForMarking(
+        answer: Answer,
+        questionOptions: QuestionOption[],
+    ): QuestionOption | undefined {
+        if (answer.selectedOptionId) {
+            return questionOptions.find(
+                option => option.optionId === answer.selectedOptionId,
+            );
+        }
+
+        if (
+            answer.question?.questionType === QuestionType.TRUE_FALSE &&
+            answer.textAnswer
+        ) {
+            const normalizedAnswer = answer.textAnswer.trim().toLowerCase();
+            return questionOptions.find(
+                option =>
+                    option.optionText.trim().toLowerCase() === normalizedAnswer,
+            );
+        }
+
+        return undefined;
     }
 
     /**
