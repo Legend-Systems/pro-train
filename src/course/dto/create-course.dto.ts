@@ -1,5 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, MinLength } from 'class-validator';
+import {
+    IsString,
+    IsNotEmpty,
+    IsOptional,
+    MinLength,
+    IsArray,
+    ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { CreateCourseMaterialItemDto } from './create-course-material-item.dto';
 
 export class CreateCourseDto {
     @ApiProperty({
@@ -30,4 +39,16 @@ export class CreateCourseDto {
     @IsOptional()
     @IsString({ message: 'Course description must be a string' })
     description?: string;
+
+    @ApiProperty({
+        description:
+            'Optional course materials to attach when the course is created',
+        type: [CreateCourseMaterialItemDto],
+        required: false,
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateCourseMaterialItemDto)
+    materials?: CreateCourseMaterialItemDto[];
 }

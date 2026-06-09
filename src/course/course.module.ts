@@ -10,6 +10,7 @@ import { Result } from '../results/entities/result.entity';
 import { UserModule } from '../user/user.module';
 import { AuthModule } from '../auth/auth.module';
 import { CommonModule } from '../common/common.module';
+import { CourseMaterialsModule } from '../course-materials/course-materials.module';
 
 @Module({
     imports: [
@@ -21,6 +22,7 @@ import { CommonModule } from '../common/common.module';
         UserModule,
         AuthModule,
         CommonModule,
+        CourseMaterialsModule,
     ],
     controllers: [CourseController],
     providers: [CourseService],
