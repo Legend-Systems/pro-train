@@ -749,6 +749,7 @@ export class TestAttemptsService {
         total: number;
         page: number;
         pageSize: number;
+        statistics: TestAttemptStatsDto;
     }> {
         const cacheKey = this.CACHE_KEYS.USER_ATTEMPTS(
             userId,
@@ -765,6 +766,7 @@ export class TestAttemptsService {
                 total: number;
                 page: number;
                 pageSize: number;
+                statistics: TestAttemptStatsDto;
             };
         }
 
@@ -809,12 +811,20 @@ export class TestAttemptsService {
             };
         });
 
+        // Attach aggregate stats (includes pass/fail from results table)
+        const statistics = await this.getStats(scope, testId, userId);
+
+        const response = {
+            ...result,
+            statistics,
+        };
+
         await this.cacheManager.set(
             cacheKey,
-            result,
+            response,
             this.CACHE_TTL.USER_ATTEMPTS,
         );
-        return result;
+        return response;
     }
 
     /**
@@ -1401,6 +1411,24 @@ export class TestAttemptsService {
                       )
                     : new Date();
 
+            // Pass/fail counts come from scored results, not raw attempts
+            let passedAttempts = 0;
+            let failedAttempts = 0;
+            let averageScore = 0;
+            let passRate = 0;
+
+            if (userId) {
+                const resultCounts =
+                    await this.resultsService.getUserResultCounts(
+                        userId,
+                        testId,
+                    );
+                passedAttempts = resultCounts.passedResults;
+                failedAttempts = resultCounts.failedResults;
+                averageScore = resultCounts.averageScore;
+                passRate = resultCounts.passRate;
+            }
+
             return {
                 totalAttempts,
                 completedAttempts,
@@ -1411,6 +1439,10 @@ export class TestAttemptsService {
                 completionRate,
                 lastAttemptDate,
                 statusBreakdown,
+                passedAttempts,
+                failedAttempts,
+                averageScore,
+                passRate,
             };
         });
 

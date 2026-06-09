@@ -11,6 +11,7 @@ import { Test } from '../test/entities/test.entity';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
 import { TrainingProgressModule } from '../training_progress/training_progress.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
     imports: [
@@ -19,6 +20,7 @@ import { TrainingProgressModule } from '../training_progress/training_progress.m
         LeaderboardModule,
         CommunicationsModule,
         TrainingProgressModule,
+        AuthModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService],
