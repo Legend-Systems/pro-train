@@ -906,15 +906,12 @@ export class UserController {
                 }
             }
 
-            // Remove password from update data (use separate endpoint)
-            const { password, ...updateData } = updateUserDto;
+            // Profile endpoint: name, email, avatar, password — not role or branch
+            const { role, branchId, ...updateData } = updateUserDto;
 
-            if (password) {
-                this.logger.warn(
-                    `Password update attempted through profile update for user: ${req.user.id}`,
-                );
+            if (role !== undefined || branchId !== undefined) {
                 throw new BadRequestException(
-                    'Use /user/change-password endpoint to update password',
+                    'Role and branch cannot be updated through the profile endpoint',
                 );
             }
 

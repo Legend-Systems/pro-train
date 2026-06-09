@@ -1319,8 +1319,10 @@ export class UserService {
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             try {
+                // Profile updates: allow name, email, avatar, password (not role/branch)
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { avatar, branchId, ...profileData } = updateData;
+                const { avatar, branchId, role, password, ...profileData } =
+                    updateData;
                 const dataToUpdate: Partial<User> = { ...profileData };
 
                 // Get user first for cache invalidation and event data
@@ -1334,6 +1336,15 @@ export class UserService {
                     dataToUpdate.avatar = avatar
                         ? ({ id: avatar } as MediaFile)
                         : undefined;
+                }
+
+                // Update password when provided; omit to keep existing password
+                if (password !== undefined && password.length > 0) {
+                    const saltRounds = 12;
+                    dataToUpdate.password = await bcrypt.hash(
+                        password,
+                        saltRounds,
+                    );
                 }
 
                 await this.userRepository.update(id, dataToUpdate);
