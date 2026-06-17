@@ -30,7 +30,7 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
 import { CourseMaterialsService } from '../course-materials/course-materials.service';
-import { MaterialType } from '../course-materials/entities/course-material.entity';
+import { MaterialType, MaterialStatus } from '../course-materials/entities/course-material.entity';
 import {
     CourseLearnerProgressPayloadDto,
     KnowledgeTestContributionDto,
@@ -170,6 +170,53 @@ export class CourseService {
                 }
             }),
         );
+    }
+
+    /**
+     * Reload materials on course detail — detail cache may predate new uploads.
+     */
+    private async refreshCourseMaterialsOnDetail(
+        courseId: number,
+        scope: OrgBranchScope | undefined,
+        detail: CourseDetailDto,
+    ): Promise<void> {
+        if (!scope?.userId) {
+            return;
+        }
+
+        try {
+            const materialsResult =
+                await this.courseMaterialsService.findByCourse(
+                    courseId,
+                    {
+                        orgId: scope.orgId,
+                        branchId: scope.branchId,
+                    },
+                    scope.userId,
+                );
+            detail.courseMaterials = materialsResult.data.materials;
+        } catch (error) {
+            this.logger.warn(
+                `Failed to refresh materials for course ${courseId}:`,
+                error,
+            );
+        }
+    }
+
+    private mapActiveCourseMaterials(
+        materials: CourseDetailDto['courseMaterials'],
+    ): CourseDetailDto['courseMaterials'] {
+        return (materials || [])
+            .filter(
+                material =>
+                    material.isActive !== false &&
+                    (material as { status?: MaterialStatus }).status !==
+                        MaterialStatus.DELETED,
+            )
+            .sort(
+                (a, b) =>
+                    (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+            );
     }
 
     private async invalidateCourseListCaches(
@@ -495,6 +542,14 @@ export class CourseService {
                     this.logger.debug(
                         `Cache hit for course detail: ${cacheKey}`,
                     );
+                    await this.refreshCourseMaterialsOnDetail(
+                        id,
+                        scope,
+                        cachedCourse,
+                    );
+                    cachedCourse.courseMaterials = this.mapActiveCourseMaterials(
+                        cachedCourse.courseMaterials,
+                    );
                     return cachedCourse;
                 }
             } catch (error) {
@@ -511,6 +566,11 @@ export class CourseService {
             query.leftJoinAndSelect(
                 'course.courseMaterials',
                 'courseMaterials',
+                'courseMaterials.status = :materialStatus AND courseMaterials.isActive = :materialIsActive',
+                {
+                    materialStatus: MaterialStatus.ACTIVE,
+                    materialIsActive: true,
+                },
             );
             query.leftJoinAndSelect('courseMaterials.mediaFile', 'mediaFile');
             query.leftJoinAndSelect(
@@ -599,12 +659,14 @@ export class CourseService {
             const result: CourseDetailDto = {
                 ...course,
                 creator: course.creator,
-                courseMaterials: (course.courseMaterials || []).map(material => ({
-                    ...material,
-                    creator: material.creator,
-                    updater: material.updater,
-                    mediaFile: material.mediaFile,
-                })),
+                courseMaterials: this.mapActiveCourseMaterials(
+                    (course.courseMaterials || []).map(material => ({
+                        ...material,
+                        creator: material.creator,
+                        updater: material.updater,
+                        mediaFile: material.mediaFile,
+                    })),
+                ),
                 tests: (course.tests || [])
                     .filter(test => test.isActive)
                     .map(test => ({

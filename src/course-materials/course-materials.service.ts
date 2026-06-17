@@ -149,35 +149,51 @@ export class CourseMaterialsService {
     private async invalidateMaterialCache(
         materialId: number,
         courseId?: number,
+        orgId?: string,
+        branchId?: string,
     ): Promise<void> {
-        const keysToDelete = [this.CACHE_KEYS.MATERIAL_BY_ID(materialId)];
+        await this.cacheManager
+            .del(this.CACHE_KEYS.MATERIAL_BY_ID(materialId))
+            .catch(error =>
+                this.logger.warn(
+                    `Cache deletion failed for key ${this.CACHE_KEYS.MATERIAL_BY_ID(materialId)}:`,
+                    error,
+                ),
+            );
 
         if (courseId) {
-            keysToDelete.push(
-                this.CACHE_KEYS.MATERIALS_BY_COURSE(courseId),
-                this.CACHE_KEYS.MATERIALS_COUNT(courseId),
-            );
+            await this.invalidateCourseListCaches(courseId, orgId, branchId);
         }
-
-        await Promise.all(
-            keysToDelete.map(key =>
-                this.cacheManager
-                    .del(key)
-                    .catch(error =>
-                        this.logger.warn(
-                            `Cache deletion failed for key ${key}:`,
-                            error,
-                        ),
-                    ),
-            ),
-        );
     }
 
-    private async invalidateCourseListCaches(courseId: number): Promise<void> {
+    private async invalidateCourseListCaches(
+        courseId: number,
+        orgId?: string,
+        branchId?: string,
+    ): Promise<void> {
         const keysToDelete = [
             this.CACHE_KEYS.MATERIALS_BY_COURSE(courseId),
             this.CACHE_KEYS.MATERIALS_COUNT(courseId),
         ];
+
+        // Course detail cache can predate newly uploaded materials — clear common scope keys
+        const scopeVariants: Array<{
+            orgId?: string;
+            branchId?: string;
+        }> = [
+            { orgId, branchId },
+            { orgId: undefined, branchId: undefined },
+            { orgId, branchId: undefined },
+            { orgId: undefined, branchId },
+        ];
+
+        for (const variant of scopeVariants) {
+            keysToDelete.push(
+                `org:${variant.orgId || 'global'}:branch:${
+                    variant.branchId || 'global'
+                }:course:detail:${courseId}`,
+            );
+        }
 
         await Promise.all(
             keysToDelete.map(key =>
@@ -194,13 +210,27 @@ export class CourseMaterialsService {
     }
 
     /**
+     * Compare org/branch IDs safely — JWT scope uses strings, entities may use numbers.
+     */
+    private scopeIdsMatch(
+        entityId: string | number | undefined,
+        scopeId: string | undefined,
+    ): boolean {
+        if (!scopeId) {
+            return true;
+        }
+        if (entityId === undefined || entityId === null) {
+            return false;
+        }
+        return String(entityId) === String(scopeId);
+    }
+
+    /**
      * Validate course access with scope
      */
     private async validateCourseAccessWithScope(
         courseId: number,
         scope: OrgBranchScope,
-        // userId is kept for potential future access control logic
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         userId?: string,
     ): Promise<Course> {
         const course = await this.courseRepository.findOne({
@@ -212,15 +242,19 @@ export class CourseMaterialsService {
             throw new NotFoundException(`Course with ID ${courseId} not found`);
         }
 
-        // Validate organization access if orgId provided
-        if (scope.orgId && course.orgId?.id !== scope.orgId) {
+        if (
+            scope.orgId &&
+            !this.scopeIdsMatch(course.orgId?.id, scope.orgId)
+        ) {
             throw new ForbiddenException(
                 'Access denied: Course belongs to different organization',
             );
         }
 
-        // Validate branch access if branchId provided
-        if (scope.branchId && course.branchId?.id !== scope.branchId) {
+        if (
+            scope.branchId &&
+            !this.scopeIdsMatch(course.branchId?.id, scope.branchId)
+        ) {
             throw new ForbiddenException(
                 'Access denied: Course belongs to different branch',
             );
@@ -264,6 +298,7 @@ export class CourseMaterialsService {
             type: material.type,
             sortOrder: material.sortOrder,
             isActive: material.isActive,
+            status: material.status,
             courseId: material.courseId,
             createdBy: material.createdBy,
             updatedBy: material.updatedBy,
@@ -348,9 +383,11 @@ export class CourseMaterialsService {
             const savedMaterial =
                 await this.courseMaterialRepository.save(material);
 
-            // Invalidate related caches
+            // Invalidate related caches (materials list + stale course detail)
             await this.invalidateCourseListCaches(
                 createCourseMaterialDto.courseId,
+                course.orgId?.id ? String(course.orgId.id) : undefined,
+                course.branchId?.id ? String(course.branchId.id) : undefined,
             );
 
             // Emit event for logging/analytics
