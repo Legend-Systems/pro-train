@@ -59,4 +59,28 @@ export class TestAttemptStatsDto {
         },
     })
     statusBreakdown: Record<string, number>;
+
+    @ApiProperty({
+        description: 'Number of scored attempts that passed',
+        example: 8,
+    })
+    passedAttempts: number;
+
+    @ApiProperty({
+        description: 'Number of scored attempts that failed',
+        example: 3,
+    })
+    failedAttempts: number;
+
+    @ApiProperty({
+        description: 'Average score percentage across scored results',
+        example: 72.5,
+    })
+    averageScore: number;
+
+    @ApiProperty({
+        description: 'Pass rate percentage across scored results',
+        example: 72.7,
+    })
+    passRate: number;
 }

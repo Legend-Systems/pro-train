@@ -26,6 +26,10 @@ import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { CommunicationsService } from '../communications/communications.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
+import { UserRole } from '../user/entities/user.entity';
+import {
+    AdminResultsDashboardDto,
+} from './dto/admin-results-dashboard.dto';
 
 @Injectable()
 export class ResultsService {
@@ -519,6 +523,312 @@ export class ResultsService {
                 `Failed to create result from attempt: ${errorMessage}`,
             );
         }
+    }
+
+    /**
+     * Count pass/fail results for a user (used by test-attempt dashboard stats).
+     */
+    async getUserResultCounts(
+        userId: string,
+        testId?: number,
+    ): Promise<{
+        totalResults: number;
+        passedResults: number;
+        failedResults: number;
+        averageScore: number;
+        passRate: number;
+    }> {
+        const baseWhere: { userId: string; testId?: number } = { userId };
+        if (testId) {
+            baseWhere.testId = testId;
+        }
+
+        const totalResults = await this.resultRepository.count({
+            where: baseWhere,
+        });
+
+        const passedResults = await this.resultRepository.count({
+            where: { ...baseWhere, passed: true },
+        });
+
+        const failedResults = totalResults - passedResults;
+
+        const averageScoreQuery = this.resultRepository
+            .createQueryBuilder('result')
+            .select('AVG(result.percentage)', 'averageScore')
+            .where('result.userId = :userId', { userId });
+
+        if (testId) {
+            averageScoreQuery.andWhere('result.testId = :testId', { testId });
+        }
+
+        const averageScoreRow = await averageScoreQuery.getRawOne();
+
+        const averageScore = Number(averageScoreRow?.averageScore || 0);
+        const passRate =
+            totalResults > 0 ? (passedResults / totalResults) * 100 : 0;
+
+        return {
+            totalResults,
+            passedResults,
+            failedResults,
+            averageScore: Math.round(averageScore * 100) / 100,
+            passRate: Math.round(passRate * 100) / 100,
+        };
+    }
+
+    /** Restrict dashboard access to leadership roles only. */
+    private assertAdminAccess(scope: OrgBranchScope): void {
+        const allowedRoles: UserRole[] = [
+            UserRole.ADMIN,
+            UserRole.OWNER,
+            UserRole.BRANDON,
+        ];
+
+        if (
+            !scope.userRole ||
+            !allowedRoles.includes(scope.userRole as UserRole)
+        ) {
+            throw new ForbiddenException(
+                'Admin access required to view organization results',
+            );
+        }
+    }
+
+    /** Apply org/branch filters shared by admin dashboard queries. */
+    private applyAdminScopeFilters(
+        queryBuilder: SelectQueryBuilder<Result>,
+        scope: OrgBranchScope,
+    ): SelectQueryBuilder<Result> {
+        if (scope.orgId) {
+            queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
+        }
+        if (scope.branchId) {
+            queryBuilder.andWhere('branchId.id = :branchId', {
+                branchId: scope.branchId,
+            });
+        }
+        return queryBuilder;
+    }
+
+    /**
+     * Org-wide results dashboard for CEO / owner / admin review.
+     */
+    async getAdminDashboard(
+        scope: OrgBranchScope,
+        filterDto: ResultFilterDto,
+    ): Promise<AdminResultsDashboardDto> {
+        this.assertAdminAccess(scope);
+
+        const { page = 1, limit = 20, ...filters } = filterDto;
+        const skip = (page - 1) * limit;
+
+        const summaryQuery = this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        );
+
+        if (filters.testId) {
+            summaryQuery.andWhere('result.testId = :testId', {
+                testId: filters.testId,
+            });
+        }
+        if (filters.passed !== undefined) {
+            summaryQuery.andWhere('result.passed = :passed', {
+                passed: filters.passed,
+            });
+        }
+
+        const totalResults = await summaryQuery.getCount();
+        const passedCount = await summaryQuery
+            .clone()
+            .andWhere('result.passed = :passedTrue', { passedTrue: true })
+            .getCount();
+        const failedCount = totalResults - passedCount;
+
+        const aggregateRow = await summaryQuery
+            .clone()
+            .select('AVG(result.score)', 'averageScore')
+            .addSelect('AVG(result.percentage)', 'averagePercentage')
+            .addSelect('COUNT(DISTINCT result.userId)', 'uniqueEmployees')
+            .addSelect('COUNT(DISTINCT result.testId)', 'activeTests')
+            .getRawOne<{
+                averageScore: string;
+                averagePercentage: string;
+                uniqueEmployees: string;
+                activeTests: string;
+            }>();
+
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        const recentResults = await summaryQuery
+            .clone()
+            .andWhere('result.calculatedAt >= :sevenDaysAgo', { sevenDaysAgo })
+            .getCount();
+
+        const passRate =
+            totalResults > 0 ? (passedCount / totalResults) * 100 : 0;
+
+        const listQuery = this.buildFilterQuery(filters, scope);
+        listQuery.orderBy('result.calculatedAt', 'DESC');
+
+        const [resultEntities, total] = await listQuery
+            .skip(skip)
+            .take(limit)
+            .getManyAndCount();
+
+        const results = await Promise.all(
+            resultEntities.map(result => this.getEnhancedResult(result)),
+        );
+
+        const testPerformanceRows = await this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.test', 'test')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        )
+            .select('test.testId', 'testId')
+            .addSelect('test.title', 'testTitle')
+            .addSelect('COUNT(result.resultId)', 'totalAttempts')
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'passedCount',
+            )
+            .groupBy('test.testId')
+            .addGroupBy('test.title')
+            .orderBy('totalAttempts', 'DESC')
+            .limit(6)
+            .getRawMany<{
+                testId: number;
+                testTitle: string;
+                totalAttempts: string;
+                averageScore: string;
+                passedCount: string;
+            }>();
+
+        const topPerformerRows = await this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.user', 'user')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        )
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .addSelect('COUNT(result.resultId)', 'totalTests')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'testsPassed',
+            )
+            .groupBy('user.id')
+            .addGroupBy('user.firstName')
+            .addGroupBy('user.lastName')
+            .having('COUNT(result.resultId) >= 1')
+            .orderBy('averageScore', 'DESC')
+            .limit(5)
+            .getRawMany<{
+                userId: string;
+                firstName: string;
+                lastName: string;
+                averageScore: string;
+                totalTests: string;
+                testsPassed: string;
+            }>();
+
+        const needsAttentionRows = await this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.user', 'user')
+                .leftJoin('result.test', 'test')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        )
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = false THEN 1 ELSE 0 END)',
+                'failedAttempts',
+            )
+            .addSelect('MAX(test.title)', 'lastFailedTest')
+            .where('result.passed = :failed', { failed: false })
+            .groupBy('user.id')
+            .addGroupBy('user.firstName')
+            .addGroupBy('user.lastName')
+            .orderBy('failedAttempts', 'DESC')
+            .limit(5)
+            .getRawMany<{
+                userId: string;
+                firstName: string;
+                lastName: string;
+                failedAttempts: string;
+                lastFailedTest: string;
+            }>();
+
+        return {
+            summary: {
+                totalResults,
+                passedCount,
+                failedCount,
+                passRate: Math.round(passRate * 100) / 100,
+                averageScore:
+                    Math.round(Number(aggregateRow?.averageScore || 0) * 100) /
+                    100,
+                averagePercentage:
+                    Math.round(
+                        Number(aggregateRow?.averagePercentage || 0) * 100,
+                    ) / 100,
+                uniqueEmployees: Number(aggregateRow?.uniqueEmployees || 0),
+                activeTests: Number(aggregateRow?.activeTests || 0),
+                recentResults,
+            },
+            results,
+            total,
+            page,
+            limit,
+            testPerformance: testPerformanceRows.map(row => {
+                const attempts = Number(row.totalAttempts) || 0;
+                const passed = Number(row.passedCount) || 0;
+                return {
+                    testId: Number(row.testId),
+                    testTitle: row.testTitle || `Test #${row.testId}`,
+                    totalAttempts: attempts,
+                    averageScore:
+                        Math.round(Number(row.averageScore || 0) * 100) / 100,
+                    passRate:
+                        attempts > 0
+                            ? Math.round((passed / attempts) * 10000) / 100
+                            : 0,
+                };
+            }),
+            topPerformers: topPerformerRows.map(row => ({
+                userId: row.userId,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                averageScore:
+                    Math.round(Number(row.averageScore || 0) * 100) / 100,
+                testsPassed: Number(row.testsPassed) || 0,
+                totalTests: Number(row.totalTests) || 0,
+            })),
+            needsAttention: needsAttentionRows.map(row => ({
+                userId: row.userId,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                failedAttempts: Number(row.failedAttempts) || 0,
+                lastFailedTest: row.lastFailedTest || 'Unknown test',
+            })),
+        };
     }
 
     async findUserResults(

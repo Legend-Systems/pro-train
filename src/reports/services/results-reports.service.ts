@@ -537,29 +537,21 @@ export class ResultsReportsService {
     private async getResultsStats(
         userId: string,
     ): Promise<ResultsStatsReportDto> {
-        // Total results for user
-        const totalResults = await this.resultRepository
-            .createQueryBuilder('r')
-            .innerJoin('r.attempt', 'ta')
-            .where('ta.userId = :userId', { userId })
-            .getCount();
+        // Query results.userId directly — more reliable than joining through attempts
+        const totalResults = await this.resultRepository.count({
+            where: { userId },
+        });
 
-        // Passed vs Failed
-        const passedResults = await this.resultRepository
-            .createQueryBuilder('r')
-            .innerJoin('r.attempt', 'ta')
-            .where('ta.userId = :userId', { userId })
-            .andWhere('r.passed = true')
-            .getCount();
+        const passedResults = await this.resultRepository.count({
+            where: { userId, passed: true },
+        });
 
         const failedResults = totalResults - passedResults;
 
-        // Average score
         const avgScoreResult = await this.resultRepository
             .createQueryBuilder('r')
-            .innerJoin('r.attempt', 'ta')
-            .where('ta.userId = :userId', { userId })
-            .select('AVG(r.score)', 'avgScore')
+            .select('AVG(r.percentage)', 'avgScore')
+            .where('r.userId = :userId', { userId })
             .getRawOne();
 
         const averageScore = Number(avgScoreResult?.avgScore || 0);
@@ -567,9 +559,8 @@ export class ResultsReportsService {
         // Best score
         const bestScoreResult = await this.resultRepository
             .createQueryBuilder('r')
-            .innerJoin('r.attempt', 'ta')
-            .where('ta.userId = :userId', { userId })
-            .select('MAX(r.score)', 'bestScore')
+            .select('MAX(r.percentage)', 'bestScore')
+            .where('r.userId = :userId', { userId })
             .getRawOne();
 
         const bestScore = Number(bestScoreResult?.bestScore || 0);
@@ -581,7 +572,7 @@ export class ResultsReportsService {
         const recentResults = await this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
-            .where('ta.userId = :userId', { userId })
+            .where('r.userId = :userId', { userId })
             .andWhere('ta.submitTime >= :sevenDaysAgo', { sevenDaysAgo })
             .getCount();
 

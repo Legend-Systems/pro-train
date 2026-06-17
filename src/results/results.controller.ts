@@ -31,7 +31,11 @@ import { ResultAnalyticsDto } from './dto/result-analytics.dto';
 import { ResultListResponseDto } from './dto/result-list-response.dto';
 import { ResultDetailDto } from './dto/result-detail.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../user/entities/user.entity';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { AdminResultsDashboardDto } from './dto/admin-results-dashboard.dto';
 
 @ApiTags('📊 Results & Performance Analytics')
 @Controller('results')
@@ -591,6 +595,33 @@ export class ResultsController {
             `Getting analytics for test: ${testId} by user: ${scope.userId}`,
         );
         return this.resultsService.getTestAnalytics(testId, scope, scope.userId);
+    }
+
+    @Get('admin/dashboard')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @ApiOperation({
+        summary: 'Org-wide results dashboard (Admin)',
+        description:
+            'Returns organization-wide test results, summary metrics, and employee performance insights for leadership review.',
+        operationId: 'getAdminResultsDashboard',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Admin dashboard retrieved successfully',
+        type: AdminResultsDashboardDto,
+    })
+    @ApiForbiddenResponse({
+        description: 'Forbidden - admin, owner, or brandon role required',
+    })
+    async getAdminDashboard(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Query() filterDto: ResultFilterDto,
+    ): Promise<AdminResultsDashboardDto> {
+        this.logger.log(
+            `Getting admin results dashboard for org: ${scope.orgId}, branch: ${scope.branchId}`,
+        );
+        return this.resultsService.getAdminDashboard(scope, filterDto);
     }
 
     @Get(':id')
