@@ -978,6 +978,56 @@ export class UserService {
         });
     }
 
+    /**
+     * Clears cached user data before authentication so credentials are verified against the database.
+     */
+    async clearUserCacheForAuthentication(
+        email: string,
+        userId?: string,
+    ): Promise<void> {
+        if (userId) {
+            await this.invalidateUserCache(userId, email);
+        } else {
+            const cacheKey = this.CACHE_KEYS.USER_BY_EMAIL(email);
+            try {
+                await this.cacheManager.del(cacheKey);
+            } catch (error) {
+                this.logger.warn(
+                    `Failed to delete auth cache key ${cacheKey}:`,
+                    error,
+                );
+            }
+        }
+
+        this.retryService.resetCircuitBreaker('database_operation_any_any');
+        this.logger.debug(
+            `Cleared user cache and reset database circuit breaker for email: ${email}`,
+        );
+    }
+
+    /**
+     * Finds a user by email for sign-in. Always reads from the database with the password hash intact.
+     */
+    async findByEmailForAuthentication(email: string): Promise<User | null> {
+        await this.clearUserCacheForAuthentication(email);
+
+        return this.retryService.executeDatabase(
+            async () => {
+                const user = await this.userRepository.findOne({
+                    where: { email, status: UserStatus.ACTIVE },
+                    relations: ['orgId', 'branchId', 'avatar'],
+                });
+
+                if (!user?.password) {
+                    return null;
+                }
+
+                return this.loadAvatarVariants(user);
+            },
+            { operation: 'database_operation' },
+        );
+    }
+
     async findById(id: string): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first

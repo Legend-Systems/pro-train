@@ -82,6 +82,12 @@ export class CourseMaterialResponseDto {
     isActive: boolean;
 
     @ApiProperty({
+        description: 'Material lifecycle status',
+        example: 'active',
+    })
+    status: string;
+
+    @ApiProperty({
         description: '🎓 ID of the course this material belongs to',
         example: 1,
     })

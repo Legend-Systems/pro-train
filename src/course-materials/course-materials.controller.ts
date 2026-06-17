@@ -390,7 +390,7 @@ export class CourseMaterialsController {
 
             return await this.courseMaterialsService.findByCourse(
                 courseId,
-                { orgId: scope.orgId, branchId: scope.branchId },
+                scope,
                 scope.userId,
                 { includeInactive, sortBy, sortOrder },
             );

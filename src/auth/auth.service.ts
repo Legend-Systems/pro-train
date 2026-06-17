@@ -552,17 +552,22 @@ export class AuthService {
     ): Promise<StandardApiResponse<SessionResponseDto>> {
         const { email, password } = signInDto;
 
-        // Find user by email with full org/branch details
-        const user = await this.userService.findByEmailWithFullDetails(email);
+        // Always verify credentials against the database (never a stale cache entry)
+        const user =
+            await this.userService.findByEmailForAuthentication(email);
         if (!user) {
+            this.logger.warn(`Sign in failed for email: ${email}`);
             throw new UnauthorizedException('Invalid credentials');
         }
 
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
+            this.logger.warn(`Invalid password for email: ${email}`);
             throw new UnauthorizedException('Invalid credentials');
         }
+
+        this.logger.log(`Sign in successful for email: ${email}`);
 
         // Generate JWT tokens
         const tokenPair = await this.tokenManagerService.generateTokenPair({
@@ -856,6 +861,40 @@ export class AuthService {
             }
             throw new UnauthorizedException('Invalid refresh token');
         }
+    }
+
+    /**
+     * Logs out a user by revoking refresh tokens and clearing cached session data.
+     */
+    async logout(
+        refreshToken?: string,
+        userId?: string,
+    ): Promise<StandardApiResponse<null>> {
+        if (refreshToken) {
+            this.tokenManagerService.revokeRefreshToken(refreshToken);
+        }
+
+        if (userId) {
+            const user = await this.userService.findById(userId);
+            this.tokenManagerService.revokeAllUserTokens(userId);
+
+            if (user?.email) {
+                await this.userService.clearUserCacheForAuthentication(
+                    user.email,
+                    userId,
+                );
+            }
+        }
+
+        this.logger.log(
+            `User logged out${userId ? ` (userId: ${userId})` : ''}`,
+        );
+
+        return {
+            success: true,
+            data: null,
+            message: 'Logged out successfully',
+        };
     }
 
     /**

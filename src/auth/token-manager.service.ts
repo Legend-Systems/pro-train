@@ -34,7 +34,7 @@ export interface SpecialTokenData {
 
 @Injectable()
 export class TokenManagerService {
-    private readonly accessTokenExpiry = '1h';
+    private readonly accessTokenExpiry = '1d';
     private readonly refreshTokenExpiry = '7d';
     private readonly refreshTokens = new Map<
         string,
@@ -82,8 +82,27 @@ export class TokenManagerService {
         return {
             accessToken,
             refreshToken,
-            expiresIn: 3600, // 1 hour in seconds
+            expiresIn: this.getAccessTokenExpiresInSeconds(),
         };
+    }
+
+    private getAccessTokenExpiresInSeconds(): number {
+        const expiry = this.accessTokenExpiry;
+        const numericValue = parseInt(expiry, 10);
+
+        if (expiry.endsWith('d')) {
+            return numericValue * 24 * 60 * 60;
+        }
+
+        if (expiry.endsWith('h')) {
+            return numericValue * 60 * 60;
+        }
+
+        if (expiry.endsWith('m')) {
+            return numericValue * 60;
+        }
+
+        return numericValue;
     }
 
     private generateRefreshToken(userId: string): string {

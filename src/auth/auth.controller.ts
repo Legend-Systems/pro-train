@@ -27,6 +27,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from '../user/dto/verify-email.dto';
 import { ResendVerificationDto } from '../user/dto/resend-verification.dto';
 import { RefreshTokenDto } from '../user/dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { SendInvitationDto } from './dto/send-invitation.dto';
 import { ValidateInvitationDto } from './dto/validate-invitation.dto';
 import {
@@ -959,6 +960,23 @@ export class AuthController {
     ): Promise<StandardApiResponse<any>> {
         this.logger.log('Token refresh request received');
         return this.authService.refreshToken(refreshTokenDto);
+    }
+
+    @Post('logout')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Sign out and revoke session',
+        description:
+            'Revokes refresh tokens and clears cached user session data on the server.',
+    })
+    async logout(
+        @Body() logoutDto: LogoutDto,
+        @Request() req: { user?: { id: string } },
+    ): Promise<StandardApiResponse<null>> {
+        return this.authService.logout(
+            logoutDto.refreshToken,
+            req.user?.id,
+        );
     }
 
     @Post('forgot-password')
