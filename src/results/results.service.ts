@@ -30,10 +30,27 @@ import { UserRole } from '../user/entities/user.entity';
 import {
     AdminResultsDashboardDto,
 } from './dto/admin-results-dashboard.dto';
+import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filter.dto';
+import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
 
 @Injectable()
 export class ResultsService {
     private readonly logger = new Logger(ResultsService.name);
+
+    private static readonly MONTH_LABELS = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+    ] as const;
 
     // Cache key patterns with org/branch scoping
     private readonly CACHE_KEYS = {
@@ -828,6 +845,372 @@ export class ResultsService {
                 failedAttempts: Number(row.failedAttempts) || 0,
                 lastFailedTest: row.lastFailedTest || 'Unknown test',
             })),
+        };
+    }
+
+    /**
+     * Per-employee analytics for the admin Employee Analytics tab.
+     * Supports filtering by person and by month within a calendar year.
+     */
+    async getAdminEmployeeMetrics(
+        scope: OrgBranchScope,
+        filterDto: AdminEmployeeMetricsFilterDto,
+    ): Promise<AdminEmployeeMetricsDto> {
+        this.assertAdminAccess(scope);
+
+        const year = filterDto.year ?? new Date().getFullYear();
+        const { month } = filterDto;
+
+        const employeeRows = await this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.user', 'user')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        )
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('COUNT(result.resultId)', 'totalResults')
+            .groupBy('user.id')
+            .addGroupBy('user.firstName')
+            .addGroupBy('user.lastName')
+            .orderBy('user.firstName', 'ASC')
+            .getRawMany<{
+                userId: string;
+                firstName: string;
+                lastName: string;
+                totalResults: string;
+            }>();
+
+        const employees = employeeRows.map(row => ({
+            userId: row.userId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            totalResults: Number(row.totalResults) || 0,
+        }));
+
+        const selectedUserId =
+            filterDto.userId ?? employees[0]?.userId ?? undefined;
+
+        const emptyResponse: AdminEmployeeMetricsDto = {
+            year,
+            month,
+            selectedUserId,
+            employees,
+            summary: {
+                totalTests: 0,
+                testsPassed: 0,
+                testsFailed: 0,
+                passRate: 0,
+                averageScore: 0,
+                coursesAttempted: 0,
+                coursesPassed: 0,
+            },
+            monthlyTrend: ResultsService.MONTH_LABELS.map((label, index) => ({
+                month: index + 1,
+                monthLabel: label,
+                testsPassed: 0,
+                testsFailed: 0,
+                passRate: 0,
+                averageScore: 0,
+            })),
+            courseTrends: [],
+            courseSummaries: [],
+            orgComparison: ResultsService.MONTH_LABELS.map((label, index) => ({
+                month: index + 1,
+                monthLabel: label,
+                orgPassRate: 0,
+                orgAverageScore: 0,
+            })),
+        };
+
+        if (!selectedUserId) {
+            return emptyResponse;
+        }
+
+        const buildScopedUserQuery = (): SelectQueryBuilder<Result> => {
+            let query = this.applyAdminScopeFilters(
+                this.resultRepository
+                    .createQueryBuilder('result')
+                    .leftJoin('result.orgId', 'orgId')
+                    .leftJoin('result.branchId', 'branchId'),
+                scope,
+            )
+                .andWhere('result.userId = :selectedUserId', {
+                    selectedUserId,
+                })
+                .andWhere('YEAR(result.calculatedAt) = :year', { year });
+
+            if (month) {
+                query = query.andWhere(
+                    'MONTH(result.calculatedAt) = :month',
+                    { month },
+                );
+            }
+
+            return query;
+        };
+
+        const summaryRow = await buildScopedUserQuery()
+            .select('COUNT(result.resultId)', 'totalTests')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'testsPassed',
+            )
+            .addSelect(
+                'SUM(CASE WHEN result.passed = false THEN 1 ELSE 0 END)',
+                'testsFailed',
+            )
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .addSelect('COUNT(DISTINCT result.courseId)', 'coursesAttempted')
+            .addSelect(
+                'COUNT(DISTINCT CASE WHEN result.passed = true THEN result.courseId END)',
+                'coursesPassed',
+            )
+            .getRawOne<{
+                totalTests: string;
+                testsPassed: string;
+                testsFailed: string;
+                averageScore: string;
+                coursesAttempted: string;
+                coursesPassed: string;
+            }>();
+
+        const totalTests = Number(summaryRow?.totalTests) || 0;
+        const testsPassed = Number(summaryRow?.testsPassed) || 0;
+        const testsFailed = Number(summaryRow?.testsFailed) || 0;
+
+        const monthlyRows = await buildScopedUserQuery()
+            .select('MONTH(result.calculatedAt)', 'month')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'testsPassed',
+            )
+            .addSelect(
+                'SUM(CASE WHEN result.passed = false THEN 1 ELSE 0 END)',
+                'testsFailed',
+            )
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .groupBy('MONTH(result.calculatedAt)')
+            .orderBy('month', 'ASC')
+            .getRawMany<{
+                month: string;
+                testsPassed: string;
+                testsFailed: string;
+                averageScore: string;
+            }>();
+
+        const monthlyMap = new Map(
+            monthlyRows.map(row => [Number(row.month), row]),
+        );
+
+        const monthlyTrend = ResultsService.MONTH_LABELS.map((label, index) => {
+            const monthNum = index + 1;
+            const row = monthlyMap.get(monthNum);
+            const passed = Number(row?.testsPassed) || 0;
+            const failed = Number(row?.testsFailed) || 0;
+            const attempts = passed + failed;
+
+            return {
+                month: monthNum,
+                monthLabel: label,
+                testsPassed: passed,
+                testsFailed: failed,
+                passRate:
+                    attempts > 0
+                        ? Math.round((passed / attempts) * 10000) / 100
+                        : 0,
+                averageScore:
+                    Math.round(Number(row?.averageScore || 0) * 100) / 100,
+            };
+        }).filter(point => !month || point.month === month);
+
+        const courseMonthRows = await buildScopedUserQuery()
+            .leftJoin('result.course', 'course')
+            .select('MONTH(result.calculatedAt)', 'month')
+            .addSelect('course.courseId', 'courseId')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'passed',
+            )
+            .addSelect(
+                'SUM(CASE WHEN result.passed = false THEN 1 ELSE 0 END)',
+                'failed',
+            )
+            .groupBy('MONTH(result.calculatedAt)')
+            .addGroupBy('course.courseId')
+            .addGroupBy('course.title')
+            .orderBy('month', 'ASC')
+            .getRawMany<{
+                month: string;
+                courseId: string;
+                courseTitle: string;
+                passed: string;
+                failed: string;
+            }>();
+
+        const courseMap = new Map<
+            number,
+            { courseId: number; courseTitle: string; monthlyData: Map<number, { passed: number; failed: number }> }
+        >();
+
+        for (const row of courseMonthRows) {
+            const courseId = Number(row.courseId);
+            if (!courseMap.has(courseId)) {
+                courseMap.set(courseId, {
+                    courseId,
+                    courseTitle: row.courseTitle || `Course #${courseId}`,
+                    monthlyData: new Map(),
+                });
+            }
+
+            courseMap.get(courseId)?.monthlyData.set(Number(row.month), {
+                passed: Number(row.passed) || 0,
+                failed: Number(row.failed) || 0,
+            });
+        }
+
+        const visibleMonths = month
+            ? [month]
+            : ResultsService.MONTH_LABELS.map((_, index) => index + 1);
+
+        const courseTrends = Array.from(courseMap.values()).map(course => ({
+            courseId: course.courseId,
+            courseTitle: course.courseTitle,
+            monthlyData: visibleMonths.map(monthNum => ({
+                month: monthNum,
+                monthLabel: ResultsService.MONTH_LABELS[monthNum - 1],
+                passed: course.monthlyData.get(monthNum)?.passed ?? 0,
+                failed: course.monthlyData.get(monthNum)?.failed ?? 0,
+            })),
+        }));
+
+        const courseSummaryRows = await buildScopedUserQuery()
+            .leftJoin('result.course', 'course')
+            .select('course.courseId', 'courseId')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'passed',
+            )
+            .addSelect(
+                'SUM(CASE WHEN result.passed = false THEN 1 ELSE 0 END)',
+                'failed',
+            )
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .groupBy('course.courseId')
+            .addGroupBy('course.title')
+            .orderBy('passed', 'DESC')
+            .getRawMany<{
+                courseId: string;
+                courseTitle: string;
+                passed: string;
+                failed: string;
+                averageScore: string;
+            }>();
+
+        const courseSummaries = courseSummaryRows.map(row => {
+            const passed = Number(row.passed) || 0;
+            const failed = Number(row.failed) || 0;
+            const attempts = passed + failed;
+
+            return {
+                courseId: Number(row.courseId),
+                courseTitle: row.courseTitle || `Course #${row.courseId}`,
+                passed,
+                failed,
+                averageScore:
+                    Math.round(Number(row.averageScore || 0) * 100) / 100,
+                passRate:
+                    attempts > 0
+                        ? Math.round((passed / attempts) * 10000) / 100
+                        : 0,
+            };
+        });
+
+        let orgQuery = this.applyAdminScopeFilters(
+            this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId'),
+            scope,
+        )
+            .andWhere('YEAR(result.calculatedAt) = :year', { year });
+
+        if (month) {
+            orgQuery = orgQuery.andWhere(
+                'MONTH(result.calculatedAt) = :month',
+                { month },
+            );
+        }
+
+        const orgMonthlyRows = await orgQuery
+            .select('MONTH(result.calculatedAt)', 'month')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'passed',
+            )
+            .addSelect('COUNT(result.resultId)', 'total')
+            .addSelect('AVG(result.percentage)', 'averageScore')
+            .groupBy('MONTH(result.calculatedAt)')
+            .orderBy('month', 'ASC')
+            .getRawMany<{
+                month: string;
+                passed: string;
+                total: string;
+                averageScore: string;
+            }>();
+
+        const orgMap = new Map(
+            orgMonthlyRows.map(row => [Number(row.month), row]),
+        );
+
+        const orgComparison = ResultsService.MONTH_LABELS.map(
+            (label, index) => {
+                const monthNum = index + 1;
+                const row = orgMap.get(monthNum);
+                const passed = Number(row?.passed) || 0;
+                const total = Number(row?.total) || 0;
+
+                return {
+                    month: monthNum,
+                    monthLabel: label,
+                    orgPassRate:
+                        total > 0
+                            ? Math.round((passed / total) * 10000) / 100
+                            : 0,
+                    orgAverageScore:
+                        Math.round(Number(row?.averageScore || 0) * 100) / 100,
+                };
+            },
+        ).filter(point => !month || point.month === month);
+
+        return {
+            year,
+            month,
+            selectedUserId,
+            employees,
+            summary: {
+                totalTests,
+                testsPassed,
+                testsFailed,
+                passRate:
+                    totalTests > 0
+                        ? Math.round((testsPassed / totalTests) * 10000) / 100
+                        : 0,
+                averageScore:
+                    Math.round(Number(summaryRow?.averageScore || 0) * 100) /
+                    100,
+                coursesAttempted: Number(summaryRow?.coursesAttempted) || 0,
+                coursesPassed: Number(summaryRow?.coursesPassed) || 0,
+            },
+            monthlyTrend,
+            courseTrends,
+            courseSummaries,
+            orgComparison,
         };
     }
 
