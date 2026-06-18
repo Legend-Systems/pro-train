@@ -365,10 +365,18 @@ export class CourseMaterialsService {
                 }
             }
 
+            const resolvedDescription =
+                createCourseMaterialDto.description?.trim() ||
+                mediaFile?.description?.trim() ||
+                mediaFile?.altText?.trim() ||
+                (mediaFile
+                    ? `Course material: ${mediaFile.originalName}`
+                    : undefined);
+
             // Create the material
             const material = this.courseMaterialRepository.create({
                 title: createCourseMaterialDto.title,
-                description: createCourseMaterialDto.description,
+                description: resolvedDescription,
                 mediaFile,
                 externalUrl: createCourseMaterialDto.externalUrl,
                 type: createCourseMaterialDto.type,
