@@ -36,6 +36,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../user/entities/user.entity';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { AdminResultsDashboardDto } from './dto/admin-results-dashboard.dto';
+import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filter.dto';
+import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
 
 @ApiTags('📊 Results & Performance Analytics')
 @Controller('results')
@@ -622,6 +624,30 @@ export class ResultsController {
             `Getting admin results dashboard for org: ${scope.orgId}, branch: ${scope.branchId}`,
         );
         return this.resultsService.getAdminDashboard(scope, filterDto);
+    }
+
+    @Get('admin/employee-metrics')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @ApiOperation({
+        summary: 'Per-employee results analytics (Admin)',
+        description:
+            'Monthly pass trends, per-course line data, and org comparison for owner coaching decisions.',
+        operationId: 'getAdminEmployeeMetrics',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Employee metrics retrieved successfully',
+        type: AdminEmployeeMetricsDto,
+    })
+    async getAdminEmployeeMetrics(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Query() filterDto: AdminEmployeeMetricsFilterDto,
+    ): Promise<AdminEmployeeMetricsDto> {
+        this.logger.log(
+            `Getting admin employee metrics for org: ${scope.orgId}, user: ${filterDto.userId ?? 'default'}`,
+        );
+        return this.resultsService.getAdminEmployeeMetrics(scope, filterDto);
     }
 
     @Get(':id')
