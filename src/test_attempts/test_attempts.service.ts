@@ -27,6 +27,11 @@ import { AnswersService } from '../answers/answers.service';
 import { TestService } from '../test/test.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { RetryService } from '../common/services/retry.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+    RewardsTestAttemptStartedEvent,
+    TestAttemptSubmittedEvent,
+} from '../common/events';
 
 @Injectable()
 export class TestAttemptsService {
@@ -89,6 +94,7 @@ export class TestAttemptsService {
         private readonly resultsService: ResultsService,
         private readonly answersService: AnswersService,
         private readonly testService: TestService,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
 
     /**
@@ -218,6 +224,22 @@ export class TestAttemptsService {
             this.logger.log(
                 `Created new attempt ${newAttempt.attemptId} for test ${createAttemptDto.testId} and user ${userId}`,
             );
+
+            // Phase 3/4 — emit event for start-attempt XP (new attempts only)
+            if (scope.orgId) {
+                this.eventEmitter.emit(
+                    'test.attempt.started',
+                    new RewardsTestAttemptStartedEvent(
+                        newAttempt.attemptId,
+                        createAttemptDto.testId,
+                        test.courseId,
+                        userId,
+                        newAttempt.attemptNumber,
+                        scope.orgId,
+                        scope.branchId,
+                    ),
+                );
+            }
 
             return this.mapToResponseDto(newAttempt);
         });
@@ -622,6 +644,32 @@ export class TestAttemptsService {
             attempt.progressPercentage = 100;
 
             const savedAttempt = await this.testAttemptRepository.save(attempt);
+
+            // Phase 3 — emit submitted event (XP awarded via ResultsService chain)
+            if (scope.orgId) {
+                const courseId =
+                    attempt.test?.courseId ??
+                    (
+                        await this.testRepository.findOne({
+                            where: { testId: attempt.testId },
+                            select: { courseId: true },
+                        })
+                    )?.courseId;
+
+                if (courseId) {
+                    this.eventEmitter.emit(
+                        'test.attempt.submitted',
+                        new TestAttemptSubmittedEvent(
+                            attemptId,
+                            attempt.testId,
+                            courseId,
+                            userId,
+                            scope.orgId,
+                            scope.branchId,
+                        ),
+                    );
+                }
+            }
 
             // Invalidate related caches
             await this.invalidateAttemptCache(

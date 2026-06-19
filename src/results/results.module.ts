@@ -12,6 +12,7 @@ import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
 import { TrainingProgressModule } from '../training_progress/training_progress.module';
 import { AuthModule } from '../auth/auth.module';
+import { RewardsModule } from '../rewards/rewards.module';
 
 @Module({
     imports: [
@@ -21,6 +22,7 @@ import { AuthModule } from '../auth/auth.module';
         CommunicationsModule,
         TrainingProgressModule,
         AuthModule,
+        RewardsModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService],

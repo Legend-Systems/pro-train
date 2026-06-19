@@ -27,6 +27,9 @@ import { CommunicationsService } from '../communications/communications.service'
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
 import { UserRole } from '../user/entities/user.entity';
+import { RewardsService } from '../rewards/rewards.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
 import {
     AdminResultsDashboardDto,
 } from './dto/admin-results-dashboard.dto';
@@ -104,6 +107,8 @@ export class ResultsService {
         private readonly leaderboardService: LeaderboardService,
         private readonly communicationsService: CommunicationsService,
         private readonly trainingProgressService: TrainingProgressService,
+        private readonly rewardsService: RewardsService,
+        private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
 
@@ -492,6 +497,46 @@ export class ResultsService {
             } else {
                 this.logger.warn(
                     `Skipping leaderboard update due to critical validation failures for attempt ${attemptId}`,
+                );
+            }
+
+            // Phase 4 — XP awards after leaderboard (non-blocking; never rolls back result)
+            try {
+                await this.rewardsService.processTestResultXp({
+                    resultId: savedResult.resultId,
+                    attemptId,
+                    testId: attempt.testId,
+                    courseId: attempt.test.courseId,
+                    userId: attempt.userId,
+                    percentage,
+                    passed,
+                    attemptNumber: attempt.attemptNumber,
+                    testTitle: attempt.test.title,
+                    orgId: orgId.id,
+                    branchId: branchId?.id,
+                });
+
+                this.eventEmitter.emit(
+                    'test.result.created',
+                    new TestResultCreatedEvent(
+                        savedResult.resultId,
+                        attemptId,
+                        attempt.testId,
+                        attempt.test.courseId,
+                        attempt.userId,
+                        score,
+                        percentage,
+                        passed,
+                        attempt.attemptNumber,
+                        attempt.test.title,
+                        orgId.id,
+                        branchId?.id,
+                    ),
+                );
+            } catch (xpError) {
+                this.logger.error(
+                    `XP award failed for result ${savedResult.resultId} (non-fatal)`,
+                    xpError instanceof Error ? xpError.stack : String(xpError),
                 );
             }
 

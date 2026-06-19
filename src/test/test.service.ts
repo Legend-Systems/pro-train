@@ -256,6 +256,7 @@ export class TestService {
                         scope.orgId,
                         scope.branchId,
                         savedTest.isActive,
+                        scope.userId,
                     ),
                 );
 

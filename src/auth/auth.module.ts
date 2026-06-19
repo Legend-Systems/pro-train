@@ -12,6 +12,7 @@ import { UserModule } from '../user/user.module';
 import { LeaderboardModule } from '../leaderboard/leaderboard.module';
 import { CommunicationsModule } from '../communications/communications.module';
 import { OrgModule } from '../org/org.module';
+import { RewardsModule } from '../rewards/rewards.module';
 
 @Module({
     imports: [
@@ -19,6 +20,7 @@ import { OrgModule } from '../org/org.module';
         LeaderboardModule,
         CommunicationsModule,
         OrgModule,
+        RewardsModule,
         PassportModule,
         JwtModule.registerAsync({
             imports: [ConfigModule],

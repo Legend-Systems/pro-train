@@ -403,6 +403,25 @@ export class CourseMaterialsController {
         }
     }
 
+    @Post(':id/view')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Record course material view',
+        description:
+            'Tracks first-time material view for XP engagement awards (Phase 4).',
+    })
+    @ApiParam({ name: 'id', description: 'Course material ID' })
+    async recordMaterialView(
+        @Param('id', ParseIntPipe) id: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardOperationResponse> {
+        return this.courseMaterialsService.recordMaterialView(
+            id,
+            scope,
+            scope.userId,
+        );
+    }
+
     @Get(':id')
     @ApiOperation({
         summary: '🔍 Get Course Material Details',

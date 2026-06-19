@@ -25,6 +25,7 @@ import {
     UserOrgBranchAssignedEvent,
     UserDeactivatedEvent,
     UserRestoredEvent,
+    UserProfileCompletedEvent,
 } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
 import * as bcrypt from 'bcrypt';
@@ -1318,6 +1319,24 @@ export class UserService {
                     updatedUser.orgId?.name,
                     updatedUser.branchId?.id,
                     updatedUser.branchId?.name,
+                ),
+            );
+        }
+
+        // Phase 3/4 — profile completion XP when avatar + name are present
+        const profileUser = updatedUser || existingUser;
+        if (
+            profileUser.avatar &&
+            profileUser.firstName?.trim() &&
+            profileUser.lastName?.trim() &&
+            profileUser.orgId?.id
+        ) {
+            this.eventEmitter.emit(
+                'user.profile.completed',
+                new UserProfileCompletedEvent(
+                    id,
+                    profileUser.orgId.id,
+                    profileUser.branchId?.id,
                 ),
             );
         }

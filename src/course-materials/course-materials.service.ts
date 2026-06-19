@@ -12,6 +12,7 @@ import { Repository, In } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CourseMaterialViewedEvent } from '../common/events/course-material-viewed.event';
 import { CreateCourseMaterialDto } from './dto/create-course-material.dto';
 import { UpdateCourseMaterialDto } from './dto/update-course-material.dto';
 import {
@@ -23,6 +24,7 @@ import {
     CourseMaterial,
     MaterialStatus,
 } from './entities/course-material.entity';
+import { CourseMaterialView } from './entities/course-material-view.entity';
 import { Course } from '../course/entities/course.entity';
 import { User } from '../user/entities/user.entity';
 import {
@@ -68,6 +70,8 @@ export class CourseMaterialsService {
         private readonly userRepository: Repository<User>,
         @InjectRepository(MediaFile)
         private readonly mediaRepository: Repository<MediaFile>,
+        @InjectRepository(CourseMaterialView)
+        private readonly courseMaterialViewRepository: Repository<CourseMaterialView>,
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
         private readonly eventEmitter: EventEmitter2,
@@ -1079,6 +1083,74 @@ export class CourseMaterialsService {
                 return this.loadMediaFileVariants(material);
             }
             return material;
+        });
+    }
+
+    /**
+     * Phase 4 — records first view of a material and emits XP event.
+     * Idempotent: duplicate views for same user/material are ignored.
+     */
+    async recordMaterialView(
+        materialId: number,
+        scope: OrgBranchScope,
+        userId: string,
+    ): Promise<StandardOperationResponse> {
+        return this.retryOperation(async () => {
+            const material = await this.courseMaterialRepository.findOne({
+                where: { materialId },
+                relations: ['course', 'course.orgId', 'course.branchId'],
+            });
+
+            if (!material) {
+                throw new NotFoundException(
+                    `Course material ${materialId} not found`,
+                );
+            }
+
+            if (scope.orgId && material.course?.orgId?.id !== scope.orgId) {
+                throw new ForbiddenException(
+                    'Material not accessible in your organization',
+                );
+            }
+
+            const orgId = material.course?.orgId?.id ?? scope.orgId;
+            if (!orgId) {
+                throw new BadRequestException(
+                    'Organization context required to record material view',
+                );
+            }
+
+            const existingView = await this.courseMaterialViewRepository.findOne(
+                {
+                    where: { userId, materialId },
+                },
+            );
+
+            if (!existingView) {
+                const view = this.courseMaterialViewRepository.create({
+                    userId,
+                    materialId,
+                    courseId: material.courseId,
+                });
+                await this.courseMaterialViewRepository.save(view);
+
+                this.eventEmitter.emit(
+                    'course-material.viewed',
+                    new CourseMaterialViewedEvent(
+                        materialId,
+                        material.courseId,
+                        userId,
+                        orgId,
+                        material.course?.branchId?.id ?? scope.branchId,
+                    ),
+                );
+            }
+
+            return {
+                message: 'Material view recorded',
+                status: 'success',
+                code: 200,
+            };
         });
     }
 }
