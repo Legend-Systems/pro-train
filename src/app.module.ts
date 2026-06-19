@@ -36,9 +36,13 @@ import { MediaManagerModule } from './media-manager/media-manager.module';
 import { MediaFile } from './media-manager/entities/media-manager.entity';
 import { CourseMaterialsModule } from './course-materials/course-materials.module';
 import { CourseMaterial } from './course-materials/entities/course-material.entity';
+import { CourseMaterialView } from './course-materials/entities/course-material-view.entity';
 import { Organization } from './org/entities/org.entity';
 import { Branch } from './branch/entities/branch.entity';
 import { CommonModule } from './common/common.module';
+import { UserRewards } from './rewards/entities/user-rewards.entity';
+import { XPTransaction } from './rewards/entities/xp-transaction.entity';
+import { RewardsModule } from './rewards/rewards.module';
 
 @Module({
     imports: [
@@ -96,6 +100,9 @@ import { CommonModule } from './common/common.module';
                     TestAttempt,
                     TrainingProgress,
                     User,
+                    UserRewards,
+                    XPTransaction,
+                    CourseMaterialView,
                 ],
                 synchronize: false,
                 logging: false,
@@ -150,6 +157,7 @@ import { CommonModule } from './common/common.module';
         BranchModule,
         MediaManagerModule,
         CourseMaterialsModule,
+        RewardsModule,
     ],
     controllers: [AppController],
     providers: [

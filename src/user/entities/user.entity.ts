@@ -9,6 +9,7 @@ import {
     UpdateDateColumn,
     OneToMany,
     ManyToOne,
+    OneToOne,
     Index,
 } from 'typeorm';
 import { Organization } from '../../org/entities/org.entity';
@@ -20,6 +21,7 @@ import { Leaderboard } from 'src/leaderboard/entities/leaderboard.entity';
 import { Answer } from 'src/answers/entities/answer.entity';
 import { TrainingProgress } from 'src/training_progress/entities/training_progress.entity';
 import { Course } from 'src/course/entities/course.entity';
+import { UserRewards } from 'src/rewards/entities/user-rewards.entity';
 
 export enum UserRole {
     BRANDON = 'brandon',
@@ -164,6 +166,10 @@ export class User {
 
     @OneToMany(() => TrainingProgress, 'user')
     trainingProgress: TrainingProgress[];
+
+    /** Inverse side of XP rewards — one row per user per org (lazy-created on first award). */
+    @OneToOne(() => UserRewards, (rewards) => rewards.user)
+    rewards?: UserRewards;
 
     constructor(partial: Partial<User>) {
         Object.assign(this, partial);

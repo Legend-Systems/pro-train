@@ -10,5 +10,6 @@ export class TestCreatedEvent {
         public readonly organizationId?: string,
         public readonly branchId?: string,
         public readonly isActive?: boolean,
+        public readonly creatorId?: string,
     ) {}
 } 

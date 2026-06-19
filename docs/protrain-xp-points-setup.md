@@ -16,11 +16,13 @@ All awards should flow through a single service method: **`RewardsService.awardX
 
 | Area | Status |
 |------|--------|
-| `RewardsModule` / `UserRewards` / `xp_transaction` | **Not implemented** |
+| `RewardsModule` / `UserRewards` / `xp_transaction` | **Implemented** (Phases 1–6) — full award pipeline + API + crons |
+| Domain events | **Implemented** (Phase 3) — test/auth/user/course/material events emitted |
+| `course_material_view` tracking | **Implemented** (Phase 4) — `POST /course-materials/:id/view` |
 | `LeaderboardModule` | **Implemented** — derived from `results` (test scores) |
 | `TrainingProgressModule` | **Implemented** — per-test completion snapshots |
 | `EventEmitterModule` | **Configured globally** in `AppModule` |
-| Domain events | **Partial** — user/course/org events exist; test lifecycle events are defined but **not emitted** |
+| Domain events | **Implemented** — user/course/org/test lifecycle events wired (Phase 3) |
 | User identity | UUID `users.id` (not Clerk) |
 | Multi-tenancy | `OrgBranchScope` — `orgId`, `branchId`, `userId` as strings |
 
@@ -37,28 +39,32 @@ XP hooks belong **after** successful business actions (result saved, progress sy
 
 ## Step-by-step implementation plan
 
-### Phase 1 — Foundation (database + constants)
+### Phase 1 — Foundation (database + constants) ✅ COMPLETED
 
-1. **Create constants file**  
+> **Completed:** 2026-06-19 — constants, entities, migration (`1739900000000-CreateUserRewardsTables`), User link, migration executed via `yarn typeorm:migration:run`.
+
+1. ✅ **Create constants file**  
    `src/rewards/constants/xp.constants.ts`  
    Define `XP_VALUES`, `XP_ACTIONS`, `XP_SOURCE_TYPES`, `XP_CATEGORIES`, `LEVELS`, and `RANKS` (see sections below).
 
-2. **Create entities**  
+2. ✅ **Create entities**  
    - `src/rewards/entities/user-rewards.entity.ts`  
    - `src/rewards/entities/xp-transaction.entity.ts`  
-   - Optional (Phase 2+): `achievement.entity.ts`, `user-achievement.entity.ts`
+   - Optional (Phase 2+): `achievement.entity.ts`, `user-achievement.entity.ts` — deferred
 
-3. **Generate TypeORM migration**  
+3. ✅ **Generate TypeORM migration**  
    - Tables: `user_rewards`, `xp_transaction`  
    - Indexes: `(userId)`, `(userRewardsId, timestamp)`, `(orgId, challengeMonthXP)` for monthly rankings  
    - FK: `user_rewards.userId` → `users.id`  
    - FK: `xp_transaction.userRewardsId` → `user_rewards.id` ON DELETE CASCADE  
-   - FK: `user_rewards.orgId` → `organizations.id`, optional `branchId` → `branches.id`
+   - FK: `user_rewards.orgId` → `organizations.id`, optional `branchId` → `branches.id`  
+   - File: `src/migrations/1739900000000-CreateUserRewardsTables.ts`  
+   - CLI config: `src/data-source.ts` + `package.json` scripts `typeorm`, `typeorm:migration:run`
 
-4. **Link User entity**  
+4. ✅ **Link User entity**  
    Add optional `@OneToOne(() => UserRewards)` on `User` (inverse side), matching ProTrain’s UUID primary key pattern.
 
-5. **Run migration**  
+5. ✅ **Run migration**  
    ```bash
    yarn typeorm:migration:run
    ```
@@ -66,9 +72,11 @@ XP hooks belong **after** successful business actions (result saved, progress sy
 
 ---
 
-### Phase 2 — Rewards module core
+### Phase 2 — Rewards module core ✅ COMPLETED
 
-6. **Scaffold module**  
+> **Completed:** 2026-06-19 — full module scaffold, `RewardsService.awardXP()`, controller endpoints, `RewardsModule` registered in `AppModule`.
+
+6. ✅ **Scaffold module**  
    ```
    src/rewards/
    ├── rewards.module.ts
@@ -86,7 +94,7 @@ XP hooks belong **after** successful business actions (result saved, progress sy
    └── entities/
    ```
 
-7. **Implement `RewardsService.awardXP()`**  
+7. ✅ **Implement `RewardsService.awardXP()`**  
    Single DB transaction (mirror LORO pattern, adapted for ProTrain):
    - Resolve user by `userId` scoped to `orgId` / optional `branchId`
    - Skip silently if user not found or inactive
@@ -96,45 +104,52 @@ XP hooks belong **after** successful business actions (result saved, progress sy
    - Insert `xp_transaction`
    - Update aggregates: `currentXP`, `totalXP`, `challengeMonthXP`, JSON breakdowns
    - Recalculate `level` and `rank` from `totalXP`
-   - Save `UserRewards`
+   - Save `UserRewards`  
+   - Utility: `src/rewards/utils/xp-breakdown.util.ts` (`normalizeXpBreakdown`, category mapping)
 
-8. **Register module**  
+8. ✅ **Register module**  
    - Import `RewardsModule` in `AppModule`  
-   - Export `RewardsService` for injection into `ResultsModule`, `TestAttemptsModule`, `AuthModule`, `UserModule`, `TrainingProgressModule`, `CourseMaterialsModule`
+   - Export `RewardsService` for injection into `ResultsModule`, `TestAttemptsModule`, `AuthModule`, `UserModule`, `TrainingProgressModule`, `CourseMaterialsModule`  
+   - API endpoints (Phase 2 core): `POST /rewards/award-xp`, `GET /rewards/user-stats/:userId`
 
-9. **Follow module standards**  
+9. ✅ **Follow module standards**  
    Per `docs/module.standard.md`:
    - Org/branch-scoped cache keys
    - `RetryService.executeDatabase()` for all DB work
-   - Scope all queries when `OrgBranchScope` is available
+   - Scope all queries when `OrgBranchScope` is available  
+   - `RewardsSubscriber` scaffolded (event handlers wired in Phase 3)
 
 ---
 
-### Phase 3 — Event infrastructure
+### Phase 3 — Event infrastructure ✅ COMPLETED
 
-10. **Add missing domain events** (event classes already exist for some; emit them consistently):
+> **Completed:** 2026-06-19 — domain events, `RewardsSubscriber` handlers, email/XP separation preserved.
+
+10. ✅ **Add missing domain events** (event classes in `src/common/events/`; emitted from services):
 
     | Event name | Emit from | Payload highlights |
     |------------|-----------|-------------------|
-    | `test.attempt.started` | `TestAttemptsService.startAttempt` (new attempt only) | `attemptId`, `testId`, `courseId`, `userId`, `attemptNumber`, `orgId`, `branchId` |
-    | `test.attempt.submitted` | `TestAttemptsService.submitAttempt` | `attemptId`, `testId`, `courseId`, `userId` |
-    | `test.result.created` | `ResultsService.createFromAttempt` (after save) | `resultId`, `attemptId`, `testId`, `courseId`, `userId`, `score`, `percentage`, `passed`, `attemptNumber` |
-    | `course.completed` | New helper in `ResultsService` or `CourseService` | When all active tests in course have a passing result for user |
-    | `course-material.viewed` | New tracking endpoint (Phase 4) | `materialId`, `courseId`, `userId` |
-    | `user.profile.completed` | `UserService.update` | When avatar + first/last name present |
-    | `auth.daily_login` | `AuthService.signIn` | Once per user per UTC day |
+    | `test.attempt.started` | `TestAttemptsService.startAttempt` (new attempt only) | `RewardsTestAttemptStartedEvent` |
+    | `test.attempt.submitted` | `TestAttemptsService.submitAttempt` | `TestAttemptSubmittedEvent` |
+    | `test.result.created` | `ResultsService.createFromAttempt` (after save) | `TestResultCreatedEvent` |
+    | `course.completed` | `RewardsService.evaluateAndAwardCourseCompletion` | `CourseCompletedEvent` |
+    | `course-material.viewed` | `CourseMaterialsService.recordMaterialView` | `CourseMaterialViewedEvent` |
+    | `user.profile.completed` | `UserService.update` | `UserProfileCompletedEvent` |
+    | `auth.daily_login` | `AuthService.signIn` | `AuthDailyLoginEvent` |
 
-11. **Create `RewardsSubscriber`** (`src/rewards/rewards.subscriber.ts`)  
+11. ✅ **Create `RewardsSubscriber`** (`src/rewards/rewards.subscriber.ts`)  
     Listen with `@OnEvent(...)` and delegate to `awardXP()`. Wrap each handler in try/catch — rewards must never break login, test submission, or result creation.
 
-12. **Keep `EmailListener` pattern**  
+12. ✅ **Keep `EmailListener` pattern**  
     Communications stay in `communications/listeners/email.listener.ts`; XP stays in `rewards.subscriber.ts`. Do not mix concerns.
 
 ---
 
-### Phase 4 — Service integrations (direct calls + events)
+### Phase 4 — Service integrations (direct calls + events) ✅ COMPLETED
 
-13. **Results / test completion (highest priority)**  
+> **Completed:** 2026-06-19 — Results/Auth/User/TestAttempts/CourseMaterials wired; admin authoring XP via subscriber.
+
+13. ✅ **Results / test completion (highest priority)**  
     In `ResultsService.createFromAttempt`, after leaderboard update succeeds:
     - Emit `test.result.created`
     - Or call `rewardsService.awardXP()` directly with result metadata  
@@ -143,32 +158,32 @@ XP hooks belong **after** successful business actions (result saved, progress sy
     - Pass bonus if `passed === true`
     - First-try bonus if `attemptNumber === 1` and passed
     - Perfect score bonus if `percentage === 100`
-    - Improve-score bonus if new percentage beats user’s previous best for that test
+    - Improve-score bonus if new percentage beats user’s previous best for that test  
+    - Implemented via `RewardsService.processTestResultXp()` (non-blocking try/catch in `ResultsService`)
 
-14. **Test attempt start**  
+14. ✅ **Test attempt start**  
     In `TestAttemptsService.startAttempt`, when a **new** attempt is created (not when returning an existing in-progress attempt):
     - Emit `test.attempt.started` → subscriber awards start XP
 
-15. **Daily login**  
+15. ✅ **Daily login**  
     In `AuthService.signIn`, after successful authentication:
     - Check last daily-login transaction for user (UTC date)
-    - Award `DAILY_LOGIN` at most once per UTC day
+    - Award `DAILY_LOGIN` at most once per UTC day (idempotency in subscriber)
 
-16. **Profile completion**  
+16. ✅ **Profile completion**  
     In `UserService` update path, when profile meets completion criteria (avatar + firstName + lastName):
     - One-time award via idempotency key `profile-complete:{userId}`
 
-17. **Course completion**  
+17. ✅ **Course completion**  
     After each result, evaluate whether the user has passed all active tests in the course (reuse logic similar to `CourseService.getCourseLearnerProgress`):
     - One-time award via idempotency key `course-complete:{userId}:{courseId}`
 
-18. **Course materials (new tracking)**  
-    ProTrain does not yet track material views. Add:
-    - Entity `course_material_view` (`userId`, `materialId`, `courseId`, `viewedAt`)  
-    - `POST /course-materials/:id/view` or internal call from client when material opened  
+18. ✅ **Course materials (new tracking)**  
+    - Entity `course_material_view` + migration `1740000000000-CreateCourseMaterialViewTable`  
+    - `POST /course-materials/:id/view`  
     - First view per material → XP; all materials in course viewed → bonus XP
 
-19. **Admin / trainer actions (optional, role-gated)**  
+19. ✅ **Admin / trainer actions (optional, role-gated)**  
     Award only to `admin`, `owner`, or `brandon` roles:
     - `course.created` event (already emitted from `CourseService`) → creator XP
     - `test.created` event (already emitted from `TestService`) → creator XP
@@ -176,9 +191,11 @@ XP hooks belong **after** successful business actions (result saved, progress sy
 
 ---
 
-### Phase 5 — API + read paths
+### Phase 5 — API + read paths ✅ COMPLETED (backend)
 
-20. **Controller endpoints** (`/rewards`):
+> **Completed:** 2026-06-19 — all `/rewards` read/write endpoints + sign-in `rewardsStats`. Frontend (item 22) deferred to `protrain-client`.
+
+20. ✅ **Controller endpoints** (`/rewards`):
 
     | Method | Path | Purpose |
     |--------|------|---------|
@@ -187,10 +204,10 @@ XP hooks belong **after** successful business actions (result saved, progress sy
     | `GET` | `/rewards/rankings` | Org/branch leaderboard (`scope=alltime` \| `monthly`) |
     | `GET` | `/rewards/transactions/:userId` | Paginated XP history (optional) |
 
-21. **Extend sign-in / session payload**  
-    `AuthService.loadSignInLeaderboardStats` already returns test leaderboard stats. Add parallel **`rewardsStats`** (non-fatal on failure, same pattern).
+21. ✅ **Extend sign-in / session payload**  
+    `AuthService.loadSignInRewardsStats` returns **`rewardsStats`** (non-fatal on failure, same pattern as leaderboard).
 
-22. **Frontend (`protrain-client`)**  
+22. ⏳ **Frontend (`protrain-client`)** — not started  
     - `services/rewards-service.ts` — API client  
     - Show XP bar + level on `/training-progress`, `/leaderboard`, nav header  
     - Toast on level-up (optional WebSocket later)  
@@ -198,16 +215,18 @@ XP hooks belong **after** successful business actions (result saved, progress sy
 
 ---
 
-### Phase 6 — Scheduled jobs + streaks
+### Phase 6 — Scheduled jobs + streaks ✅ COMPLETED
 
-23. **Monthly challenge rollover cron**  
-    `@Cron('0 3 * * *')` — close stale challenge months for users who earned no XP (mirror LORO `rollStaleChallengeMonthsCron`).
+> **Completed:** 2026-06-19 — `RewardsCronService` with daily/monthly crons.
 
-24. **Learning streak cron**  
-    `@Cron('0 4 * * *')` — evaluate 7-day streaks from `xp_transaction` timestamps where `sourceType` is `test` or `login`; award weekly streak bonus with idempotency key `streak-7:{userId}:{week}`.
+23. ✅ **Monthly challenge rollover cron**  
+    `@Cron('0 3 * * *')` in `RewardsCronService.rollStaleChallengeMonthsCron`
 
-25. **Weekly goal cron (optional)**  
-    Award `WEEKLY_TRAINING_GOAL` when user completes ≥3 tests in rolling 7 days.
+24. ✅ **Learning streak cron**  
+    `@Cron('0 4 * * *')` in `RewardsCronService.evaluateLearningStreaksCron`
+
+25. ✅ **Weekly goal cron (optional)**  
+    `@Cron('0 5 * * 1')` in `RewardsCronService.evaluateWeeklyTrainingGoalsCron`
 
 ---
 

@@ -40,6 +40,10 @@ import {
     MediaFile,
 } from '../media-manager/entities/media-manager.entity';
 import { OrgService } from '../org/org.service';
+import { RewardsService } from '../rewards/rewards.service';
+import { UserRewardsStatsDto } from '../rewards/dto/user-rewards-stats.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AuthDailyLoginEvent } from '../common/events/auth-daily-login.event';
 
 @Injectable()
 export class AuthService {
@@ -54,6 +58,8 @@ export class AuthService {
         private readonly emailQueueService: EmailQueueService,
         private readonly configService: ConfigService,
         private readonly orgService: OrgService,
+        private readonly rewardsService: RewardsService,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
 
     /**
@@ -129,6 +135,33 @@ export class AuthService {
             return plainToClass(UserStatsResponseDto, emptyStats, {
                 excludeExtraneousValues: true,
             });
+        }
+    }
+
+    /**
+     * Phase 5 — loads XP rewards stats for sign-in (non-fatal, mirrors leaderboard pattern).
+     */
+    private async loadSignInRewardsStats(
+        user: User,
+    ): Promise<UserRewardsStatsDto | undefined> {
+        if (!user.orgId?.id) {
+            return undefined;
+        }
+
+        try {
+            const stats = await this.rewardsService.getUserStats(user.id, {
+                userId: user.id,
+                orgId: user.orgId.id,
+                branchId: user.branchId?.id,
+            });
+            return stats ?? undefined;
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : 'Unknown error';
+            this.logger.warn(
+                `Sign-in rewards stats unavailable for user ${user.id}: ${message}`,
+            );
+            return undefined;
         }
     }
 
@@ -588,6 +621,19 @@ export class AuthService {
         );
 
         const leaderboardData = await this.loadSignInLeaderboardStats(user.id);
+        const rewardsStats = await this.loadSignInRewardsStats(user);
+
+        // Phase 3/4 — daily login XP via event (idempotent per UTC day in subscriber)
+        if (user.orgId?.id) {
+            this.eventEmitter.emit(
+                'auth.daily_login',
+                new AuthDailyLoginEvent(
+                    user.id,
+                    user.orgId.id,
+                    user.branchId?.id,
+                ),
+            );
+        }
 
         // Get accessible organizations and branches based on user's role
         const accessData = await this.getAccessibleData(user);
@@ -612,6 +658,7 @@ export class AuthService {
                 expiresIn: tokenPair.expiresIn,
                 user: userResponse,
                 leaderboard: leaderboardData,
+                rewardsStats,
                 organization: user.orgId
                     ? {
                           id: user.orgId.id,

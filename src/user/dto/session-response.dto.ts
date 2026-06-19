@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../entities/user.entity';
 import { UserStatsResponseDto } from '../../leaderboard/dto/user-stats-response.dto';
+import { UserRewardsStatsDto } from '../../rewards/dto/user-rewards-stats.dto';
 
 export class OrgInfo {
     @ApiProperty({
@@ -204,6 +205,13 @@ export class SessionResponseDto {
         },
     })
     leaderboard?: UserStatsResponseDto;
+
+    @ApiProperty({
+        description: 'User XP rewards stats (level, rank, monthly challenge XP)',
+        type: UserRewardsStatsDto,
+        required: false,
+    })
+    rewardsStats?: UserRewardsStatsDto;
 
     @ApiProperty({
         description:
