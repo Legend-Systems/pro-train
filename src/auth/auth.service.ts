@@ -42,6 +42,14 @@ import {
 import { OrgService } from '../org/org.service';
 import { RewardsService } from '../rewards/rewards.service';
 import { UserRewardsStatsDto } from '../rewards/dto/user-rewards-stats.dto';
+import {
+    DEFAULT_LEVEL,
+    DEFAULT_RANK,
+} from '../rewards/constants/xp.constants';
+import {
+    createEmptyXpBreakdown,
+    getCurrentChallengeMonthUtc,
+} from '../rewards/utils/xp-breakdown.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuthDailyLoginEvent } from '../common/events/auth-daily-login.event';
 
@@ -140,6 +148,8 @@ export class AuthService {
 
     /**
      * Phase 5 — loads XP rewards stats for sign-in (non-fatal, mirrors leaderboard pattern).
+     * Returns UserRewards currentXP, totalXP, level, and rank for the profile dropdown.
+     * When no rewards row exists yet, returns zeroed defaults so the client always has values.
      */
     private async loadSignInRewardsStats(
         user: User,
@@ -154,15 +164,40 @@ export class AuthService {
                 orgId: user.orgId.id,
                 branchId: user.branchId?.id,
             });
-            return stats ?? undefined;
+
+            if (stats) {
+                return stats;
+            }
+
+            return this.buildDefaultSignInRewardsStats(user);
         } catch (error) {
             const message =
                 error instanceof Error ? error.message : 'Unknown error';
             this.logger.warn(
                 `Sign-in rewards stats unavailable for user ${user.id}: ${message}`,
             );
-            return undefined;
+            return this.buildDefaultSignInRewardsStats(user);
         }
+    }
+
+    /** Default UserRewards snapshot when the learner has not earned XP yet. */
+    private buildDefaultSignInRewardsStats(user: User): UserRewardsStatsDto {
+        const emptyBreakdown = createEmptyXpBreakdown();
+
+        return {
+            id: 0,
+            userId: user.id,
+            orgId: user.orgId!.id,
+            branchId: user.branchId?.id,
+            currentXP: 0,
+            totalXP: 0,
+            level: DEFAULT_LEVEL,
+            rank: DEFAULT_RANK,
+            xpBreakdown: emptyBreakdown,
+            challengeMonth: getCurrentChallengeMonthUtc(),
+            challengeMonthXP: 0,
+            challengeMonthXpBreakdown: { ...emptyBreakdown },
+        };
     }
 
     private async getAccessibleData(user: User): Promise<{
