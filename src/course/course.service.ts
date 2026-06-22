@@ -299,16 +299,23 @@ export class CourseService {
                 );
             }
 
-            const { materials, ...courseFields } = createCourseDto;
+            const { materials, courseThumbnail, ...courseFields } = createCourseDto;
 
             const course = this.courseRepository.create({
                 ...courseFields,
+                ...(courseThumbnail ? { courseThumbnail } : {}),
                 createdBy: scope.userId,
                 orgId: scope.orgId ? { id: scope.orgId } : undefined,
                 branchId: scope.branchId ? { id: scope.branchId } : undefined,
             });
 
             const savedCourse = await this.courseRepository.save(course);
+
+            if (courseThumbnail) {
+                this.logger.log(
+                    `Course ${savedCourse.courseId} thumbnail URL saved: ${courseThumbnail}`,
+                );
+            }
 
             if (materials?.length) {
                 this.logger.log(
@@ -753,7 +760,18 @@ export class CourseService {
             }
 
             Object.assign(existingCourse, updateCourseDto);
+            if (updateCourseDto.courseThumbnail === null) {
+                existingCourse.courseThumbnail = undefined;
+            }
             await this.courseRepository.save(existingCourse);
+
+            if (updateCourseDto.courseThumbnail) {
+                this.logger.log(
+                    `Course ${id} thumbnail URL updated: ${updateCourseDto.courseThumbnail}`,
+                );
+            } else if (updateCourseDto.courseThumbnail === null) {
+                this.logger.log(`Course ${id} thumbnail removed`);
+            }
 
             // Invalidate course cache
             await this.invalidateCourseCache(

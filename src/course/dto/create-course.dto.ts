@@ -6,6 +6,7 @@ import {
     MinLength,
     IsArray,
     ValidateNested,
+    ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateCourseMaterialItemDto } from './create-course-material-item.dto';
@@ -39,6 +40,17 @@ export class CreateCourseDto {
     @IsOptional()
     @IsString({ message: 'Course description must be a string' })
     description?: string;
+
+    /** Optional GCS public URL saved when a course thumbnail is uploaded. */
+    @ApiProperty({
+        description: 'Public URL of the course thumbnail image',
+        required: false,
+        example: 'https://storage.googleapis.com/bucket/media/course-thumb.jpg',
+    })
+    @IsOptional()
+    @ValidateIf((_, value) => value !== null)
+    @IsString({ message: 'Course thumbnail must be a URL string' })
+    courseThumbnail?: string | null;
 
     @ApiProperty({
         description:

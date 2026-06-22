@@ -74,6 +74,17 @@ export class Test {
     @IsOptional()
     description?: string;
 
+    /** Optional GCS public URL for test card thumbnail image. */
+    @Column({ name: 'test_thumbnail', type: 'varchar', length: 2048, nullable: true })
+    @ApiProperty({
+        description: 'Public URL of the test thumbnail image in cloud storage',
+        required: false,
+        example: 'https://storage.googleapis.com/bucket/media/test-thumb.jpg',
+    })
+    @IsString()
+    @IsOptional()
+    testThumbnail?: string;
+
     @Column({
         type: 'enum',
         enum: TestType,
