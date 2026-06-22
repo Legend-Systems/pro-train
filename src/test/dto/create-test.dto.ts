@@ -10,6 +10,7 @@ import {
     ValidateNested,
     IsBoolean,
     IsDateString,
+    ValidateIf,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -182,6 +183,17 @@ export class CreateTestDto {
     @IsOptional()
     @IsString({ message: 'Test description must be a string' })
     description?: string;
+
+    /** Optional GCS public URL saved when a test thumbnail is uploaded. */
+    @ApiProperty({
+        description: 'Public URL of the test thumbnail image',
+        required: false,
+        example: 'https://storage.googleapis.com/bucket/media/test-thumb.jpg',
+    })
+    @IsOptional()
+    @ValidateIf((_, value) => value !== null)
+    @IsString({ message: 'Test thumbnail must be a URL string' })
+    testThumbnail?: string | null;
 
     @ApiProperty({
         description: 'Type of test determining behavior and purpose',

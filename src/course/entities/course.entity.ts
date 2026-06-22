@@ -57,6 +57,17 @@ export class Course {
     @IsOptional()
     description?: string;
 
+    /** Optional GCS public URL for course card thumbnail image. */
+    @Column({ name: 'course_thumbnail', type: 'varchar', length: 2048, nullable: true })
+    @ApiProperty({
+        description: 'Public URL of the course thumbnail image in cloud storage',
+        required: false,
+        example: 'https://storage.googleapis.com/bucket/media/course-thumb.jpg',
+    })
+    @IsString()
+    @IsOptional()
+    courseThumbnail?: string;
+
     @Column()
     @ApiProperty({
         description: 'ID of the user who created this course',

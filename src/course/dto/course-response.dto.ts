@@ -123,6 +123,13 @@ export class CourseResponseDto {
     thumbnail?: any;
 
     @ApiProperty({
+        description: 'Public URL of the course thumbnail image',
+        required: false,
+        nullable: true,
+    })
+    courseThumbnail?: string;
+
+    @ApiProperty({
         description: 'Course rating',
         example: 4.5,
     })

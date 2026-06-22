@@ -166,7 +166,7 @@ export class TestService {
 
             try {
                 // Create test entity (excluding questions from the test data)
-                const { questions, examDate, ...testData } = createTestDto;
+                const { questions, examDate, testThumbnail, ...testData } = createTestDto;
                 const normalizedExamDate =
                     examDate === undefined
                         ? undefined
@@ -176,6 +176,7 @@ export class TestService {
 
                 const test = queryRunner.manager.create(Test, {
                     ...testData,
+                    ...(testThumbnail ? { testThumbnail } : {}),
                     examDate: normalizedExamDate,
                     maxAttempts: createTestDto.maxAttempts || 1,
                     orgId: course.orgId,
@@ -183,6 +184,12 @@ export class TestService {
                 });
 
                 const savedTest = await queryRunner.manager.save(test);
+
+                if (testThumbnail) {
+                    this.logger.log(
+                        `Test ${savedTest.testId} thumbnail URL saved: ${testThumbnail}`,
+                    );
+                }
 
                 let questionCount = 0;
 
@@ -808,16 +815,20 @@ export class TestService {
                         examDate === null ? null : new Date(examDate),
                 }),
             };
-            const result = await this.testRepository.update(id, testUpdateData);
 
-            if (result.affected === 0) {
-                throw new NotFoundException(`Test with ID ${id} not found`);
+            Object.assign(test, testUpdateData);
+            if (updateTestDto.testThumbnail === null) {
+                test.testThumbnail = undefined;
             }
+            const updatedTest = await this.testRepository.save(test);
 
-            const updatedTest = await this.testRepository.findOne({
-                where: { testId: id },
-                relations: ['course'],
-            });
+            if (updateTestDto.testThumbnail) {
+                this.logger.log(
+                    `Test ${id} thumbnail URL updated: ${updateTestDto.testThumbnail}`,
+                );
+            } else if (updateTestDto.testThumbnail === null) {
+                this.logger.log(`Test ${id} thumbnail removed`);
+            }
 
             if (!updatedTest) {
                 throw new NotFoundException(`Test with ID ${id} not found`);

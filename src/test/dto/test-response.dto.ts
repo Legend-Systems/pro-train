@@ -32,6 +32,13 @@ export class TestResponseDto {
     description?: string;
 
     @ApiProperty({
+        description: 'Public URL of the test thumbnail image',
+        required: false,
+        nullable: true,
+    })
+    testThumbnail?: string;
+
+    @ApiProperty({
         description: 'Type of test',
         example: TestType.EXAM,
         enum: TestType,
