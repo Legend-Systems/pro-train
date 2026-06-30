@@ -68,6 +68,24 @@ class AdminEmployeePerformanceDto {
 
     @ApiProperty({ example: 6 })
     totalTests: number;
+
+    @ApiProperty({ example: 'North Branch', required: false })
+    branchName?: string;
+
+    @ApiProperty({ example: 12.5, required: false })
+    totalTrainingHours?: number;
+
+    @ApiProperty({ example: 2450, required: false })
+    xpPoints?: number;
+
+    @ApiProperty({ example: 4, required: false })
+    level?: number;
+
+    @ApiProperty({ example: 'Gold', required: false })
+    rank?: string;
+
+    @ApiProperty({ example: ['5 Tests Completed', 'Perfect Score'], required: false })
+    milestones?: string[];
 }
 
 /** Employees who may need coaching or re-training. */
