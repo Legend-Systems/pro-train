@@ -795,6 +795,7 @@ export class ResultsService {
             this.resultRepository
                 .createQueryBuilder('result')
                 .leftJoin('result.user', 'user')
+                .leftJoin('user.branchId', 'userBranch')
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
@@ -802,6 +803,7 @@ export class ResultsService {
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
+            .addSelect('MAX(userBranch.name)', 'branchName')
             .addSelect('AVG(result.percentage)', 'averageScore')
             .addSelect('COUNT(result.resultId)', 'totalTests')
             .addSelect(
@@ -818,10 +820,16 @@ export class ResultsService {
                 userId: string;
                 firstName: string;
                 lastName: string;
+                branchName: string | null;
                 averageScore: string;
                 totalTests: string;
                 testsPassed: string;
             }>();
+
+        const topPerformers = await this.enrichTopPerformers(
+            topPerformerRows,
+            scope,
+        );
 
         const needsAttentionRows = await this.applyAdminScopeFilters(
             this.resultRepository
@@ -890,15 +898,7 @@ export class ResultsService {
                             : 0,
                 };
             }),
-            topPerformers: topPerformerRows.map(row => ({
-                userId: row.userId,
-                firstName: row.firstName,
-                lastName: row.lastName,
-                averageScore:
-                    Math.round(Number(row.averageScore || 0) * 100) / 100,
-                testsPassed: Number(row.testsPassed) || 0,
-                totalTests: Number(row.totalTests) || 0,
-            })),
+            topPerformers,
             needsAttention: needsAttentionRows.map(row => ({
                 userId: row.userId,
                 firstName: row.firstName,
@@ -907,6 +907,119 @@ export class ResultsService {
                 lastFailedTest: row.lastFailedTest || 'Unknown test',
             })),
         };
+    }
+
+    /** Enriches top performer rows with branch, training hours, XP, and milestones. */
+    private async enrichTopPerformers(
+        rows: Array<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+            averageScore: string;
+            totalTests: string;
+            testsPassed: string;
+        }>,
+        scope: OrgBranchScope,
+    ): Promise<AdminResultsDashboardDto['topPerformers']> {
+        return Promise.all(
+            rows.map(async row => {
+                const averageScore =
+                    Math.round(Number(row.averageScore || 0) * 100) / 100;
+                const testsPassed = Number(row.testsPassed) || 0;
+                const totalTests = Number(row.totalTests) || 0;
+
+                let totalTrainingHours = 0;
+                let xpPoints = 0;
+                let level = 1;
+                let rank = 'ROOKIE';
+
+                if (scope.orgId) {
+                    try {
+                        const hoursSummary =
+                            await this.trainingHoursService.getUserSummary(
+                                row.userId,
+                                scope.orgId,
+                                scope.branchId,
+                            );
+                        totalTrainingHours = hoursSummary.totalHours;
+                    } catch (hoursError) {
+                        this.logger.warn(
+                            `Top performer training hours lookup failed for ${row.userId}`,
+                            hoursError instanceof Error
+                                ? hoursError.message
+                                : String(hoursError),
+                        );
+                    }
+
+                    try {
+                        const rewardsStats =
+                            await this.rewardsService.getUserStats(
+                                row.userId,
+                                scope,
+                            );
+                        if (rewardsStats) {
+                            xpPoints = rewardsStats.totalXP;
+                            level = rewardsStats.level;
+                            rank = rewardsStats.rank;
+                        }
+                    } catch (rewardsError) {
+                        this.logger.warn(
+                            `Top performer rewards lookup failed for ${row.userId}`,
+                            rewardsError instanceof Error
+                                ? rewardsError.message
+                                : String(rewardsError),
+                        );
+                    }
+                }
+
+                return {
+                    userId: row.userId,
+                    firstName: row.firstName,
+                    lastName: row.lastName,
+                    averageScore,
+                    testsPassed,
+                    totalTests,
+                    branchName: row.branchName || 'Unassigned',
+                    totalTrainingHours,
+                    xpPoints,
+                    level,
+                    rank,
+                    milestones: this.buildPerformerMilestones(
+                        testsPassed,
+                        totalTests,
+                        averageScore,
+                    ),
+                };
+            }),
+        );
+    }
+
+    /** Derives display milestones for a top performer from test stats. */
+    private buildPerformerMilestones(
+        testsPassed: number,
+        totalTests: number,
+        averageScore: number,
+    ): string[] {
+        const milestones: string[] = [];
+
+        if (totalTests >= 1) {
+            milestones.push('First Test Completed');
+        }
+        if (totalTests >= 5) {
+            milestones.push('5 Tests Completed');
+        }
+        if (totalTests >= 10) {
+            milestones.push('10 Tests Completed');
+        }
+        if (testsPassed >= 5) {
+            milestones.push('5 Tests Passed');
+        }
+        if (averageScore >= 100) {
+            milestones.push('Perfect Score');
+        }
+
+        return milestones;
     }
 
     /**
