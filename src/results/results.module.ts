@@ -13,6 +13,7 @@ import { CommunicationsModule } from '../communications/communications.module';
 import { TrainingProgressModule } from '../training_progress/training_progress.module';
 import { AuthModule } from '../auth/auth.module';
 import { RewardsModule } from '../rewards/rewards.module';
+import { TrainingHoursModule } from '../training-hours/training-hours.module';
 
 @Module({
     imports: [
@@ -23,6 +24,7 @@ import { RewardsModule } from '../rewards/rewards.module';
         TrainingProgressModule,
         AuthModule,
         RewardsModule,
+        TrainingHoursModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService],

@@ -17,6 +17,7 @@ import {
     UserPerformanceDto,
     GlobalUserStatsDto,
 } from '../dto/user-analytics.dto';
+import { TrainingHoursService } from '../../training-hours/training-hours.service';
 
 @Injectable()
 export class UserReportsService {
@@ -31,6 +32,7 @@ export class UserReportsService {
         private testRepository: Repository<Test>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly trainingHoursService: TrainingHoursService,
     ) {}
 
     async getUserAnalytics(userId: string): Promise<UserAnalyticsResponseDto> {
@@ -58,7 +60,7 @@ export class UserReportsService {
 
         // Generate fresh analytics data
         const [stats, engagement, performance] = await Promise.all([
-            this.getUserStats(userId),
+            this.getUserStats(userId, user.orgId?.id),
             this.getUserEngagement(userId, user),
             this.getUserPerformance(userId),
         ]);
@@ -77,7 +79,10 @@ export class UserReportsService {
         return analyticsData;
     }
 
-    private async getUserStats(userId: string): Promise<UserStatsDto> {
+    private async getUserStats(
+        userId: string,
+        orgId?: string,
+    ): Promise<UserStatsDto> {
         // Get total test attempts
         const totalTestsAttempted = await this.testAttemptRepository.count({
             where: { userId },
@@ -107,40 +112,95 @@ export class UserReportsService {
 
         const averageScore = Number(avgScoreResult?.avgScore) || 0;
 
-        // Calculate total study time (sum of all attempt durations)
-        const studyTimeResult = await this.testAttemptRepository
-            .createQueryBuilder('ta')
-            .where('ta.userId = :userId', { userId })
-            .andWhere('ta.submitTime IS NOT NULL')
-            .select(
-                'SUM(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
-                'totalSeconds',
-            )
-            .getRawOne();
+        // Training hours from ledger when org context is available
+        let totalStudyTimeHours = 0;
+        let averageSessionDurationMinutes = 0;
 
-        const totalStudyTimeHours =
-            Number(studyTimeResult?.totalSeconds || 0) / 3600;
+        if (orgId) {
+            try {
+                totalStudyTimeHours =
+                    await this.trainingHoursService.getTotalStudyTimeHours(
+                        userId,
+                        orgId,
+                    );
+                averageSessionDurationMinutes =
+                    await this.trainingHoursService.getAverageSessionDurationMinutes(
+                        userId,
+                        orgId,
+                    );
+            } catch {
+                // Fallback to attempt-based calculation if ledger unavailable
+                const studyTimeResult = await this.testAttemptRepository
+                    .createQueryBuilder('ta')
+                    .where('ta.userId = :userId', { userId })
+                    .andWhere('ta.submitTime IS NOT NULL')
+                    .select(
+                        'SUM(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
+                        'totalSeconds',
+                    )
+                    .getRawOne();
 
-        // Calculate average session duration
-        const sessionDurations = await this.testAttemptRepository
-            .createQueryBuilder('ta')
-            .where('ta.userId = :userId', { userId })
-            .andWhere('ta.submitTime IS NOT NULL')
-            .select(
-                'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
-                'duration',
-            )
-            .getRawMany();
+                totalStudyTimeHours =
+                    Number(studyTimeResult?.totalSeconds || 0) / 3600;
 
-        const averageSessionDurationMinutes =
-            sessionDurations.length > 0
-                ? sessionDurations.reduce(
-                      (sum, session) => sum + Number(session.duration || 0),
-                      0,
-                  ) /
-                  sessionDurations.length /
-                  60
-                : 0;
+                const sessionDurations = await this.testAttemptRepository
+                    .createQueryBuilder('ta')
+                    .where('ta.userId = :userId', { userId })
+                    .andWhere('ta.submitTime IS NOT NULL')
+                    .select(
+                        'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
+                        'duration',
+                    )
+                    .getRawMany();
+
+                averageSessionDurationMinutes =
+                    sessionDurations.length > 0
+                        ? sessionDurations.reduce(
+                              (sum, session) =>
+                                  sum + Number(session.duration || 0),
+                              0,
+                          ) /
+                          sessionDurations.length /
+                          60
+                        : 0;
+            }
+        } else {
+            const studyTimeResult = await this.testAttemptRepository
+                .createQueryBuilder('ta')
+                .where('ta.userId = :userId', { userId })
+                .andWhere('ta.submitTime IS NOT NULL')
+                .select(
+                    'SUM(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
+                    'totalSeconds',
+                )
+                .getRawOne();
+
+            totalStudyTimeHours =
+                Number(studyTimeResult?.totalSeconds || 0) / 3600;
+
+            const sessionDurations = await this.testAttemptRepository
+                .createQueryBuilder('ta')
+                .where('ta.userId = :userId', { userId })
+                .andWhere('ta.submitTime IS NOT NULL')
+                .select(
+                    'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
+                    'duration',
+                )
+                .getRawMany();
+
+            averageSessionDurationMinutes =
+                sessionDurations.length > 0
+                    ? sessionDurations.reduce(
+                          (sum, session) =>
+                              sum + Number(session.duration || 0),
+                          0,
+                      ) /
+                      sessionDurations.length /
+                      60
+                    : 0;
+        }
+
+        // Legacy block removed — study time now sourced from training hours ledger
 
         // Get number of different courses engaged with
         const coursesEngaged = await this.testAttemptRepository

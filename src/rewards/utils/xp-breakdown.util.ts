@@ -61,6 +61,10 @@ export function mapActionToCategory(action: string): XpCategory {
         case XP_ACTIONS.START_TEST_ATTEMPT:
         case XP_ACTIONS.LEARNING_STREAK_7:
         case XP_ACTIONS.WEEKLY_TRAINING_GOAL:
+        case XP_ACTIONS.WEEKLY_TRAINING_HOURS_2:
+        case XP_ACTIONS.MONTHLY_TRAINING_HOURS_5:
+        case XP_ACTIONS.MONTHLY_TRAINING_HOURS_10:
+        case XP_ACTIONS.DAILY_TRAINING_30MIN:
             return XP_CATEGORIES.ENGAGEMENT;
         case XP_ACTIONS.COMPLETE_PROFILE:
             return XP_CATEGORIES.PROFILE;

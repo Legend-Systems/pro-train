@@ -51,6 +51,11 @@ import {
 } from './utils/xp-breakdown.util';
 import type { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCompletedEvent } from '../common/events/course-completed.event';
+import { TrainingHoursService } from '../training-hours/training-hours.service';
+import {
+    TRAINING_HOURS_XP_THRESHOLDS,
+} from '../training-hours/constants/training-hours.constants';
+import { formatActivityDateUtc, formatYearMonthUtc } from '../training-hours/utils/training-hours.util';
 
 /** Result returned when awardXP skips (user missing, inactive, or feature disabled). */
 interface AwardXpSkippedResult {
@@ -119,6 +124,7 @@ export class RewardsService {
         private readonly retryService: RetryService,
         private readonly configService: ConfigService,
         private readonly eventEmitter: EventEmitter2,
+        private readonly trainingHoursService: TrainingHoursService,
     ) {}
 
     /** Returns true when REWARDS_XP_ENABLED is not explicitly set to false. */
@@ -670,6 +676,230 @@ export class RewardsService {
 
                 if (!('skipped' in result && result.skipped)) {
                     awarded += 1;
+                }
+            }
+
+            return awarded;
+        });
+    }
+
+    /** Awards hour-based XP when user reaches ≥2 hours in rolling 7 days. */
+    async evaluateWeeklyTrainingHourGoals(): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const allRewards = await this.userRewardsRepository.find({
+                relations: ['orgId', 'branchId'],
+            });
+
+            let awarded = 0;
+            const weekKey = this.getIsoWeekKey(new Date());
+            const since = new Date();
+            since.setUTCDate(since.getUTCDate() - 7);
+            const end = new Date();
+
+            for (const rewards of allRewards) {
+                const orgId =
+                    typeof rewards.orgId === 'object'
+                        ? rewards.orgId.id
+                        : String(rewards.orgId);
+                const branchId =
+                    rewards.branchId &&
+                    typeof rewards.branchId === 'object'
+                        ? rewards.branchId.id
+                        : undefined;
+
+                const totalMinutes =
+                    await this.trainingHoursService.sumUserMinutesInRange(
+                        rewards.userId,
+                        orgId,
+                        since,
+                        end,
+                    );
+
+                if (totalMinutes < TRAINING_HOURS_XP_THRESHOLDS.WEEKLY_MINUTES) {
+                    continue;
+                }
+
+                const result = await this.awardXP(
+                    {
+                        userId: rewards.userId,
+                        amount: XP_VALUES.WEEKLY_TRAINING_HOURS_2,
+                        action: XP_ACTIONS.WEEKLY_TRAINING_HOURS_2,
+                        source: {
+                            id: weekKey,
+                            type: XP_SOURCE_TYPES.TRAINING_PROGRESS,
+                            details: `${totalMinutes} training minutes in 7 days`,
+                        },
+                        idempotencyKey: `weekly-hours-2:${rewards.userId}:${weekKey}`,
+                    },
+                    orgId,
+                    branchId,
+                );
+
+                if (!('skipped' in result && result.skipped)) {
+                    awarded += 1;
+                    this.logger.log(
+                        `Weekly training hours XP awarded to user ${rewards.userId}`,
+                    );
+                }
+            }
+
+            return awarded;
+        });
+    }
+
+    /** Awards monthly hour milestones for the previous calendar month. */
+    async evaluateMonthlyTrainingHourGoals(): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const now = new Date();
+            const prevMonth = new Date(
+                Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+            );
+            const yearMonth = formatYearMonthUtc(prevMonth);
+            const monthStart = new Date(
+                Date.UTC(prevMonth.getUTCFullYear(), prevMonth.getUTCMonth(), 1),
+            );
+            const monthEnd = new Date(
+                Date.UTC(prevMonth.getUTCFullYear(), prevMonth.getUTCMonth() + 1, 1),
+            );
+
+            const allRewards = await this.userRewardsRepository.find({
+                relations: ['orgId', 'branchId'],
+            });
+
+            let awarded = 0;
+
+            for (const rewards of allRewards) {
+                const orgId =
+                    typeof rewards.orgId === 'object'
+                        ? rewards.orgId.id
+                        : String(rewards.orgId);
+                const branchId =
+                    rewards.branchId &&
+                    typeof rewards.branchId === 'object'
+                        ? rewards.branchId.id
+                        : undefined;
+
+                const totalMinutes =
+                    await this.trainingHoursService.sumUserMinutesInRange(
+                        rewards.userId,
+                        orgId,
+                        monthStart,
+                        monthEnd,
+                    );
+
+                const milestones: Array<{
+                    threshold: number;
+                    action: (typeof XP_ACTIONS)[keyof typeof XP_ACTIONS];
+                    amount: number;
+                    key: string;
+                }> = [
+                    {
+                        threshold:
+                            TRAINING_HOURS_XP_THRESHOLDS.MONTHLY_5_HOURS_MINUTES,
+                        action: XP_ACTIONS.MONTHLY_TRAINING_HOURS_5,
+                        amount: XP_VALUES.MONTHLY_TRAINING_HOURS_5,
+                        key: 'monthly-hours-5',
+                    },
+                    {
+                        threshold:
+                            TRAINING_HOURS_XP_THRESHOLDS.MONTHLY_10_HOURS_MINUTES,
+                        action: XP_ACTIONS.MONTHLY_TRAINING_HOURS_10,
+                        amount: XP_VALUES.MONTHLY_TRAINING_HOURS_10,
+                        key: 'monthly-hours-10',
+                    },
+                ];
+
+                for (const milestone of milestones) {
+                    if (totalMinutes < milestone.threshold) {
+                        continue;
+                    }
+
+                    const result = await this.awardXP(
+                        {
+                            userId: rewards.userId,
+                            amount: milestone.amount,
+                            action: milestone.action,
+                            source: {
+                                id: yearMonth,
+                                type: XP_SOURCE_TYPES.TRAINING_PROGRESS,
+                                details: `${totalMinutes} training minutes in ${yearMonth}`,
+                            },
+                            idempotencyKey: `${milestone.key}:${rewards.userId}:${yearMonth}`,
+                        },
+                        orgId,
+                        branchId,
+                    );
+
+                    if (!('skipped' in result && result.skipped)) {
+                        awarded += 1;
+                        this.logger.log(
+                            `Monthly training hours XP (${milestone.action}) awarded to user ${rewards.userId}`,
+                        );
+                    }
+                }
+            }
+
+            return awarded;
+        });
+    }
+
+    /** Awards daily XP when user logged ≥30 training minutes yesterday (UTC). */
+    async evaluateDailyTrainingGoals(): Promise<number> {
+        return this.retryService.executeDatabase(async () => {
+            const yesterday = new Date();
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+            const activityDate = formatActivityDateUtc(yesterday);
+            const dayKey = activityDate;
+
+            const allRewards = await this.userRewardsRepository.find({
+                relations: ['orgId', 'branchId'],
+            });
+
+            let awarded = 0;
+
+            for (const rewards of allRewards) {
+                const orgId =
+                    typeof rewards.orgId === 'object'
+                        ? rewards.orgId.id
+                        : String(rewards.orgId);
+                const branchId =
+                    rewards.branchId &&
+                    typeof rewards.branchId === 'object'
+                        ? rewards.branchId.id
+                        : undefined;
+
+                const totalMinutes =
+                    await this.trainingHoursService.sumUserMinutesOnDate(
+                        rewards.userId,
+                        orgId,
+                        activityDate,
+                    );
+
+                if (totalMinutes < TRAINING_HOURS_XP_THRESHOLDS.DAILY_MINUTES) {
+                    continue;
+                }
+
+                const result = await this.awardXP(
+                    {
+                        userId: rewards.userId,
+                        amount: XP_VALUES.DAILY_TRAINING_30MIN,
+                        action: XP_ACTIONS.DAILY_TRAINING_30MIN,
+                        source: {
+                            id: dayKey,
+                            type: XP_SOURCE_TYPES.TRAINING_PROGRESS,
+                            details: `${totalMinutes} training minutes on ${dayKey}`,
+                        },
+                        idempotencyKey: `daily-30min:${rewards.userId}:${dayKey}`,
+                    },
+                    orgId,
+                    branchId,
+                );
+
+                if (!('skipped' in result && result.skipped)) {
+                    awarded += 1;
+                    this.logger.log(
+                        `Daily training hours XP awarded to user ${rewards.userId}`,
+                    );
                 }
             }
 

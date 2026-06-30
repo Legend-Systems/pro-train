@@ -19,6 +19,7 @@
         "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
         "test:e2e": "jest --config ./test/jest-e2e.json",
         "script:backfill-training-progress": "ts-node -r tsconfig-paths/register src/scripts/backfill-training-progress-from-results.ts",
+        "script:backfill-training-sessions": "ts-node -r tsconfig-paths/register src/scripts/backfill-training-sessions-from-attempts.ts",
         "typeorm": "typeorm-ts-node-commonjs -d src/data-source.ts",
         "typeorm:migration:run": "yarn typeorm migration:run",
         "typeorm:migration:revert": "yarn typeorm migration:revert"

@@ -14,6 +14,7 @@ import { CourseMaterial } from '../course-materials/entities/course-material.ent
 import { CourseMaterialView } from '../course-materials/entities/course-material-view.entity';
 import { CommonModule } from '../common/common.module';
 import { UserModule } from '../user/user.module';
+import { TrainingHoursModule } from '../training-hours/training-hours.module';
 
 /**
  * XP rewards module — Phases 2–6.
@@ -36,6 +37,7 @@ import { UserModule } from '../user/user.module';
         }),
         CommonModule,
         forwardRef(() => UserModule),
+        TrainingHoursModule,
     ],
     controllers: [RewardsController],
     providers: [RewardsService, RewardsSubscriber, RewardsCronService],

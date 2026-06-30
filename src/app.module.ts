@@ -43,6 +43,9 @@ import { CommonModule } from './common/common.module';
 import { UserRewards } from './rewards/entities/user-rewards.entity';
 import { XPTransaction } from './rewards/entities/xp-transaction.entity';
 import { RewardsModule } from './rewards/rewards.module';
+import { TrainingSession } from './training-hours/entities/training-session.entity';
+import { UserTrainingHoursMonthly } from './training-hours/entities/user-training-hours-monthly.entity';
+import { TrainingHoursModule } from './training-hours/training-hours.module';
 
 @Module({
     imports: [
@@ -103,6 +106,8 @@ import { RewardsModule } from './rewards/rewards.module';
                     UserRewards,
                     XPTransaction,
                     CourseMaterialView,
+                    TrainingSession,
+                    UserTrainingHoursMonthly,
                 ],
                 synchronize: false,
                 logging: false,
@@ -158,6 +163,7 @@ import { RewardsModule } from './rewards/rewards.module';
         MediaManagerModule,
         CourseMaterialsModule,
         RewardsModule,
+        TrainingHoursModule,
     ],
     controllers: [AppController],
     providers: [

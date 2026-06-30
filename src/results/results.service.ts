@@ -28,6 +28,7 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
 import { UserRole } from '../user/entities/user.entity';
 import { RewardsService } from '../rewards/rewards.service';
+import { TrainingHoursService } from '../training-hours/training-hours.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
 import {
@@ -108,6 +109,7 @@ export class ResultsService {
         private readonly communicationsService: CommunicationsService,
         private readonly trainingProgressService: TrainingProgressService,
         private readonly rewardsService: RewardsService,
+        private readonly trainingHoursService: TrainingHoursService,
         private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
@@ -329,6 +331,20 @@ export class ResultsService {
                     progressError instanceof Error
                         ? progressError.stack
                         : String(progressError),
+                );
+            }
+
+            // Record training hours ledger entry (non-blocking)
+            try {
+                await this.trainingHoursService.recordTestAttemptSession(
+                    attempt,
+                );
+            } catch (hoursError) {
+                this.logger.error(
+                    `Training hours recording failed for attempt ${attemptId} (non-fatal)`,
+                    hoursError instanceof Error
+                        ? hoursError.stack
+                        : String(hoursError),
                 );
             }
 
@@ -952,6 +968,8 @@ export class ResultsService {
                 averageScore: 0,
                 coursesAttempted: 0,
                 coursesPassed: 0,
+                totalTrainingHours: 0,
+                monthlyTrainingHours: 0,
             },
             monthlyTrend: ResultsService.MONTH_LABELS.map((label, index) => ({
                 month: index + 1,
@@ -960,6 +978,7 @@ export class ResultsService {
                 testsFailed: 0,
                 passRate: 0,
                 averageScore: 0,
+                trainingHours: 0,
             })),
             courseTrends: [],
             courseSummaries: [],
@@ -1233,6 +1252,79 @@ export class ResultsService {
             },
         ).filter(point => !month || point.month === month);
 
+        // Training hours for selected employee and org-wide trend
+        let totalTrainingHours = 0;
+        let monthlyTrainingHours = 0;
+        const hoursByMonth = new Map<number, number>();
+
+        if (scope.orgId) {
+            try {
+                const userHoursSummary =
+                    await this.trainingHoursService.getUserSummary(
+                        selectedUserId,
+                        scope.orgId,
+                        scope.branchId,
+                    );
+                totalTrainingHours = userHoursSummary.totalHours;
+                monthlyTrainingHours = userHoursSummary.currentMonthHours;
+
+                const yearStart = `${year}-01`;
+                const yearEnd = `${year}-12`;
+                const monthlyHours =
+                    await this.trainingHoursService.getMonthlyBreakdown(
+                        selectedUserId,
+                        scope.orgId,
+                        yearStart,
+                        yearEnd,
+                        scope.branchId,
+                    );
+
+                for (const bucket of monthlyHours) {
+                    const monthNum = Number(bucket.yearMonth.split('-')[1]);
+                    hoursByMonth.set(monthNum, bucket.totalHours);
+                }
+            } catch (hoursError) {
+                this.logger.error(
+                    `Training hours metrics failed for user ${selectedUserId}`,
+                    hoursError instanceof Error
+                        ? hoursError.stack
+                        : String(hoursError),
+                );
+            }
+        }
+
+        const monthlyTrendWithHours = monthlyTrend.map(point => ({
+            ...point,
+            trainingHours: hoursByMonth.get(point.month) ?? 0,
+        }));
+
+        let orgTrainingHoursTrend:
+            | AdminEmployeeMetricsDto['orgTrainingHoursTrend']
+            | undefined;
+
+        if (scope.orgId) {
+            try {
+                const trends =
+                    await this.trainingHoursService.getOrgMonthlyTrends(
+                        scope.orgId,
+                        12,
+                        scope.branchId,
+                    );
+                orgTrainingHoursTrend = trends.map(t => ({
+                    yearMonth: t.yearMonth,
+                    totalHours: t.totalHours,
+                    activeLearners: t.activeLearners,
+                }));
+            } catch (trendError) {
+                this.logger.error(
+                    'Org training hours trend failed',
+                    trendError instanceof Error
+                        ? trendError.stack
+                        : String(trendError),
+                );
+            }
+        }
+
         return {
             year,
             month,
@@ -1251,11 +1343,14 @@ export class ResultsService {
                     100,
                 coursesAttempted: Number(summaryRow?.coursesAttempted) || 0,
                 coursesPassed: Number(summaryRow?.coursesPassed) || 0,
+                totalTrainingHours,
+                monthlyTrainingHours,
             },
-            monthlyTrend,
+            monthlyTrend: monthlyTrendWithHours,
             courseTrends,
             courseSummaries,
             orgComparison,
+            orgTrainingHoursTrend,
         };
     }
 
