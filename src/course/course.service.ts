@@ -1235,10 +1235,10 @@ export class CourseService {
             return;
         }
 
-        // Check if user has elevated permissions (admin or brandon) within the same organization
+        // Check if user has elevated permissions (admin or master_admin) within the same organization
         if (scope?.userRole && scope?.orgId) {
             const hasElevatedPermissions =
-                scope.userRole === 'brandon' ||
+                scope.userRole === 'master_admin' ||
                 scope.userRole === 'admin' ||
                 scope.userRole === 'owner';
 
@@ -1247,7 +1247,7 @@ export class CourseService {
                 const courseOrgId = course.orgId?.id;
 
                 // Brandon users can edit across organizations
-                if (scope.userRole === 'brandon') {
+                if (scope.userRole === 'master_admin') {
                     return;
                 }
 
@@ -1278,10 +1278,10 @@ export class CourseService {
             return;
         }
 
-        // Check if user has elevated permissions (admin or brandon) within the same organization
+        // Check if user has elevated permissions (admin or master_admin) within the same organization
         if (scope?.userRole && scope?.orgId) {
             const hasElevatedPermissions =
-                scope.userRole === 'brandon' ||
+                scope.userRole === 'master_admin' ||
                 scope.userRole === 'admin' ||
                 scope.userRole === 'owner';
 
@@ -1290,7 +1290,7 @@ export class CourseService {
                 const courseOrgId = course.orgId?.id;
 
                 // Brandon users can edit across organizations
-                if (scope.userRole === 'brandon') {
+                if (scope.userRole === 'master_admin') {
                     return;
                 }
 

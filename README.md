@@ -186,7 +186,7 @@ export class User {
 #### **User Roles & Status**:
 ```typescript
 export enum UserRole {
-    BRANDON = 'brandon',    // Super admin
+    MASTER_ADMIN = 'master_admin',    // Super admin
     OWNER = 'owner',        // Organization owner
     ADMIN = 'admin',        // Organization admin
     USER = 'user'           // Regular user
@@ -957,7 +957,7 @@ graph TD
    - Long: 100 requests/hour
 
 4. **Role-Based Access Control**:
-   - BRANDON: Super admin access
+   - MASTER_ADMIN: Super admin access
    - OWNER: Organization owner
    - ADMIN: Organization admin
    - USER: Regular user

@@ -82,7 +82,7 @@ export class UserService {
      * Helper method to determine if deleted users should be included
      */
     private shouldIncludeDeleted(userRole?: string): boolean {
-        return userRole === UserRole.BRANDON || userRole === UserRole.ADMIN;
+        return userRole === UserRole.MASTER_ADMIN || userRole === UserRole.ADMIN;
     }
 
     /**
@@ -225,7 +225,7 @@ export class UserService {
             { page: 1, limit: 20, role: 'admin' },
             { page: 1, limit: 20, role: 'user' },
             { page: 1, limit: 20, role: 'owner' },
-            { page: 1, limit: 20, role: 'brandon' },
+            { page: 1, limit: 20, role: 'master_admin' },
             // Empty filter combinations
             {},
             { page: 1 },
@@ -645,7 +645,7 @@ export class UserService {
                 .leftJoinAndSelect('user.branchId', 'branch')
                 .leftJoinAndSelect('user.avatar', 'avatar');
 
-            // Include deleted users only for brandon/admin roles
+            // Include deleted users only for master_admin/admin roles
             if (this.shouldIncludeDeleted(scope?.userRole)) {
                 queryBuilder.where('user.status IN (:...statuses)', {
                     statuses: [UserStatus.ACTIVE, UserStatus.DELETED],
@@ -740,9 +740,9 @@ export class UserService {
                 .leftJoinAndSelect('user.branchId', 'branch')
                 .leftJoinAndSelect('user.avatar', 'avatar');
 
-            // Apply where conditions properly - include deleted users for brandon/admin
+            // Apply where conditions properly - include deleted users for master_admin/admin
             if (this.shouldIncludeDeleted(scope?.userRole)) {
-                // For brandon/admin, use the provided status or show all statuses including deleted
+                // For master_admin/admin, use the provided status or show all statuses including deleted
                 if (filters.status) {
                     queryBuilder.where('user.status = :status', {
                         status: filters.status,

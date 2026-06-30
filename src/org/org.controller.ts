@@ -2003,9 +2003,9 @@ export class OrgController {
             throw new ForbiddenException('Access denied to this organization');
         }
 
-        // For users with elevated permissions (brandon, admin, owner), allow editing any branch in their org
+        // For users with elevated permissions (master_admin, admin, owner), allow editing any branch in their org
         const hasElevatedPermissions =
-            scope.role === 'brandon' ||
+            scope.role === 'master_admin' ||
             scope.role === 'admin' ||
             scope.role === 'owner';
 
@@ -2100,9 +2100,9 @@ export class OrgController {
             throw new ForbiddenException('Access denied to this organization');
         }
 
-        // For users with elevated permissions (brandon, admin, owner), allow deleting any branch in their org
+        // For users with elevated permissions (master_admin, admin, owner), allow deleting any branch in their org
         const hasElevatedPermissions =
-            scope.role === 'brandon' ||
+            scope.role === 'master_admin' ||
             scope.role === 'admin' ||
             scope.role === 'owner';
 

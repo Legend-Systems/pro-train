@@ -601,7 +601,7 @@ export class ResultsController {
 
     @Get('admin/dashboard')
     @UseGuards(RolesGuard)
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({
         summary: 'Org-wide results dashboard (Admin)',
         description:
@@ -614,7 +614,7 @@ export class ResultsController {
         type: AdminResultsDashboardDto,
     })
     @ApiForbiddenResponse({
-        description: 'Forbidden - admin, owner, or brandon role required',
+        description: 'Forbidden - admin, owner, or master_admin role required',
     })
     async getAdminDashboard(
         @OrgBranchScope() scope: OrgBranchScope,
@@ -628,7 +628,7 @@ export class ResultsController {
 
     @Get('admin/employee-metrics')
     @UseGuards(RolesGuard)
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({
         summary: 'Per-employee results analytics (Admin)',
         description:

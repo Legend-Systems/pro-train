@@ -60,7 +60,7 @@ The user controller now uses organizational role guards to control access based 
 
 ## Role Hierarchy
 
-1. **BRANDON** - Super admin, access to everything
+1. **MASTER_ADMIN** - Super admin, access to everything
 2. **ADMIN** - Organization admin, can manage users within org (+ cross-org when allowed)
 3. **OWNER** - Organization owner, can manage users within their organization
 4. **USER** - Regular user, no administrative access to user management
@@ -77,7 +77,7 @@ The user controller now uses organizational role guards to control access based 
 - Can access across organizations when `allowCrossOrg: true`
 - Can perform sensitive operations like user creation and deletion
 
-### BRANDON Role
+### MASTER_ADMIN Role
 - Universal access to all operations across all organizations
 - Bypasses all organizational and branch restrictions
 

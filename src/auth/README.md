@@ -35,7 +35,7 @@ auth/
 ### Authentication & Authorization
 
 - **JWT-based Authentication** with access and refresh tokens
-- **Role-based Access Control** (BRANDON, OWNER, ADMIN, USER)
+- **Role-based Access Control** (MASTER_ADMIN, OWNER, ADMIN, USER)
 - **Organization & Branch Scoping** for multi-tenant support
 - **Secure Password Hashing** using bcrypt with 12 salt rounds
 - **Rate Limiting** protection against brute force attacks

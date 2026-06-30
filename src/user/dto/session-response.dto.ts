@@ -120,7 +120,7 @@ export class UserResponseDto {
 
     @ApiProperty({
         description: 'User role in the system',
-        example: 'brandon',
+        example: 'master_admin',
         enum: UserRole,
         required: false,
     })

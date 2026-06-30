@@ -278,8 +278,8 @@ export class AuthService {
         }[] = [];
 
         switch (user.role) {
-            case UserRole.BRANDON:
-                // BRANDON - Super admin, access to everything
+            case UserRole.MASTER_ADMIN:
+                // MASTER_ADMIN - Super admin, access to everything
                 permissions.canAccessAllOrganizations = true;
                 permissions.canAccessAllBranches = true;
                 permissions.crossOrgAccess = true;
