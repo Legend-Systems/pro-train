@@ -184,7 +184,7 @@ XP hooks belong **after** successful business actions (result saved, progress sy
     - First view per material → XP; all materials in course viewed → bonus XP
 
 19. ✅ **Admin / trainer actions (optional, role-gated)**  
-    Award only to `admin`, `owner`, or `brandon` roles:
+    Award only to `admin`, `owner`, or `master_admin` roles:
     - `course.created` event (already emitted from `CourseService`) → creator XP
     - `test.created` event (already emitted from `TestService`) → creator XP
     - `course-material.created` event (already emitted) → creator XP
@@ -492,7 +492,7 @@ Default on new `UserRewards`: `level = 1`, `rank = 'ROOKIE'`.
 | 7-day learning streak | XP-earning activity 7 days in a row | `LEARNING_STREAK_7` (50) |
 | Weekly training goal | ≥3 tests submitted in 7 days | `WEEKLY_TRAINING_GOAL` (30) |
 
-### Admins / trainers (`ADMIN`, `OWNER`, `BRANDON`)
+### Admins / trainers (`ADMIN`, `OWNER`, `MASTER_ADMIN`)
 
 | User task | When it completes | XP award(s) |
 |-----------|-------------------|-------------|
@@ -729,7 +729,7 @@ Keep both. Optionally add a combined “engagement score” in reports later —
 5. **Feature flag** — ship dark with `REWARDS_XP_ENABLED` until backfill and QA complete.
 6. **Pass threshold** — ProTrain uses **60%** pass rate in `ResultsService.createFromAttempt`; align `PASS_TEST` with that rule.
 7. **Attempt limits** — `tests.maxAttempts` caps retakes; XP for `IMPROVE_SCORE` still applies within allowed attempts.
-8. **Admin awards** — restrict `POST /rewards/award-xp` to `ADMIN`, `OWNER`, `BRANDON` via existing role guards (`docs/ROLE_GUARDS.md`).
+8. **Admin awards** — restrict `POST /rewards/award-xp` to `ADMIN`, `OWNER`, `MASTER_ADMIN` via existing role guards (`docs/ROLE_GUARDS.md`).
 9. **Breakdown sync** — when adding categories, update both `xp-breakdown.util.ts` and `RewardsService.mapSourceTypeToCategory()`.
 10. **Material views** — requires new tracking; until implemented, skip material-related XP or awards will never fire.
 

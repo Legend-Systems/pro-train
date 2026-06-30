@@ -105,7 +105,7 @@ export class TrainingHoursController {
 
     /** Admin: training hours summary for any org user. */
     @Get('users/:userId/summary')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get training hours summary for a user (admin)' })
     @ApiParam({ name: 'userId', type: String })
     async getUserSummary(
@@ -124,7 +124,7 @@ export class TrainingHoursController {
 
     /** Admin: monthly breakdown for any org user. */
     @Get('users/:userId/monthly')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get monthly training hours for a user (admin)' })
     @ApiParam({ name: 'userId', type: String })
     @ApiQuery({ name: 'from', required: false })
@@ -156,7 +156,7 @@ export class TrainingHoursController {
 
     /** Admin: org-wide summary for a month. */
     @Get('admin/org-summary')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get org training hours summary for a month' })
     @ApiQuery({ name: 'yearMonth', required: false, example: '2026-06' })
     async getOrgSummary(
@@ -181,7 +181,7 @@ export class TrainingHoursController {
 
     /** Admin: monthly trends for charts. */
     @Get('admin/monthly-trends')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get org monthly training hours trends' })
     @ApiQuery({ name: 'months', required: false, example: 12 })
     async getMonthlyTrends(
@@ -200,7 +200,7 @@ export class TrainingHoursController {
 
     /** Admin: top learners by hours for a month. */
     @Get('admin/user-rankings')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get top learners by training hours' })
     @ApiQuery({ name: 'yearMonth', required: false })
     @ApiQuery({ name: 'limit', required: false })

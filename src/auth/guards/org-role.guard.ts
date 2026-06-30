@@ -65,7 +65,7 @@ export class OrgRoleGuard implements CanActivate {
         requiredRoles: UserRole[],
     ): boolean {
         // Brandon role has access to everything
-        if (userRole === UserRole.BRANDON) {
+        if (userRole === UserRole.MASTER_ADMIN) {
             return true;
         }
 
@@ -79,7 +79,7 @@ export class OrgRoleGuard implements CanActivate {
         request: AuthenticatedRequest,
     ): boolean {
         // Brandon role has access to everything everywhere
-        if (user.role === UserRole.BRANDON) {
+        if (user.role === UserRole.MASTER_ADMIN) {
             return true;
         }
 
@@ -117,7 +117,7 @@ export class OrgRoleGuard implements CanActivate {
             return true;
         }
 
-        // Check organization scope for non-owner/non-brandon roles
+        // Check organization scope for non-owner/non-master_admin roles
         if (targetOrgId && user.orgId !== targetOrgId) {
             return false;
         }

@@ -23,7 +23,7 @@ import { User, UserRole } from '../user/entities/user.entity';
 const AUTHORING_ROLES: UserRole[] = [
     UserRole.ADMIN,
     UserRole.OWNER,
-    UserRole.BRANDON,
+    UserRole.MASTER_ADMIN,
 ];
 
 /**

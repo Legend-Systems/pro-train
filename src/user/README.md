@@ -33,7 +33,7 @@ Following the comprehensive compliance review, this module has been updated to m
 #### **Role-Based Access Control**
 
 - **OrgRoleGuard Integration**: Organization-scoped role-based access control
-- **Convenient Decorators**: `@AdminOnly()`, `@OwnerOrAdmin()`, `@BrandonOnly()`, `@AnyRole()`
+- **Convenient Decorators**: `@AdminOnly()`, `@OwnerOrAdmin()`, `@MasterAdminOnly()`, `@AnyRole()`
 - **Cross-Organization Access**: Configurable admin permissions across organizations
 - **Business Logic Compliance**: Owners have full access within their organization
 
@@ -164,7 +164,7 @@ export class User {
 
 ```typescript
 export enum UserRole {
-    BRANDON = 'brandon', // Super admin access
+    MASTER_ADMIN = 'master_admin', // Super admin access
     OWNER = 'owner', // Organization owner
     ADMIN = 'admin', // Organization admin
     USER = 'user', // Regular user
@@ -753,7 +753,7 @@ async findAllWithFilters(
         orgId?: string; 
         branchId?: string; // Optional - when omitted enables cross-branch access
         userId: string; 
-        userRole?: string; // Enables deleted user visibility for brandon/admin
+        userRole?: string; // Enables deleted user visibility for master_admin/admin
     },
 ): Promise<{ users: User[]; total: number; totalPages: number }>
 
@@ -832,7 +832,7 @@ private generateCacheKeyForUsers(
 
 // 🆕 Helper method to determine admin visibility for deleted users
 private shouldIncludeDeleted(userRole?: string): boolean {
-    return userRole === UserRole.BRANDON || userRole === UserRole.ADMIN;
+    return userRole === UserRole.MASTER_ADMIN || userRole === UserRole.ADMIN;
 }
 ```
 

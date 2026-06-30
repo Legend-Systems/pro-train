@@ -185,7 +185,7 @@ export class AppService {
             },
             capabilities: {
                 userManagement: [
-                    'Multi-role system (brandon, owner, admin, user)',
+                    'Multi-role system (master_admin, owner, admin, user)',
                     'Secure registration and authentication',
                     'Profile management with avatar support',
                     'Password security with complexity requirements',

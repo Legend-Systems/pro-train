@@ -16,7 +16,7 @@ import {
     AdminOnly,
     OwnerOrAdmin,
     AnyRole,
-    BrandonOnly,
+    MasterAdminOnly,
     OrgRoles,
 } from '../decorators/org-roles.decorator';
 import { GetUser } from '../decorators/get-user.decorator';
@@ -30,23 +30,23 @@ export class RoleGuardExamplesController {
     // Basic Role Guard Examples
     @Get('basic/admin-only')
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.ADMIN, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Admin only endpoint (basic role guard)' })
     basicAdminOnly(@GetUser() user: AuthenticatedUser) {
         return {
-            message: 'This endpoint is accessible by admins and brandon only',
+            message: 'This endpoint is accessible by admins and master_admin only',
             user: { id: user.id, role: user.role },
         };
     }
 
     @Get('basic/owner-or-admin')
     @UseGuards(JwtAuthGuard, RolesGuard)
-    @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.BRANDON)
+    @Roles(UserRole.OWNER, UserRole.ADMIN, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Owner or admin endpoint (basic role guard)' })
     basicOwnerOrAdmin(@GetUser() user: AuthenticatedUser) {
         return {
             message:
-                'This endpoint is accessible by owners, admins, and brandon',
+                'This endpoint is accessible by owners, admins, and master_admin',
             user: { id: user.id, role: user.role },
         };
     }
@@ -124,9 +124,9 @@ export class RoleGuardExamplesController {
 
     @Delete('org/:orgId/super-admin')
     @UseGuards(JwtAuthGuard, OrgRoleGuard)
-    @BrandonOnly()
-    @ApiOperation({ summary: 'Brandon only (super admin)' })
-    orgBrandonOnly(
+    @MasterAdminOnly()
+    @ApiOperation({ summary: 'Master Admin only (super admin)' })
+    orgMasterAdminOnly(
         @Param('orgId') orgId: string,
         @GetUser() user: AuthenticatedUser,
     ) {
@@ -186,7 +186,7 @@ export class RoleGuardExamplesController {
     @Put('org/:orgId/sensitive-settings')
     @UseGuards(JwtAuthGuard, OrgRoleGuard)
     @OrgRoles({
-        roles: [UserRole.OWNER, UserRole.BRANDON],
+        roles: [UserRole.OWNER, UserRole.MASTER_ADMIN],
         allowCrossOrg: false,
         allowCrossBranch: true,
     })

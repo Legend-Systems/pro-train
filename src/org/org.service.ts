@@ -319,10 +319,10 @@ export class OrgService {
         }
 
         // If user has a specific branch, validate they can access this branch
-        // UNLESS they have elevated permissions (BRANDON, OWNER, or ADMIN) within the same org
+        // UNLESS they have elevated permissions (MASTER_ADMIN, OWNER, or ADMIN) within the same org
         if (scope.branchId && scope.branchId !== branchId) {
             const hasElevatedPermissions =
-                scope.userRole === 'brandon' ||
+                scope.userRole === 'master_admin' ||
                 scope.userRole === 'admin' ||
                 scope.userRole === 'owner';
 

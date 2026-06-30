@@ -28,7 +28,7 @@ export class RolesGuard implements CanActivate {
         }
 
         // Brandon role has access to everything
-        if (user.role === UserRole.BRANDON) {
+        if (user.role === UserRole.MASTER_ADMIN) {
             return true;
         }
 

@@ -469,7 +469,7 @@ export class CourseController {
       Returns **course completion** (Section 1.1) and **personal knowledge %** (Section 1.2) derived from
       \`tests\` + \`results\`, not from averaged \`training_progress\` rows.
 
-      - **userId** defaults to the authenticated user; admins/owners/brandon may pass another learner id.
+      - **userId** defaults to the authenticated user; admins/owners/master_admin may pass another learner id.
     `,
         operationId: 'getCourseLearnerProgress',
     })
@@ -500,7 +500,7 @@ export class CourseController {
         const resolvedLearnerUserId = learnerUserIdQuery ?? scope.userId;
         const isElevatedCourseProgressRole =
             scope.userRole === UserRole.ADMIN ||
-            scope.userRole === UserRole.BRANDON ||
+            scope.userRole === UserRole.MASTER_ADMIN ||
             scope.userRole === UserRole.OWNER;
 
         if (

@@ -24,7 +24,7 @@ import { Course } from 'src/course/entities/course.entity';
 import { UserRewards } from 'src/rewards/entities/user-rewards.entity';
 
 export enum UserRole {
-    BRANDON = 'brandon',
+    MASTER_ADMIN = 'master_admin',
     OWNER = 'owner',
     ADMIN = 'admin',
     USER = 'user',

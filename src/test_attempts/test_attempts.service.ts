@@ -1345,7 +1345,7 @@ export class TestAttemptsService {
 
             const isElevatedRole =
                 scope.userRole === UserRole.ADMIN ||
-                scope.userRole === UserRole.BRANDON ||
+                scope.userRole === UserRole.MASTER_ADMIN ||
                 scope.userRole === UserRole.OWNER;
 
             if (attemptRecord.userId !== requesterUserId && !isElevatedRole) {

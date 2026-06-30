@@ -660,7 +660,7 @@ export class ResultsService {
         const allowedRoles: UserRole[] = [
             UserRole.ADMIN,
             UserRole.OWNER,
-            UserRole.BRANDON,
+            UserRole.MASTER_ADMIN,
         ];
 
         if (

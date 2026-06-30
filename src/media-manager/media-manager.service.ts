@@ -1199,8 +1199,8 @@ export class MediaManagerService {
         userId: string,
         scope?: OrgBranchScope,
     ): boolean {
-        // BRANDON role has access to everything
-        if (scope?.userRole === 'brandon') {
+        // MASTER_ADMIN role has access to everything
+        if (scope?.userRole === 'master_admin') {
             return true;
         }
 

@@ -109,7 +109,7 @@ This document tracks the migration of user controller endpoints to use StandardR
 | GET /user/admin/deleted | ADMIN+ | ✅ | View deleted users across orgs |
 | PATCH /user/admin/restore/:userId | ADMIN+ | ✅ | Restore any user across orgs |
 
-**Role Hierarchy**: BRANDON > OWNER > ADMIN > USER
+**Role Hierarchy**: MASTER_ADMIN > OWNER > ADMIN > USER
 
 ## ✅ Next Steps - COMPLETED!
 

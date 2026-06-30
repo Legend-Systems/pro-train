@@ -15,7 +15,7 @@ The system supports four user roles (in order of privilege):
 
 ```typescript
 enum UserRole {
-    BRANDON = 'brandon', // Super admin - access to everything
+    MASTER_ADMIN = 'master_admin', // Super admin - access to everything
     OWNER = 'owner', // Organization owner
     ADMIN = 'admin', // Organization admin
     USER = 'user', // Regular user
@@ -43,9 +43,9 @@ export class AdminController {
     }
 
     @Get('super-admin')
-    @Roles(UserRole.BRANDON)
+    @Roles(UserRole.MASTER_ADMIN)
     superAdminOnly() {
-        // Only brandon role can access this
+        // Only master_admin role can access this
     }
 }
 ```
@@ -106,22 +106,22 @@ export class OrganizationController {
 
 #### `@AdminOnly(allowCrossOrg?: boolean)`
 
-- Allows: ADMIN, BRANDON
+- Allows: ADMIN, MASTER_ADMIN
 - Default: `allowCrossOrg = false`
 
 #### `@OwnerOrAdmin(allowCrossOrg?: boolean)`
 
-- Allows: OWNER, ADMIN, BRANDON
+- Allows: OWNER, ADMIN, MASTER_ADMIN
 - Default: `allowCrossOrg = false`
 
 #### `@AnyRole()`
 
-- Allows: All roles (USER, ADMIN, OWNER, BRANDON)
+- Allows: All roles (USER, ADMIN, OWNER, MASTER_ADMIN)
 - Cross-org: false, Cross-branch: true
 
-#### `@BrandonOnly()`
+#### `@MasterAdminOnly()`
 
-- Allows: BRANDON only
+- Allows: MASTER_ADMIN only
 - Cross-org: true, Cross-branch: true
 
 ### Advanced Configuration
@@ -153,7 +153,7 @@ export class OrganizationController {
 
 ### Admin Cross-Organization Access
 
-Based on the system memory: "Admins and 'brandon' users can edit any branch within their organization, even if their scope includes a specific branchId, as long as their role is sufficiently high and the organization matches the branch being edited."
+Based on the system memory: "Admins and 'master_admin' users can edit any branch within their organization, even if their scope includes a specific branchId, as long as their role is sufficiently high and the organization matches the branch being edited."
 
 - Admins can edit any branch within their organization
 - With `allowCrossOrg: true`, admins can access other organizations
@@ -182,7 +182,7 @@ The guard automatically detects organization and branch IDs from request paramet
 The `OrgRoleGuard` automatically falls back to basic role checking when:
 - No organizational role configuration is provided (using `@Roles()` instead of `@OrgRoles()`)
 - This allows for simple role-based access without organizational scope
-- Business logic still applies: OWNER and BRANDON bypass restrictions even in basic mode
+- Business logic still applies: OWNER and MASTER_ADMIN bypass restrictions even in basic mode
 
 ### Error Handling
 
@@ -207,7 +207,7 @@ The `OrgRoleGuard` automatically falls back to basic role checking when:
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdminPanelController {
     @Get('dashboard')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     getDashboard() {
         return 'Admin dashboard';
     }
@@ -227,7 +227,7 @@ export class OrgManagementController {
     }
 
     @Delete()
-    @BrandonOnly() // Super admin only
+    @MasterAdminOnly() // Super admin only
     deleteOrganization(@Param('orgId') orgId: string) {
         // Delete entire organization
     }

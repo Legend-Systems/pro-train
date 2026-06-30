@@ -59,7 +59,7 @@ export class RewardsController {
      * Delegates to RewardsService.awardXP() (single transaction entry point).
      */
     @Post('award-xp')
-    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.BRANDON)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Manually award XP to a user (admin only)' })
     async awardXp(
         @Body() dto: CreateRewardDto,

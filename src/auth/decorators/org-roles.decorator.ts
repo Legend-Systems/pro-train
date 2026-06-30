@@ -8,14 +8,14 @@ export const OrgRoles = (config: OrgRoleConfig) =>
 // Convenience decorators for common scenarios
 export const AdminOnly = (allowCrossOrg: boolean = false) =>
     OrgRoles({
-        roles: [UserRole.ADMIN, UserRole.BRANDON],
+        roles: [UserRole.ADMIN, UserRole.MASTER_ADMIN],
         allowCrossOrg,
         allowCrossBranch: true,
     });
 
 export const OwnerOrAdmin = (allowCrossOrg: boolean = false) =>
     OrgRoles({
-        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.BRANDON],
+        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.MASTER_ADMIN],
         allowCrossOrg,
         allowCrossBranch: true,
     });
@@ -26,15 +26,18 @@ export const AnyRole = () =>
             UserRole.USER,
             UserRole.ADMIN,
             UserRole.OWNER,
-            UserRole.BRANDON,
+            UserRole.MASTER_ADMIN,
         ],
         allowCrossOrg: false,
         allowCrossBranch: true,
     });
 
-export const BrandonOnly = () =>
+export const MasterAdminOnly = () =>
     OrgRoles({
-        roles: [UserRole.BRANDON],
+        roles: [UserRole.MASTER_ADMIN],
         allowCrossOrg: true,
         allowCrossBranch: true,
     });
+
+/** @deprecated Use {@link MasterAdminOnly} instead. */
+export const BrandonOnly = MasterAdminOnly;
