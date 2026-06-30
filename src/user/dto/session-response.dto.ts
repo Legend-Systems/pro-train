@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../entities/user.entity';
 import { UserStatsResponseDto } from '../../leaderboard/dto/user-stats-response.dto';
 import { UserRewardsStatsDto } from '../../rewards/dto/user-rewards-stats.dto';
+import { TrainingHoursSignInSummaryDto } from '../../training-hours/dto/training-hours.dto';
 
 export class OrgInfo {
     @ApiProperty({
@@ -212,6 +213,13 @@ export class SessionResponseDto {
         required: false,
     })
     rewardsStats?: UserRewardsStatsDto;
+
+    @ApiProperty({
+        description: 'User training hours summary for profile and dashboard',
+        type: TrainingHoursSignInSummaryDto,
+        required: false,
+    })
+    trainingHoursSummary?: TrainingHoursSignInSummaryDto;
 
     @ApiProperty({
         description:

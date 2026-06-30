@@ -41,6 +41,8 @@ import {
 } from '../media-manager/entities/media-manager.entity';
 import { OrgService } from '../org/org.service';
 import { RewardsService } from '../rewards/rewards.service';
+import { TrainingHoursService } from '../training-hours/training-hours.service';
+import { TrainingHoursSignInSummaryDto } from '../training-hours/dto/training-hours.dto';
 import { UserRewardsStatsDto } from '../rewards/dto/user-rewards-stats.dto';
 import {
     DEFAULT_LEVEL,
@@ -67,6 +69,7 @@ export class AuthService {
         private readonly configService: ConfigService,
         private readonly orgService: OrgService,
         private readonly rewardsService: RewardsService,
+        private readonly trainingHoursService: TrainingHoursService,
         private readonly eventEmitter: EventEmitter2,
     ) {}
 
@@ -177,6 +180,34 @@ export class AuthService {
                 `Sign-in rewards stats unavailable for user ${user.id}: ${message}`,
             );
             return this.buildDefaultSignInRewardsStats(user);
+        }
+    }
+
+    /** Loads training hours summary for sign-in (non-fatal). */
+    private async loadSignInTrainingHoursSummary(
+        user: User,
+    ): Promise<TrainingHoursSignInSummaryDto | undefined> {
+        if (!user.orgId?.id) {
+            return undefined;
+        }
+
+        try {
+            return await this.trainingHoursService.getSignInSummary(
+                user.id,
+                user.orgId.id,
+                user.branchId?.id,
+            );
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : 'Unknown error';
+            this.logger.warn(
+                `Sign-in training hours unavailable for user ${user.id}: ${message}`,
+            );
+            return {
+                totalHours: 0,
+                currentMonthHours: 0,
+                weeklyHours: 0,
+            };
         }
     }
 
@@ -657,6 +688,8 @@ export class AuthService {
 
         const leaderboardData = await this.loadSignInLeaderboardStats(user.id);
         const rewardsStats = await this.loadSignInRewardsStats(user);
+        const trainingHoursSummary =
+            await this.loadSignInTrainingHoursSummary(user);
 
         // Phase 3/4 — daily login XP via event (idempotent per UTC day in subscriber)
         if (user.orgId?.id) {
@@ -694,6 +727,7 @@ export class AuthService {
                 user: userResponse,
                 leaderboard: leaderboardData,
                 rewardsStats,
+                trainingHoursSummary,
                 organization: user.orgId
                     ? {
                           id: user.orgId.id,

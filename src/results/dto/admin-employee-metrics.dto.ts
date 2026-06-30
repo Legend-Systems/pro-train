@@ -1,6 +1,4 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-/** Employee option for the analytics user filter dropdown. */
 export class AdminEmployeeOptionDto {
     @ApiProperty()
     userId: string;
@@ -34,6 +32,9 @@ export class AdminMonthlyTrendPointDto {
 
     @ApiProperty({ example: 78.5 })
     averageScore: number;
+
+    @ApiProperty({ example: 2.5 })
+    trainingHours: number;
 }
 
 /** Per-course monthly pass counts — one line per course on the chart. */
@@ -105,6 +106,12 @@ export class AdminEmployeeSummaryDto {
 
     @ApiProperty({ example: 4 })
     coursesPassed: number;
+
+    @ApiProperty({ example: 12.5 })
+    totalTrainingHours: number;
+
+    @ApiProperty({ example: 3.2 })
+    monthlyTrainingHours: number;
 }
 
 /** Org-wide monthly pass rate for owner comparison. */
@@ -150,4 +157,13 @@ export class AdminEmployeeMetricsDto {
 
     @ApiProperty({ type: [AdminOrgMonthlyComparisonDto] })
     orgComparison: AdminOrgMonthlyComparisonDto[];
+
+    @ApiPropertyOptional({
+        description: 'Org-wide monthly training hours for admin charts',
+    })
+    orgTrainingHoursTrend?: {
+        yearMonth: string;
+        totalHours: number;
+        activeLearners: number;
+    }[];
 }

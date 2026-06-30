@@ -17,6 +17,7 @@ import { Question } from '../questions/entities/question.entity';
 import { Answer } from '../answers/entities/answer.entity';
 import { Leaderboard } from '../leaderboard/entities/leaderboard.entity';
 import { TrainingProgress } from '../training_progress/entities/training_progress.entity';
+import { TrainingHoursModule } from '../training-hours/training-hours.module';
 
 @Module({
     imports: [
@@ -35,6 +36,7 @@ import { TrainingProgress } from '../training_progress/entities/training_progres
             Leaderboard,
             TrainingProgress,
         ]),
+        TrainingHoursModule,
     ],
     controllers: [ReportsController],
     providers: [
