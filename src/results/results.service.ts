@@ -1664,12 +1664,14 @@ export class ResultsService {
         userId?: string,
     ): Promise<ResultResponseDto> {
         try {
+            // Mirror buildFilterQuery joins — Test has no `creator` relation (only Course does).
+            // An invalid `test.creator` join caused TypeORM to throw and surfaced as
+            // InternalServerErrorException('Failed to fetch result') on GET /results/:id.
             const queryBuilder = this.resultRepository
                 .createQueryBuilder('result')
                 .leftJoinAndSelect('result.user', 'user')
                 .leftJoinAndSelect('user.avatar', 'userAvatar')
                 .leftJoinAndSelect('result.test', 'test')
-                .leftJoinAndSelect('test.creator', 'testInstructor')
                 .leftJoinAndSelect('result.course', 'course')
                 .leftJoinAndSelect('course.creator', 'courseInstructor')
                 .leftJoinAndSelect('result.attempt', 'attempt')
