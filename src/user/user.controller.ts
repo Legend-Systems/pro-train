@@ -43,6 +43,7 @@ import {
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { transformAvatarForResponse } from './utils/avatar-response.util';
 
 @ApiTags('👤 User & Profile Management')
 @Controller('user')
@@ -733,9 +734,9 @@ export class UserController {
                 };
             }
 
-            // Remove sensitive data
+            // Remove sensitive data and normalise avatar URLs for clients.
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { password, ...userProfile } = user;
+            const { password, avatar, ...userProfile } = user;
 
             this.logger.log(
                 `Profile retrieved successfully for user: ${req.user.id}`,
@@ -744,7 +745,10 @@ export class UserController {
             return {
                 success: true,
                 message: 'Profile retrieved successfully',
-                data: userProfile,
+                data: {
+                    ...userProfile,
+                    avatar: transformAvatarForResponse(user.avatar),
+                },
             };
         } catch (error) {
             this.logger.error(
@@ -906,6 +910,12 @@ export class UserController {
                 }
             }
 
+            if (updateUserDto.avatar !== undefined) {
+                this.logger.log(
+                    `Updating profile avatar for user ${req.user.id} to mediaId ${updateUserDto.avatar}`,
+                );
+            }
+
             // Profile endpoint: name, email, avatar, password — not role or branch
             const { role, branchId, ...updateData } = updateUserDto;
 
@@ -915,7 +925,22 @@ export class UserController {
                 );
             }
 
-            await this.userService.updateProfile(req.user.id, updateData);
+            const result = await this.userService.updateProfile(
+                req.user.id,
+                updateData,
+            );
+
+            if (result.status !== 'success') {
+                throw new BadRequestException(
+                    result.message || 'Profile update failed',
+                );
+            }
+
+            if (updateUserDto.avatar !== undefined) {
+                this.logger.log(
+                    `Profile avatar updated successfully for user ${req.user.id} (mediaId ${updateUserDto.avatar})`,
+                );
+            }
 
             this.logger.log(
                 `Profile updated successfully for user: ${req.user.id}`,
@@ -929,6 +954,12 @@ export class UserController {
                 },
             };
         } catch (error) {
+            if (updateUserDto.avatar !== undefined) {
+                this.logger.error(
+                    `Profile avatar update failed for user ${req.user.id} (mediaId ${updateUserDto.avatar})`,
+                    error instanceof Error ? error.stack : String(error),
+                );
+            }
             this.logger.error(
                 `Error updating profile for user ${req.user.id}:`,
                 error,
