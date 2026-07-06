@@ -29,6 +29,7 @@ import {
 } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
 import * as bcrypt from 'bcrypt';
+import { transformAvatarForResponse } from './utils/avatar-response.util';
 
 @Injectable()
 export class UserService {
@@ -608,6 +609,76 @@ export class UserService {
             }
         }
         return user;
+    }
+
+    /**
+     * Persists avatar FK via entity save — TypeORM `update()` and relation `.set()` are unreliable
+     * for ManyToOne updates in this schema; `save()` matches the proven user creation path.
+     */
+    private async persistUserAvatarRelation(
+        userId: string,
+        avatarMediaId?: number | null,
+    ): Promise<void> {
+        const user = await this.userRepository.findOne({ where: { id: userId } });
+        if (!user) {
+            throw new NotFoundException(`User with ID ${userId} not found`);
+        }
+
+        user.avatar = avatarMediaId
+            ? ({ id: avatarMediaId } as MediaFile)
+            : undefined;
+
+        await this.userRepository.save(user);
+    }
+
+    /** Verifies the avatar FK was written — throws if the DB still references another media id. */
+    private async assertAvatarPersisted(
+        userId: string,
+        expectedMediaId: number,
+    ): Promise<void> {
+        const persisted = await this.userRepository.findOne({
+            where: { id: userId },
+            relations: ['avatar'],
+        });
+
+        if (persisted?.avatar?.id !== expectedMediaId) {
+            throw new BadRequestException(
+                `Avatar update did not persist (expected media ${expectedMediaId}, got ${persisted?.avatar?.id ?? 'none'})`,
+            );
+        }
+    }
+
+    /** Clears variant caches for previous and next avatar media ids after a profile photo change. */
+    private async invalidateAvatarVariantCaches(
+        orgId?: string,
+        branchId?: string,
+        ...avatarMediaIds: Array<number | undefined>
+    ): Promise<void> {
+        const uniqueIds = [
+            ...new Set(avatarMediaIds.filter((id): id is number => !!id)),
+        ];
+
+        for (const avatarMediaId of uniqueIds) {
+            const keys = [
+                this.CACHE_KEYS.USER_AVATAR_VARIANTS(
+                    avatarMediaId,
+                    orgId,
+                    branchId,
+                ),
+                this.CACHE_KEYS.USER_AVATAR_VARIANTS(avatarMediaId),
+            ];
+
+            for (const key of keys) {
+                try {
+                    await this.cacheManager.del(key);
+                } catch (error) {
+                    this.logger.warn(
+                        `Failed to delete avatar variant cache key ${key}:`,
+                        error,
+                    );
+                }
+            }
+        }
     }
 
     async findAll(scope?: {
@@ -1206,6 +1277,8 @@ export class UserService {
         }
 
         // Convert avatar ID to MediaFile reference if provided
+        const previousAvatarId = existingUser.avatar?.id;
+
         if (avatar !== undefined) {
             dataToUpdate.avatar = avatar
                 ? ({ id: avatar } as MediaFile)
@@ -1256,7 +1329,17 @@ export class UserService {
             didUpdatePassword = true;
         }
 
-        await this.userRepository.update(id, dataToUpdate);
+        if (avatar !== undefined) {
+            await this.persistUserAvatarRelation(id, avatar ?? null);
+            if (avatar) {
+                await this.assertAvatarPersisted(id, avatar);
+            }
+            delete dataToUpdate.avatar;
+        }
+
+        if (Object.keys(dataToUpdate).length > 0) {
+            await this.userRepository.update(id, dataToUpdate);
+        }
 
         // Get updated user data for comprehensive cache invalidation
         const updatedUser = await this.userRepository.findOne({
@@ -1292,6 +1375,15 @@ export class UserService {
             scope?.orgId || existingUser.orgId?.id,
             scope?.branchId || existingUser.branchId?.id,
         );
+
+        if (avatar !== undefined) {
+            await this.invalidateAvatarVariantCaches(
+                existingUser.orgId?.id,
+                existingUser.branchId?.id,
+                previousAvatarId,
+                avatar ?? undefined,
+            );
+        }
 
         // Check cache state after invalidation
         this.logger.log(`📋 AFTER Cache Invalidation:`);
@@ -1387,11 +1479,11 @@ export class UserService {
         updateData: Partial<UpdateUserDto>,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
+            const { avatar, branchId, role, password, ...profileData } =
+                updateData;
+
             try {
                 // Profile updates: allow name, email, avatar, password (not role/branch)
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { avatar, branchId, role, password, ...profileData } =
-                    updateData;
                 const dataToUpdate: Partial<User> = { ...profileData };
 
                 // Get user first for cache invalidation and event data
@@ -1400,11 +1492,22 @@ export class UserService {
                     throw new NotFoundException(`User with ID ${id} not found`);
                 }
 
-                // Convert avatar ID to MediaFile reference if provided
+                const previousAvatarId = user.avatar?.id;
+
+                // Avatar FK must be saved via relation API — repository.update() ignores relations.
                 if (avatar !== undefined) {
-                    dataToUpdate.avatar = avatar
-                        ? ({ id: avatar } as MediaFile)
-                        : undefined;
+                    if (avatar) {
+                        this.logger.log(
+                            `Applying avatar mediaId ${avatar} to user ${id}`,
+                        );
+                    } else {
+                        this.logger.log(`Removing avatar for user ${id}`);
+                    }
+                    await this.persistUserAvatarRelation(id, avatar ?? null);
+                    if (avatar) {
+                        await this.assertAvatarPersisted(id, avatar);
+                    }
+                    delete dataToUpdate.avatar;
                 }
 
                 // Update password when provided; omit to keep existing password
@@ -1416,7 +1519,9 @@ export class UserService {
                     );
                 }
 
-                await this.userRepository.update(id, dataToUpdate);
+                if (Object.keys(dataToUpdate).length > 0) {
+                    await this.userRepository.update(id, dataToUpdate);
+                }
 
                 // Get updated user data for comprehensive cache invalidation
                 const updatedUser = await this.userRepository.findOne({
@@ -1432,6 +1537,33 @@ export class UserService {
                     user.branchId?.id,
                 );
 
+                if (avatar !== undefined) {
+                    await this.invalidateAvatarVariantCaches(
+                        user.orgId?.id,
+                        user.branchId?.id,
+                        previousAvatarId,
+                        avatar ?? undefined,
+                    );
+                }
+
+                // Repopulate user cache with fresh DB state (avoids stale avatar on immediate GET /profile)
+                if (updatedUser) {
+                    const userWithVariants =
+                        await this.loadAvatarVariants(updatedUser);
+                    try {
+                        await this.cacheManager.set(
+                            this.CACHE_KEYS.USER_BY_ID(id),
+                            userWithVariants,
+                            this.CACHE_TTL.USER * 1000,
+                        );
+                    } catch (error) {
+                        this.logger.warn(
+                            `Cache set failed after profile update for user ${id}:`,
+                            error,
+                        );
+                    }
+                }
+
                 // Emit user profile updated event
                 const updatedFields = Object.keys(updateData);
                 this.eventEmitter.emit(
@@ -1445,10 +1577,17 @@ export class UserService {
                         user.orgId?.name,
                         user.branchId?.id,
                         user.branchId?.name,
-                        user.avatar?.id?.toString(),
+                        updatedUser?.avatar?.id?.toString() ??
+                            user.avatar?.id?.toString(),
                         updatedFields,
                     ),
                 );
+
+                if (avatar !== undefined) {
+                    this.logger.log(
+                        `Profile avatar saved for user ${id} (mediaId ${updatedUser?.avatar?.id ?? avatar})`,
+                    );
+                }
 
                 return {
                     message: 'Profile updated successfully',
@@ -1456,6 +1595,12 @@ export class UserService {
                     code: 200,
                 };
             } catch (error) {
+                if (updateData.avatar !== undefined) {
+                    this.logger.error(
+                        `Profile avatar update failed for user ${id} (mediaId ${updateData.avatar})`,
+                        error instanceof Error ? error.stack : String(error),
+                    );
+                }
                 if (error instanceof NotFoundException) {
                     return {
                         message: error.message,

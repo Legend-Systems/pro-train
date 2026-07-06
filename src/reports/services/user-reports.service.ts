@@ -330,7 +330,7 @@ export class UserReportsService {
             .where('ta.userId = :userId', { userId })
             .andWhere('ta.status = :status', { status: 'submitted' })
             .orderBy('ta.submitTime', 'ASC')
-            .select(['r.score', 'ta.submitTime'])
+            .select(['r.resultId', 'r.score', 'ta.submitTime'])
             .limit(10)
             .getMany();
 
