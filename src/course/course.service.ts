@@ -480,6 +480,13 @@ export class CourseService {
 
             const [courses, total] = await query.getManyAndCount();
 
+            const attemptsByCourseId = scope?.userId
+                ? await this.getUserAttemptsByCourseIds(
+                      scope.userId,
+                      courses.map(course => course.courseId),
+                  )
+                : new Map<number, number>();
+
             // Calculate actual test counts for each course with caching and map creator
             const coursesWithCounts = await Promise.all(
                 courses.map(async course => {
@@ -489,11 +496,18 @@ export class CourseService {
                     const studentCount = await this.getCachedStudentCount(
                         course.courseId,
                     );
+                    const materialCount =
+                        await this.courseMaterialsService.getMaterialCount(
+                            course.courseId,
+                        );
 
                     return {
                         ...course,
                         creator: course.creator,
                         testCount,
+                        materialCount,
+                        userTotalAttempts:
+                            attemptsByCourseId.get(course.courseId) ?? 0,
                         studentCount,
                         isActive: course.status === CourseStatus.ACTIVE,
                         isPublished: course.status === CourseStatus.ACTIVE, // For now, treating active as published
@@ -1415,6 +1429,29 @@ export class CourseService {
         }
 
         return count;
+    }
+
+    private async getUserAttemptsByCourseIds(
+        userId: string,
+        courseIds: number[],
+    ): Promise<Map<number, number>> {
+        if (courseIds.length === 0) {
+            return new Map();
+        }
+
+        const rows = await this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .innerJoin('attempt.test', 'test')
+            .select('test.courseId', 'courseId')
+            .addSelect('COUNT(attempt.attemptId)', 'attemptCount')
+            .where('attempt.userId = :userId', { userId })
+            .andWhere('test.courseId IN (:...courseIds)', { courseIds })
+            .groupBy('test.courseId')
+            .getRawMany<{ courseId: string; attemptCount: string }>();
+
+        return new Map(
+            rows.map(row => [Number(row.courseId), Number(row.attemptCount)]),
+        );
     }
 
     private async getCachedStudentCount(courseId: number): Promise<number> {

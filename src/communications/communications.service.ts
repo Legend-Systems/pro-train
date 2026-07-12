@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 import { ConfigService } from '@nestjs/config';
 import { OrgService } from '../org/org.service';
@@ -22,6 +24,7 @@ import { EmailStatus } from './entities/communication.entity';
 @Injectable()
 export class CommunicationsService {
     private readonly logger = new Logger(CommunicationsService.name);
+    private defaultOrganizationLogoDataUri: string | null | undefined;
 
     constructor(
         @InjectRepository(Communication)
@@ -130,6 +133,43 @@ export class CommunicationsService {
             organization: organizationData,
             sender: senderData,
         };
+    }
+
+    /**
+     * Resolves the organization logo URL for email templates, falling back to the
+     * bundled default logo when no organization logo is configured.
+     */
+    private async resolveOrganizationLogo(
+        logoUrl?: string,
+    ): Promise<string | undefined> {
+        const trimmedLogoUrl = logoUrl?.trim();
+        if (trimmedLogoUrl) {
+            return trimmedLogoUrl;
+        }
+
+        if (this.defaultOrganizationLogoDataUri !== undefined) {
+            return this.defaultOrganizationLogoDataUri ?? undefined;
+        }
+
+        try {
+            const logoPath = path.join(
+                process.cwd(),
+                'src',
+                'assets',
+                'images',
+                'bit-white.png',
+            );
+            const logoBuffer = await fs.readFile(logoPath);
+            this.defaultOrganizationLogoDataUri = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+            return this.defaultOrganizationLogoDataUri;
+        } catch (error) {
+            this.defaultOrganizationLogoDataUri = null;
+            this.logger.warn(
+                'Default organization logo unavailable for email rendering',
+                error,
+            );
+            return undefined;
+        }
     }
 
     async sendWelcomeOrganizationEmail(
@@ -887,12 +927,15 @@ export class CommunicationsService {
 
             // Get organization data for sender information
             const orgData = await this.getOrganizationDataForEmail(templateData.organizationId);
+            const organizationLogo = await this.resolveOrganizationLogo(
+                orgData.organization?.logoUrl,
+            );
 
             const fullTemplateData = {
                 ...baseData,
                 ...templateData,
                 organizationName: orgData.organization?.name,
-                organizationLogo: orgData.organization?.logoUrl,
+                organizationLogo,
                 organizationWebsite: orgData.organization?.website,
             };
 
