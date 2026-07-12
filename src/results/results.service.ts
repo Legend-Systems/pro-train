@@ -2705,6 +2705,7 @@ export class ResultsService {
                 status: result.test.isActive ? 'active' : 'inactive',
                 createdAt: result.test.createdAt,
                 instructions: result.test.description || '',
+                testThumbnail: result.test.testThumbnail ?? null,
                 instructor: null, // Test entity doesn't have creator relation
             } : null,
             // Enhanced course data - return null if course relation is null
