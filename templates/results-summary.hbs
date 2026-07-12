@@ -122,6 +122,12 @@
             font-size: 20px;
             font-weight: 700;
         }
+
+        img.org-logo {
+            display: block;
+            object-fit: contain;
+            padding: 8px;
+        }
         
         .org-name {
             font-size: 20px;
@@ -192,30 +198,33 @@
         .score-circle {
             width: 120px;
             height: 120px;
-            border-radius: 50%;
+            border-radius: 60px;
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            text-align: center;
+            vertical-align: middle;
             margin: 0 auto 15px;
             box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
         }
         
-        .score-text {
-            text-align: center;
-        }
-        
         .score-percentage {
-            font-size: 36px;
+            display: block;
+            font-size: 32px;
             font-weight: 700;
-            line-height: 1;
+            line-height: 36px;
+            margin: 0;
+            padding: 0;
         }
         
         .score-label {
-            font-size: 12px;
+            display: block;
+            font-size: 11px;
+            line-height: 14px;
             opacity: 0.9;
             font-weight: 500;
+            letter-spacing: 0.5px;
+            margin: 2px 0 0;
+            padding: 0;
         }
         
         .score-description {
@@ -460,10 +469,12 @@
             .score-circle {
                 width: 100px;
                 height: 100px;
+                border-radius: 50px;
             }
             
             .score-percentage {
-                font-size: 28px;
+                font-size: 26px;
+                line-height: 30px;
             }
         }
     </style>
@@ -494,7 +505,11 @@
             
             {{#if organizationName}}
             <div class="organization-section">
+                {{#if organizationLogo}}
+                <img src="{{organizationLogo}}" alt="{{organizationName}}" class="org-logo">
+                {{else}}
                 <div class="org-logo">{{organizationName.[0]}}</div>
+                {{/if}}
                 <div class="org-name">{{organizationName}}</div>
                 {{#if organizationWebsite}}
                 <div class="org-website">{{organizationWebsite}}</div>
@@ -508,7 +523,7 @@
                 <div class="test-details">
                     <div class="detail-item">
                         <div class="detail-label">Score</div>
-                        <div class="detail-value">{{#if scoreDisplay}}{{scoreDisplay}} ({{percentage}}%){{else}}{{percentage}}%{{/if}}</div>
+                        <div class="detail-value">{{#if scoreDisplay}}{{scoreDisplay}} ({{lookup this 'percentage'}}%){{else}}{{lookup this 'percentage'}}%{{/if}}</div>
                     </div>
                     <div class="detail-item">
                         <div class="detail-label">Correct Answers</div>
@@ -528,12 +543,20 @@
             </div>
             
             <div class="score-display">
-                <div class="score-circle">
-                    <div class="score-text">
-                        <div class="score-percentage">{{#if percentage}}{{percentage}}{{else}}0{{/if}}%</div>
-                        <div class="score-label">SCORE</div>
-                    </div>
-                </div>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto 15px;">
+                    <tr>
+                        <td
+                            class="score-circle"
+                            align="center"
+                            valign="middle"
+                            width="120"
+                            height="120"
+                            style="width: 120px; height: 120px; border-radius: 60px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-align: center; vertical-align: middle; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);">
+                            <span class="score-percentage" style="display: block; font-size: 32px; font-weight: 700; line-height: 36px; margin: 0; padding: 0;">{{lookup this 'percentage'}}%</span>
+                            <span class="score-label" style="display: block; font-size: 11px; line-height: 14px; font-weight: 500; letter-spacing: 0.5px; margin: 2px 0 0; padding: 0; opacity: 0.9;">SCORE</span>
+                        </td>
+                    </tr>
+                </table>
                 <div class="score-description">
                     {{#ifCond (or percentage 0) ">=" 90}}
                     Exceptional Performance

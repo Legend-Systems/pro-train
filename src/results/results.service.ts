@@ -1473,6 +1473,16 @@ export class ResultsService {
         filterDto: ResultFilterDto,
     ): Promise<{
         results: ResultResponseDto[];
+        summary: {
+            totalResults: number;
+            averageScore: number;
+            averagePercentage: number;
+            passedCount: number;
+            failedCount: number;
+            passRate: number;
+            highestScore: number;
+            lowestScore: number;
+        };
         total: number;
         page: number;
         limit: number;
@@ -1495,8 +1505,23 @@ export class ResultsService {
                 results.map(result => this.getEnhancedResult(result))
             );
 
+            const counts = await this.getUserResultCounts(
+                userId,
+                filters.testId,
+            );
+
             return {
                 results: responseResults,
+                summary: {
+                    totalResults: counts.totalResults,
+                    averageScore: counts.averageScore,
+                    averagePercentage: counts.averageScore,
+                    passedCount: counts.passedResults,
+                    failedCount: counts.failedResults,
+                    passRate: counts.passRate,
+                    highestScore: 0,
+                    lowestScore: 0,
+                },
                 total,
                 page,
                 limit,
@@ -2619,6 +2644,15 @@ export class ResultsService {
             );
 
             // Prepare template data with proper data types and fallbacks
+            const calculatedPercentage =
+                questionCount > 0
+                    ? Math.round((correctAnswersCount / questionCount) * 100)
+                    : 0;
+            const storedPercentage = Number(result.percentage);
+            const percentage = Number.isFinite(storedPercentage)
+                ? Math.round(storedPercentage)
+                : calculatedPercentage;
+
             const templateData = {
                 recipientName:
                     `${attempt.user.firstName || ''} ${attempt.user.lastName || ''}`.trim() ||
@@ -2629,13 +2663,13 @@ export class ResultsService {
                 maxScore: Number(result.maxScore) || questionCount,
                 totalQuestions: questionCount || 1,
                 correctAnswers: correctAnswersCount || 0,
-                percentage: Number(result.percentage) || 0,
+                percentage,
                 completionTime: completionTime || 'Not available',
                 resultsUrl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/results/${result.resultId}`,
                 organizationId: attempt.orgId?.id || result.orgId?.id,
                 // Additional data for better display
                 scoreDisplay: `${Number(result.score) || 0}/${Number(result.maxScore) || questionCount}`,
-                isPassed: (Number(result.percentage) || 0) >= 60,
+                isPassed: percentage >= 60,
             };
 
             this.logger.debug(

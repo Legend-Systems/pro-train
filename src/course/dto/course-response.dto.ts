@@ -177,6 +177,20 @@ export class CourseResponseDto {
     testCount?: number;
 
     @ApiProperty({
+        description: 'Number of active course materials',
+        example: 8,
+        required: false,
+    })
+    materialCount?: number;
+
+    @ApiProperty({
+        description: 'Total test attempts made by the authenticated user in this course',
+        example: 12,
+        required: false,
+    })
+    userTotalAttempts?: number;
+
+    @ApiProperty({
         description: 'Number of students enrolled in this course',
         example: 23,
         required: false,
