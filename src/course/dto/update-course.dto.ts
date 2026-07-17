@@ -1,7 +1,8 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength } from 'class-validator';
+import { IsString, IsOptional, MinLength, IsEnum } from 'class-validator';
 import { CreateCourseDto } from './create-course.dto';
+import { CourseStatus } from '../entities/course.entity';
 
 export class UpdateCourseDto extends PartialType(CreateCourseDto) {
     @ApiProperty({
@@ -32,4 +33,14 @@ export class UpdateCourseDto extends PartialType(CreateCourseDto) {
     @IsOptional()
     @IsString({ message: 'Course description must be a string' })
     description?: string;
+
+    @ApiProperty({
+        description: 'Course operational status',
+        enum: CourseStatus,
+        required: false,
+        example: CourseStatus.ACTIVE,
+    })
+    @IsOptional()
+    @IsEnum(CourseStatus, { message: 'Course status must be a valid status value' })
+    status?: CourseStatus;
 }

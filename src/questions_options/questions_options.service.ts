@@ -296,14 +296,28 @@ export class QuestionsOptionsService {
             try {
                 const createdOptions: QuestionOption[] = [];
 
+                // Continue ordering after any existing options for the question.
+                const maxOrder = await queryRunner.manager
+                    .createQueryBuilder(QuestionOption, 'option')
+                    .select('MAX(option.orderIndex)', 'maxOrder')
+                    .where('option.questionId = :questionId', {
+                        questionId: bulkCreateDto.questionId,
+                    })
+                    .getRawOne<{ maxOrder: number | null }>();
+
+                let nextOrderIndex = (maxOrder?.maxOrder || 0) + 1;
+
                 for (const optionData of bulkCreateDto.options) {
                     const optionDto = {
                         questionId: bulkCreateDto.questionId,
                         optionText: optionData.optionText,
-                        isCorrect: optionData.isCorrect,
+                        isCorrect: optionData.isCorrect ?? false,
+                        orderIndex: nextOrderIndex,
                         orgId: question.orgId,
                         branchId: question.branchId,
                     };
+
+                    nextOrderIndex += 1;
 
                     const option = queryRunner.manager.create(
                         QuestionOption,

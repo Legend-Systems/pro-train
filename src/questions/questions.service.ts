@@ -236,6 +236,8 @@ export class QuestionsService {
             await this.validateTestAccess(
                 createQuestionDto.testId,
                 scope.userId,
+                scope,
+                true,
             );
 
             // Validate media file if provided
@@ -264,8 +266,19 @@ export class QuestionsService {
                 );
             }
 
-            // Auto-increment order index if not provided
-            if (!createQuestionDto.orderIndex) {
+            // Resolve the order index. When one is not provided, or when the
+            // requested index already exists, append the question at the end of
+            // the test so concurrent edits and retries never collide.
+            const needsAutoOrder =
+                !createQuestionDto.orderIndex ||
+                !!(await this.questionRepository.findOne({
+                    where: {
+                        testId: createQuestionDto.testId,
+                        orderIndex: createQuestionDto.orderIndex,
+                    },
+                }));
+
+            if (needsAutoOrder) {
                 const maxOrder = await this.questionRepository
                     .createQueryBuilder('question')
                     .select('MAX(question.orderIndex)', 'maxOrder')
@@ -275,20 +288,6 @@ export class QuestionsService {
                     .getRawOne<MaxOrderResult>();
 
                 createQuestionDto.orderIndex = (maxOrder?.maxOrder || 0) + 1;
-            } else {
-                // Check for duplicate order index
-                const existingQuestion = await this.questionRepository.findOne({
-                    where: {
-                        testId: createQuestionDto.testId,
-                        orderIndex: createQuestionDto.orderIndex,
-                    },
-                });
-
-                if (existingQuestion) {
-                    throw new ConflictException(
-                        `Question with order index ${createQuestionDto.orderIndex} already exists in this test`,
-                    );
-                }
             }
 
             const question = this.questionRepository.create({
@@ -354,6 +353,8 @@ export class QuestionsService {
                     await this.validateTestAccess(
                         questionDto.testId,
                         scope.userId,
+                        scope,
+                        true,
                     );
 
                     const question = await this.createQuestionInTransaction(
@@ -734,9 +735,11 @@ export class QuestionsService {
             }
 
             // Validate test access with scope
-            await this.validateTestAccessWithScope(question.testId, scope);
+            await this.validateTestAccessWithScope(question.testId, scope, true);
 
-            // Check for order index conflicts if updating
+            // Resolve order index conflicts by swapping with the occupying
+            // question instead of failing. This keeps full re-syncs (edit +
+            // reorder in a single save) graceful rather than throwing midway.
             if (
                 updateQuestionDto.orderIndex &&
                 updateQuestionDto.orderIndex !== question.orderIndex
@@ -749,9 +752,8 @@ export class QuestionsService {
                 });
 
                 if (existingQuestion) {
-                    throw new ConflictException(
-                        `Question with order index ${updateQuestionDto.orderIndex} already exists in this test`,
-                    );
+                    existingQuestion.orderIndex = question.orderIndex;
+                    await this.questionRepository.save(existingQuestion);
                 }
             }
 
@@ -801,7 +803,7 @@ export class QuestionsService {
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             // Validate test access with scope
-            await this.validateTestAccessWithScope(testId, scope);
+            await this.validateTestAccessWithScope(testId, scope, true);
 
             const queryRunner = this.dataSource.createQueryRunner();
             await queryRunner.connect();
@@ -931,7 +933,7 @@ export class QuestionsService {
             );
 
             // Validate test access with scope
-            await this.validateTestAccessWithScope(question.testId, scope);
+            await this.validateTestAccessWithScope(question.testId, scope, true);
 
             // Step 1: Check for active test attempts that might reference this question
             const activeAttemptsQuery = this.dataSource
@@ -1111,19 +1113,37 @@ export class QuestionsService {
     }
 
     /**
-     * Validate test access and ownership
+     * Validate test access and ownership via the parent course.
      */
     private async validateTestAccess(
         testId: number,
         userId: string,
+        scope?: OrgBranchScope,
+        isWriteOperation: boolean = false,
     ): Promise<void> {
+        const test = await this.testRepository.findOne({
+            where: { testId },
+        });
+
+        if (!test) {
+            throw new NotFoundException(`Test with ID ${testId} not found`);
+        }
+
         try {
-            await this.testService.validateCourseAccess(testId, userId);
+            await this.testService.validateCourseAccess(
+                test.courseId,
+                userId,
+                scope,
+                isWriteOperation,
+            );
         } catch (error) {
             if (error instanceof NotFoundException) {
                 throw new NotFoundException(`Test with ID ${testId} not found`);
             }
-            throw new ForbiddenException('You do not have access to this test');
+            if (error instanceof ForbiddenException) {
+                throw new ForbiddenException('You do not have access to this test');
+            }
+            throw error;
         }
     }
 
@@ -1216,7 +1236,13 @@ export class QuestionsService {
     private async validateTestAccessWithScope(
         testId: number,
         scope: OrgBranchScope,
+        isWriteOperation: boolean = false,
     ): Promise<void> {
-        await this.validateTestAccess(testId, scope.userId);
+        await this.validateTestAccess(
+            testId,
+            scope.userId,
+            scope,
+            isWriteOperation,
+        );
     }
 }
