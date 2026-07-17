@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, ValidateNested, IsNumber } from 'class-validator';
+import {
+    IsArray,
+    ValidateNested,
+    IsNumber,
+    IsString,
+    IsNotEmpty,
+    IsBoolean,
+    IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BulkOptionDto {
@@ -7,14 +15,19 @@ export class BulkOptionDto {
         description: 'The option text/content',
         example: 'O(log n) - Logarithmic time complexity',
     })
+    @IsString()
+    @IsNotEmpty()
     optionText: string;
 
     @ApiProperty({
         description: 'Whether this option is the correct answer',
         example: true,
         default: false,
+        required: false,
     })
-    isCorrect: boolean;
+    @IsBoolean()
+    @IsOptional()
+    isCorrect?: boolean = false;
 }
 
 export class BulkCreateOptionsDto {
