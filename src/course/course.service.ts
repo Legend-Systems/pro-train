@@ -22,6 +22,8 @@ import {
     StandardOperationResponse,
 } from './dto/course-response.dto';
 import { Course, CourseStatus } from './entities/course.entity';
+import { Organization } from '../org/entities/org.entity';
+import { Branch } from '../branch/entities/branch.entity';
 import { Test, TestType } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
@@ -219,15 +221,90 @@ export class CourseService {
             );
     }
 
+    /**
+     * Resolves numeric org/branch ids from JWT scope values or loaded TypeORM relations.
+     * Passing a relation entity to Number() yields NaN and list cache keys are never cleared.
+     */
+    private resolveOrgBranchIds(
+        orgRef?: string | number | Organization | null,
+        branchRef?: string | number | Branch | null,
+    ): { orgId?: number; branchId?: number } {
+        const orgId =
+            orgRef == null
+                ? undefined
+                : typeof orgRef === 'object' && 'id' in orgRef
+                  ? Number(orgRef.id)
+                  : Number(orgRef);
+        const branchId =
+            branchRef == null
+                ? undefined
+                : typeof branchRef === 'object' && 'id' in branchRef
+                  ? Number(branchRef.id)
+                  : Number(branchRef);
+
+        return {
+            orgId: orgId != null && !Number.isNaN(orgId) ? orgId : undefined,
+            branchId:
+                branchId != null && !Number.isNaN(branchId) ? branchId : undefined,
+        };
+    }
+
+    /** Paginated list limits used by admin mobile/web clients — busted on every mutation. */
+    private readonly commonCourseListLimits = [10, 50, 100] as const;
+
     private async invalidateCourseListCaches(
         orgId?: number,
         branchId?: number,
     ): Promise<void> {
-        // Clear general course list caches
-        const keysToInvalidate = [this.CACHE_KEYS.ALL_COURSES(orgId, branchId)];
+        const registryKey = this.courseListRegistryKey(orgId, branchId);
+        let registeredKeys: string[] = [];
+
+        try {
+            registeredKeys =
+                (await this.cacheManager.get<string[]>(registryKey)) ?? [];
+        } catch (error) {
+            this.logger.warn(
+                `Failed to read course list cache registry ${registryKey}:`,
+                error,
+            );
+        }
+
+        // Proactively delete known admin/learner list keys (mobile uses limit 100, tests tab uses 50).
+        // Include both explicit sort params and bare page/limit variants — cache keys differ when
+        // sortBy/sortOrder are omitted from the query string.
+        const proactiveKeys = this.commonCourseListLimits.flatMap(limit =>
+            (['admin', 'learner'] as const).flatMap(audience => {
+                const baseFilters = { page: 1, limit } as const;
+                const filterVariants: Array<{
+                    page: number;
+                    limit: number;
+                    sortBy?: string;
+                    sortOrder?: 'ASC' | 'DESC';
+                }> = [
+                    baseFilters,
+                    { ...baseFilters, sortBy: 'createdAt', sortOrder: 'DESC' },
+                ];
+
+                return filterVariants.map(filters =>
+                    this.generateCacheKeyForCourses(
+                        filters,
+                        'all',
+                        orgId,
+                        branchId,
+                        audience,
+                    ),
+                );
+            }),
+        );
+
+        const keysToInvalidate = [
+            this.CACHE_KEYS.ALL_COURSES(orgId, branchId),
+            ...registeredKeys,
+            ...proactiveKeys,
+        ];
 
         await Promise.all(
-            keysToInvalidate.map(async key => {
+            [...new Set(keysToInvalidate)].map(async key => {
                 try {
                     await this.cacheManager.del(key);
                 } catch (error) {
@@ -239,8 +316,31 @@ export class CourseService {
             }),
         );
 
-        // Note: In production, consider implementing cache tags or maintaining
-        // a registry of active cache keys for more granular invalidation
+        try {
+            await this.cacheManager.del(registryKey);
+        } catch (error) {
+            this.logger.warn(
+                `Failed to delete course list cache registry ${registryKey}:`,
+                error,
+            );
+        }
+    }
+
+    /**
+     * Clears course list caches for the course org/branch and the global fallback scope.
+     * Ensures restore/deactivate/delete mutations always bust keys created before registry tracking.
+     */
+    private async invalidateCourseListCachesForCourse(
+        orgRef?: string | number | Organization | null,
+        branchRef?: string | number | Branch | null,
+    ): Promise<void> {
+        const { orgId, branchId } = this.resolveOrgBranchIds(orgRef, branchRef);
+
+        await this.invalidateCourseListCaches(orgId, branchId);
+
+        if (orgId !== undefined || branchId !== undefined) {
+            await this.invalidateCourseListCaches(undefined, undefined);
+        }
     }
 
     private async invalidateUserCoursesCache(
@@ -267,11 +367,49 @@ export class CourseService {
         );
     }
 
+    private isAdminScope(scope?: OrgBranchScope): boolean {
+        return (
+            scope?.userRole === 'master_admin' || scope?.userRole === 'admin'
+        );
+    }
+
+    /** Tracks paginated list cache keys so mutations can invalidate every variant. */
+    private courseListRegistryKey(orgId?: number, branchId?: number): string {
+        return `org:${orgId || 'global'}:branch:${branchId || 'global'}:courses:list:registry`;
+    }
+
+    private async trackCourseListCacheKey(
+        cacheKey: string,
+        orgId?: number,
+        branchId?: number,
+    ): Promise<void> {
+        const registryKey = this.courseListRegistryKey(orgId, branchId);
+
+        try {
+            const existing =
+                (await this.cacheManager.get<string[]>(registryKey)) ?? [];
+
+            if (!existing.includes(cacheKey)) {
+                await this.cacheManager.set(
+                    registryKey,
+                    [...existing, cacheKey],
+                    this.CACHE_TTL.ALL_COURSES * 1000,
+                );
+            }
+        } catch (error) {
+            this.logger.warn(
+                `Failed to track course list cache key ${cacheKey}:`,
+                error,
+            );
+        }
+    }
+
     private generateCacheKeyForCourses(
         filters?: CourseFilterDto,
         prefix: string = 'list',
         orgId?: number,
         branchId?: number,
+        audience: 'admin' | 'learner' = 'learner',
     ): string {
         const filterKey = JSON.stringify({
             title: filters?.title,
@@ -282,6 +420,7 @@ export class CourseService {
             limit: filters?.limit,
             sortBy: filters?.sortBy,
             sortOrder: filters?.sortOrder,
+            audience,
         });
         return `${this.CACHE_KEYS.COURSE_LIST(filterKey, orgId, branchId)}:${prefix}`;
     }
@@ -345,9 +484,9 @@ export class CourseService {
             }
 
             // Invalidate list caches since a new course was created
-            await this.invalidateCourseListCaches(
-                scope.orgId ? Number(scope.orgId) : undefined,
-                scope.branchId ? Number(scope.branchId) : undefined,
+            await this.invalidateCourseListCachesForCourse(
+                scope.orgId,
+                scope.branchId,
             );
 
             // Emit course created event
@@ -389,12 +528,17 @@ export class CourseService {
         scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
         return this.retryService.executeDatabase(async () => {
+            const orgId = scope?.orgId ? Number(scope.orgId) : undefined;
+            const branchId = scope?.branchId ? Number(scope.branchId) : undefined;
+            const audience = this.isAdminScope(scope) ? 'admin' : 'learner';
+
             // Check cache first
             const cacheKey = this.generateCacheKeyForCourses(
                 filters,
                 'all',
-                scope?.orgId ? Number(scope.orgId) : undefined,
-                scope?.branchId ? Number(scope.branchId) : undefined,
+                orgId,
+                branchId,
+                audience,
             );
 
             try {
@@ -430,10 +574,12 @@ export class CourseService {
             query.leftJoinAndSelect('course.orgId', 'org');
             query.leftJoinAndSelect('course.branchId', 'branch');
 
-            // Filter by status - only show active courses by default
-            query.andWhere('course.status = :status', {
-                status: CourseStatus.ACTIVE,
-            });
+            // Learners only see active courses; admins need every status for management screens.
+            if (!this.isAdminScope(scope)) {
+                query.andWhere('course.status = :status', {
+                    status: CourseStatus.ACTIVE,
+                });
+            }
 
             // Apply org/branch scoping - only if user has these assignments
             // For users without org/branch assignments, they can see all active courses
@@ -531,6 +677,7 @@ export class CourseService {
                     result,
                     this.CACHE_TTL.COURSE_LIST * 1000,
                 );
+                await this.trackCourseListCacheKey(cacheKey, orgId, branchId);
                 this.logger.debug(`Cache set for course list: ${cacheKey}`);
             } catch (error) {
                 this.logger.warn(
@@ -787,12 +934,20 @@ export class CourseService {
                 this.logger.log(`Course ${id} thumbnail removed`);
             }
 
-            // Invalidate course cache
+            // Invalidate course and list caches so status/metadata changes are visible immediately.
+            const { orgId, branchId } = this.resolveOrgBranchIds(
+                scope.orgId,
+                scope.branchId,
+            );
             await this.invalidateCourseCache(
                 id,
                 scope.userId,
-                scope.orgId ? Number(scope.orgId) : undefined,
-                scope.branchId ? Number(scope.branchId) : undefined,
+                orgId,
+                branchId,
+            );
+            await this.invalidateCourseListCachesForCourse(
+                scope.orgId,
+                scope.branchId,
             );
 
             this.logger.log(
@@ -1515,12 +1670,20 @@ export class CourseService {
                 deletedBy: { id: deletedBy },
             });
 
-            // Invalidate course cache
+            // Invalidate course cache — use relation .id, not Number(entity), for org/branch scope.
+            const { orgId, branchId } = this.resolveOrgBranchIds(
+                course.orgId,
+                course.branchId,
+            );
             await this.invalidateCourseCache(
                 courseId,
                 course.createdBy,
-                course.orgId ? Number(course.orgId) : undefined,
-                course.branchId ? Number(course.branchId) : undefined,
+                orgId,
+                branchId,
+            );
+            await this.invalidateCourseListCachesForCourse(
+                course.orgId,
+                course.branchId,
             );
 
             return {
@@ -1563,12 +1726,20 @@ export class CourseService {
                 deletedBy: { id: restoredBy },
             });
 
-            // Invalidate course cache
+            // Invalidate course cache — use relation .id, not Number(entity), for org/branch scope.
+            const { orgId, branchId } = this.resolveOrgBranchIds(
+                course.orgId,
+                course.branchId,
+            );
             await this.invalidateCourseCache(
                 courseId,
                 course.createdBy,
-                course.orgId ? Number(course.orgId) : undefined,
-                course.branchId ? Number(course.branchId) : undefined,
+                orgId,
+                branchId,
+            );
+            await this.invalidateCourseListCachesForCourse(
+                course.orgId,
+                course.branchId,
             );
 
             return {
