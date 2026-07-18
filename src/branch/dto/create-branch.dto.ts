@@ -12,8 +12,41 @@ import {
     IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { OperatingHours } from '../entities/branch.entity';
+import { BranchAddress, OperatingHours } from '../entities/branch.entity';
 import { BranchWhiteLabelingConfig } from '../../org/interfaces/organization.interface';
+
+/** Structured branch address fields from external systems. */
+export class BranchAddressDto implements BranchAddress {
+    @ApiProperty({ required: false, example: 'UNIT 20, VENTER CENTER' })
+    @IsOptional()
+    @IsString()
+    street?: string;
+
+    @ApiProperty({ required: false, example: 'CNR TRICHARDT & RIETFONTEIN RD' })
+    @IsOptional()
+    @IsString()
+    suburb?: string;
+
+    @ApiProperty({ required: false, example: 'HUGHES' })
+    @IsOptional()
+    @IsString()
+    city?: string;
+
+    @ApiProperty({ required: false, example: 'BOKSBURG' })
+    @IsOptional()
+    @IsString()
+    state?: string;
+
+    @ApiProperty({ required: false, example: 'South Africa' })
+    @IsOptional()
+    @IsString()
+    country?: string;
+
+    @ApiProperty({ required: false, example: '1459' })
+    @IsOptional()
+    @IsString()
+    postalCode?: string;
+}
 
 // Branch-specific white labeling DTOs
 export class BranchColorOverridesDto {
@@ -221,6 +254,17 @@ export class BranchWhiteLabelingConfigDto implements BranchWhiteLabelingConfig {
 
 export class CreateBranchDto {
     @ApiProperty({
+        description: 'External reference identifier for the branch',
+        example: 'BR-REPLACE-002',
+        required: false,
+        type: String,
+        title: 'Reference',
+    })
+    @IsOptional()
+    @IsString({ message: 'Reference must be a string' })
+    ref?: string | null;
+
+    @ApiProperty({
         description: 'Branch name within the organization',
         example: 'Downtown Branch',
         type: String,
@@ -233,16 +277,77 @@ export class CreateBranchDto {
     name: string;
 
     @ApiProperty({
-        description: 'Physical address of the branch location',
-        example: '123 Main Street, Downtown, City 12345',
+        description: 'Physical address (plain string or structured object)',
+        example: {
+            street: 'UNIT 20, VENTER CENTER',
+            suburb: 'CNR TRICHARDT & RIETFONTEIN RD',
+            city: 'HUGHES',
+            state: 'BOKSBURG',
+            country: 'South Africa',
+            postalCode: '1459',
+        },
         required: false,
-        type: String,
         title: 'Address',
-        maxLength: 500,
     })
     @IsOptional()
-    @IsString({ message: 'Address must be a string' })
-    address?: string;
+    address?: string | BranchAddressDto | null;
+
+    @ApiProperty({
+        description: 'Branch website URL',
+        example: 'https://replace-002.local',
+        required: false,
+        type: String,
+        title: 'Website',
+    })
+    @IsOptional()
+    @IsString({ message: 'Website must be a string' })
+    website?: string | null;
+
+    @ApiProperty({
+        description: 'Short alias or code for the branch',
+        example: 'BitBoksburg',
+        required: false,
+        type: String,
+        title: 'Alias',
+    })
+    @IsOptional()
+    @IsString({ message: 'Alias must be a string' })
+    alias?: string | null;
+
+    @ApiProperty({
+        description: 'Branch country code or name',
+        example: 'SA',
+        required: false,
+        type: String,
+        title: 'Country',
+    })
+    @IsOptional()
+    @IsString({ message: 'Country must be a string' })
+    country?: string | null;
+
+    @ApiProperty({
+        description: 'Branch longitude coordinate',
+        example: 28.235079,
+        required: false,
+        type: Number,
+        title: 'Longitude',
+    })
+    @IsOptional()
+    @Type(() => Number)
+    @IsNumber({}, { message: 'Longitude must be a number' })
+    longitude?: number | null;
+
+    @ApiProperty({
+        description: 'Branch latitude coordinate',
+        example: -26.179577,
+        required: false,
+        type: Number,
+        title: 'Latitude',
+    })
+    @IsOptional()
+    @Type(() => Number)
+    @IsNumber({}, { message: 'Latitude must be a number' })
+    latitude?: number | null;
 
     @ApiProperty({
         description: 'Branch contact phone number',

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { BranchAddress } from '../../branch/entities/branch.entity';
 import { UserRole } from '../entities/user.entity';
 import { UserStatsResponseDto } from '../../leaderboard/dto/user-stats-response.dto';
 import { UserRewardsStatsDto } from '../../rewards/dto/user-rewards-stats.dto';
@@ -52,7 +53,7 @@ export class BranchInfo {
         required: false,
         nullable: true,
     })
-    address?: string | null;
+    address?: string | BranchAddress | null;
 
     @ApiProperty({
         description: 'Branch contact phone number',

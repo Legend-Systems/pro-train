@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { User, UserRole } from '../user/entities/user.entity';
+import { BranchAddress } from '../branch/entities/branch.entity';
 import { UserService } from '../user/user.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { SignInDto } from '../user/dto/sign-in.dto';
@@ -241,7 +242,7 @@ export class AuthService {
             id: string;
             name: string;
             email?: string;
-            address?: string;
+            address?: string | BranchAddress | null;
             contactNumber?: string;
             managerName?: string;
             organizationId: string;
@@ -270,7 +271,7 @@ export class AuthService {
             id: string;
             name: string;
             email?: string;
-            address?: string;
+            address?: string | BranchAddress | null;
             contactNumber?: string;
             managerName?: string;
             organization?: { id: string };
@@ -376,7 +377,7 @@ export class AuthService {
             id: String(branch.id),
             name: String(branch.name),
             email: branch.email || undefined,
-            address: branch.address || undefined,
+            address: branch.address ?? undefined,
             contactNumber: branch.contactNumber || undefined,
             managerName: branch.managerName || undefined,
             organizationId: String(branch.organization?.id || branch.organizationId || ''),

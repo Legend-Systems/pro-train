@@ -136,7 +136,18 @@ export class BranchService {
     ): Promise<StandardResponse<Branch>> {
         const branch = await this.retryOperation(async () => {
             await this.findById(id); // Verify branch exists
-            await this.branchRepository.update(id, updateBranchDto);
+
+            const payload: UpdateBranchDto = { ...updateBranchDto };
+
+            if (payload.isDeleted === true && payload.deletedAt === undefined) {
+                payload.deletedAt = new Date();
+            }
+
+            if (payload.isDeleted === false) {
+                payload.deletedAt = null;
+            }
+
+            await this.branchRepository.update(id, payload);
             return await this.findById(id);
         });
 

@@ -393,12 +393,13 @@ export class TrainingHoursService {
         };
     }
 
-    /** Top learners by hours for a given month. */
+    /** Ranks learners by hours for a month (desc = top, asc = worst). */
     async getOrgUserRankings(
         orgId: string,
         yearMonth: string,
         limit: number,
         branchId?: string,
+        order: 'asc' | 'desc' = 'desc',
     ): Promise<AdminUserTrainingHoursRankingDto[]> {
         const monthStart = formatActivityDateUtc(getMonthStartUtc(yearMonth));
         const monthEnd = formatActivityDateUtc(
@@ -419,7 +420,7 @@ export class TrainingHoursService {
             .groupBy('session.userId')
             .addGroupBy('user.firstName')
             .addGroupBy('user.lastName')
-            .orderBy('totalMinutes', 'DESC')
+            .orderBy('totalMinutes', order === 'asc' ? 'ASC' : 'DESC')
             .limit(limit);
 
         if (branchId) {

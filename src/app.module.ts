@@ -46,6 +46,7 @@ import { RewardsModule } from './rewards/rewards.module';
 import { TrainingSession } from './training-hours/entities/training-session.entity';
 import { UserTrainingHoursMonthly } from './training-hours/entities/user-training-hours-monthly.entity';
 import { TrainingHoursModule } from './training-hours/training-hours.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
     imports: [
@@ -164,6 +165,7 @@ import { TrainingHoursModule } from './training-hours/training-hours.module';
         CourseMaterialsModule,
         RewardsModule,
         TrainingHoursModule,
+        AnalyticsModule,
     ],
     controllers: [AppController],
     providers: [
