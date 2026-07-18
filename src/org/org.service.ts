@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Organization } from './entities/org.entity';
-import { Branch } from '../branch/entities/branch.entity';
+import { Branch, formatBranchAddress } from '../branch/entities/branch.entity';
 import { CreateOrgDto } from './dto/create-org.dto';
 import { UpdateOrgDto } from './dto/update-org.dto';
 import { CreateBranchDto } from '../branch/dto/create-branch.dto';
@@ -227,7 +227,9 @@ export class OrgService {
                     savedBranch.email || '',
                     organization.id,
                     organization.name,
-                    savedBranch.address,
+                    savedBranch.address != null
+                        ? formatBranchAddress(savedBranch.address)
+                        : undefined,
                     savedBranch.contactNumber,
                     savedBranch.managerName,
                 ),

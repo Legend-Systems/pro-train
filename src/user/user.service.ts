@@ -903,6 +903,35 @@ export class UserService {
         });
     }
 
+    /**
+     * Loads a user for admin PUT /user/admin/:id — any status, scoped to org when applicable.
+     */
+    private async findUserForAdminUpdate(
+        id: string,
+        scope?: {
+            orgId?: string;
+            branchId?: string;
+            userId: string;
+            userRole?: string;
+        },
+    ): Promise<User> {
+        const user = await this.findById(id);
+
+        if (!user) {
+            throw new NotFoundException(`User with ID ${id} not found`);
+        }
+
+        if (
+            scope?.orgId &&
+            scope.userRole !== UserRole.MASTER_ADMIN &&
+            user.orgId?.id !== scope.orgId
+        ) {
+            throw new NotFoundException(`User with ID ${id} not found`);
+        }
+
+        return user;
+    }
+
     async findOne(id: string): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first - note: using global scope for findOne
@@ -912,8 +941,13 @@ export class UserService {
                 const cachedUser = await this.cacheManager.get<User>(cacheKey);
 
                 if (cachedUser) {
-                    this.logger.debug(`Cache hit for user: ${cacheKey}`);
-                    return cachedUser;
+                    if (cachedUser.status === UserStatus.ACTIVE) {
+                        this.logger.debug(`Cache hit for user: ${cacheKey}`);
+                        return cachedUser;
+                    }
+                    this.logger.debug(
+                        `Cache hit ignored for non-active user (${cachedUser.status}): ${cacheKey}`,
+                    );
                 }
             } catch (error) {
                 this.logger.warn(
@@ -1270,11 +1304,8 @@ export class UserService {
         const { avatar, branchId, password, ...updateData } = updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
-        // Get user first to know email for cache invalidation
-        const existingUser = await this.findOne(id);
-        if (!existingUser) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
+        // Admin updates must resolve users the same way as GET /user/admin/:id (any status).
+        const existingUser = await this.findUserForAdminUpdate(id, scope);
 
         // Convert avatar ID to MediaFile reference if provided
         const previousAvatarId = existingUser.avatar?.id;

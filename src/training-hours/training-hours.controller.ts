@@ -159,19 +159,22 @@ export class TrainingHoursController {
     @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get org training hours summary for a month' })
     @ApiQuery({ name: 'yearMonth', required: false, example: '2026-06' })
+    @ApiQuery({ name: 'branchId', required: false })
     async getOrgSummary(
         @OrgBranchScope() scope: OrgBranchScopeType,
         @Query('yearMonth') yearMonth?: string,
+        @Query('branchId') branchId?: string,
     ): Promise<AdminOrgTrainingHoursSummaryDto> {
         if (!scope.orgId) {
             throw new BadRequestException('Organization context required');
         }
 
         const month = yearMonth ?? formatYearMonthUtc(new Date());
+        const effectiveBranchId = branchId ?? scope.branchId;
         const summary = await this.trainingHoursService.getOrgMonthlySummary(
             scope.orgId,
             month,
-            scope.branchId,
+            effectiveBranchId,
         );
         this.logger.log(
             `Org training hours summary for ${month}: ${summary.totalHours}h`,
@@ -184,41 +187,51 @@ export class TrainingHoursController {
     @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
     @ApiOperation({ summary: 'Get org monthly training hours trends' })
     @ApiQuery({ name: 'months', required: false, example: 12 })
+    @ApiQuery({ name: 'branchId', required: false })
     async getMonthlyTrends(
         @OrgBranchScope() scope: OrgBranchScopeType,
         @Query('months', new DefaultValuePipe(12), ParseIntPipe) months: number,
+        @Query('branchId') branchId?: string,
     ): Promise<AdminTrainingHoursTrendDto[]> {
         if (!scope.orgId) {
             throw new BadRequestException('Organization context required');
         }
+        const effectiveBranchId = branchId ?? scope.branchId;
         return this.trainingHoursService.getOrgMonthlyTrends(
             scope.orgId,
             months,
-            scope.branchId,
+            effectiveBranchId,
         );
     }
 
     /** Admin: top learners by hours for a month. */
     @Get('admin/user-rankings')
     @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
-    @ApiOperation({ summary: 'Get top learners by training hours' })
+    @ApiOperation({ summary: 'Get learners ranked by training hours' })
     @ApiQuery({ name: 'yearMonth', required: false })
     @ApiQuery({ name: 'limit', required: false })
+    @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
+    @ApiQuery({ name: 'branchId', required: false })
     async getUserRankings(
         @OrgBranchScope() scope: OrgBranchScopeType,
         @Query('yearMonth') yearMonth?: string,
         @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit?: number,
+        @Query('order') order?: string,
+        @Query('branchId') branchId?: string,
     ): Promise<AdminUserTrainingHoursRankingDto[]> {
         if (!scope.orgId) {
             throw new BadRequestException('Organization context required');
         }
 
         const month = yearMonth ?? formatYearMonthUtc(new Date());
+        const sortOrder: 'asc' | 'desc' = order === 'asc' ? 'asc' : 'desc';
+        const effectiveBranchId = branchId ?? scope.branchId;
         return this.trainingHoursService.getOrgUserRankings(
             scope.orgId,
             month,
             limit ?? 10,
-            scope.branchId,
+            effectiveBranchId,
+            sortOrder,
         );
     }
 }
