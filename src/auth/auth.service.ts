@@ -560,13 +560,11 @@ export class AuthService {
             };
         }
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, this.saltRounds);
-
-        // Create user with org/branch from invitation if available
+        // Pass the plain password — UserService.create hashes it once.
+        // Hashing here as well would double-hash and break sign-in.
         await this.userService.create({
             email,
-            password: hashedPassword,
+            password,
             firstName,
             lastName,
             avatar,
@@ -663,7 +661,16 @@ export class AuthService {
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            this.logger.warn(`Invalid password for email: ${email}`);
+            const storedHashLooksLikeBcrypt =
+                typeof user.password === 'string' &&
+                /^\$2[aby]?\$\d{2}\$/.test(user.password);
+            this.logger.warn(
+                `Invalid password for email: ${email} ` +
+                    `(userId=${user.id}, ` +
+                    `storedHashLooksLikeBcrypt=${storedHashLooksLikeBcrypt}, ` +
+                    `storedHashLength=${user.password?.length ?? 0}, ` +
+                    `submittedPasswordLength=${password?.length ?? 0})`,
+            );
             throw new UnauthorizedException('Invalid credentials');
         }
 
