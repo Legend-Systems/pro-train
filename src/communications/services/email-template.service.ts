@@ -512,6 +512,56 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'test-exam-reminder-3day',
+                    type: EmailType.TEST_EXAM_REMINDER_3DAY,
+                    htmlFile: 'test-exam-reminder-3day.hbs',
+                    textFile: 'test-exam-reminder-3day.txt.hbs',
+                    metadata: {
+                        name: 'Test Exam Reminder (3 days)',
+                        type: EmailType.TEST_EXAM_REMINDER_3DAY,
+                        version: '1.0.0',
+                        description: 'Reminder sent 3 days before examDate',
+                        requiredData: [
+                            'testTitle',
+                            'courseTitle',
+                            'formattedExamDate',
+                            'takeTestUrl',
+                        ],
+                        optionalData: [
+                            'timeRemainingLabel',
+                            'openAppUrl',
+                            'deepLinkUrl',
+                            'appLogoDataUri',
+                            'companyLogoDataUri',
+                        ],
+                    },
+                },
+                {
+                    name: 'test-exam-reminder-dayof',
+                    type: EmailType.TEST_EXAM_REMINDER_DAYOF,
+                    htmlFile: 'test-exam-reminder-dayof.hbs',
+                    textFile: 'test-exam-reminder-dayof.txt.hbs',
+                    metadata: {
+                        name: 'Test Exam Reminder (exam day)',
+                        type: EmailType.TEST_EXAM_REMINDER_DAYOF,
+                        version: '1.0.0',
+                        description: 'Final reminder sent on examDate',
+                        requiredData: [
+                            'testTitle',
+                            'courseTitle',
+                            'formattedExamDate',
+                            'takeTestUrl',
+                        ],
+                        optionalData: [
+                            'openAppUrl',
+                            'deepLinkUrl',
+                            'appLogoDataUri',
+                            'companyLogoDataUri',
+                            'appIconDataUri',
+                        ],
+                    },
+                },
+                {
                     name: 'custom',
                     type: EmailType.CUSTOM,
                     htmlFile: 'custom.hbs',
@@ -708,6 +758,10 @@ export class EmailTemplateService {
             'course-enrollment': 'Enrolled in {{courseName}}',
             'system-alert': '{{alertTitle}}',
             'admin-report': 'Admin Report: {{reportTitle}}',
+            'test-exam-reminder-3day':
+                'Upcoming in 3 days: {{testTitle}}',
+            'test-exam-reminder-dayof':
+                'Today: Take {{testTitle}}',
             custom: '{{title}}',
         };
 

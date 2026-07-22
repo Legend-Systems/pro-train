@@ -40,6 +40,8 @@ export enum EmailType {
     SYSTEM_ALERT = 'system_alert',
     CUSTOM = 'custom',
     ADMIN_REPORT = 'admin_report',
+    TEST_EXAM_REMINDER_3DAY = 'test_exam_reminder_3day',
+    TEST_EXAM_REMINDER_DAYOF = 'test_exam_reminder_dayof',
 }
 
 export enum EmailStatus {
