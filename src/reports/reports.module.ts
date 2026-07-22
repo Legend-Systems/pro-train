@@ -7,7 +7,9 @@ import { TestReportsService } from './services/test-reports.service';
 import { ResultsReportsService } from './services/results-reports.service';
 import { LeaderboardReportsService } from './services/leaderboard-reports.service';
 import { TrainingProgressReportsService } from './services/training-progress-reports.service';
+import { AdminInsightsReportsService } from './services/admin-insights-reports.service';
 import { ReportsController } from './reports.controller';
+import { AdminReportsController } from './controllers/admin-reports.controller';
 import { Course } from '../course/entities/course.entity';
 import { Test } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
@@ -17,6 +19,7 @@ import { Question } from '../questions/entities/question.entity';
 import { Answer } from '../answers/entities/answer.entity';
 import { Leaderboard } from '../leaderboard/entities/leaderboard.entity';
 import { TrainingProgress } from '../training_progress/entities/training_progress.entity';
+import { TrainingSession } from '../training-hours/entities/training-session.entity';
 import { TrainingHoursModule } from '../training-hours/training-hours.module';
 
 @Module({
@@ -35,10 +38,11 @@ import { TrainingHoursModule } from '../training-hours/training-hours.module';
             Answer,
             Leaderboard,
             TrainingProgress,
+            TrainingSession,
         ]),
         TrainingHoursModule,
     ],
-    controllers: [ReportsController],
+    controllers: [ReportsController, AdminReportsController],
     providers: [
         CourseReportsService,
         UserReportsService,
@@ -46,6 +50,7 @@ import { TrainingHoursModule } from '../training-hours/training-hours.module';
         ResultsReportsService,
         LeaderboardReportsService,
         TrainingProgressReportsService,
+        AdminInsightsReportsService,
     ],
     exports: [
         CourseReportsService,
@@ -54,6 +59,7 @@ import { TrainingHoursModule } from '../training-hours/training-hours.module';
         ResultsReportsService,
         LeaderboardReportsService,
         TrainingProgressReportsService,
+        AdminInsightsReportsService,
     ],
 })
 export class ReportsModule {}
