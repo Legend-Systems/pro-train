@@ -39,6 +39,7 @@ export enum EmailType {
     USER_RESTORED = 'user_restored',
     SYSTEM_ALERT = 'system_alert',
     CUSTOM = 'custom',
+    ADMIN_REPORT = 'admin_report',
 }
 
 export enum EmailStatus {

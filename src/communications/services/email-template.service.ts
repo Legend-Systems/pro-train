@@ -480,6 +480,32 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'admin-report',
+                    type: EmailType.ADMIN_REPORT,
+                    htmlFile: 'admin-report.hbs',
+                    textFile: 'admin-report.txt.hbs',
+                    metadata: {
+                        name: 'Admin Report',
+                        type: EmailType.ADMIN_REPORT,
+                        version: '1.0.0',
+                        description: 'Scheduled or on-demand admin training report',
+                        requiredData: [
+                            'reportTitle',
+                            'averageKnowledgeScore',
+                            'overallPassRate',
+                            'activeLearners',
+                        ],
+                        optionalData: [
+                            'leaderboardLines',
+                            'keyAreasSummary',
+                            'topPerformersSummary',
+                            'totalTrainingHours',
+                            'atRiskUserCount',
+                            'keyAreaCount',
+                        ],
+                    },
+                },
+                {
                     name: 'custom',
                     type: EmailType.CUSTOM,
                     htmlFile: 'custom.hbs',
@@ -675,6 +701,7 @@ export class EmailTemplateService {
             'results-summary': 'Test Results: {{testTitle}}',
             'course-enrollment': 'Enrolled in {{courseName}}',
             'system-alert': '{{alertTitle}}',
+            'admin-report': 'Admin Report: {{reportTitle}}',
             custom: '{{title}}',
         };
 

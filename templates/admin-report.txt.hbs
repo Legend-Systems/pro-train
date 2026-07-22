@@ -1,0 +1,44 @@
+{{reportTitle}}
+ProTrain admin training insights
+Timeframe: {{timeframe}}
+Generated: {{generatedAt}}
+
+Hi {{recipientName}},
+
+Organization training performance summary{{#if organizationName}} for {{organizationName}}{{/if}}.
+
+KPIs
+- Avg knowledge score: {{averageKnowledgeScore}}%
+- Pass rate: {{overallPassRate}}%
+- Active learners: {{activeLearners}}
+- Training hours: {{totalTrainingHours}}h
+- At-risk users: {{atRiskUserCount}}
+- Key areas: {{keyAreaCount}}
+
+{{#if topPerformersSummary.length}}
+Top performers:
+{{#each topPerformersSummary}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if keyAreasSummary.length}}
+Key areas needing training:
+{{#each keyAreasSummary}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if hasLeaderboard}}
+Motivational leaderboard:
+{{#each leaderboardLines}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if hasCsv}}
+A CSV summary is attached.
+{{/if}}
+
+{{companyName}}
+Support: {{supportEmail}}

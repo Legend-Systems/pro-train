@@ -1,4 +1,16 @@
-import { Controller, Get, Logger, Query, UseGuards } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Delete,
+    Get,
+    Logger,
+    Param,
+    ParseUUIDPipe,
+    Patch,
+    Post,
+    Query,
+    UseGuards,
+} from '@nestjs/common';
 import {
     ApiBearerAuth,
     ApiHeader,
@@ -35,7 +47,17 @@ import {
     AdminTestPassFailDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
+import {
+    CreateReportScheduleDto,
+    GenerateAdminReportDto,
+    GenerateAdminReportResultDto,
+    ReportRunResponseDto,
+    ReportScheduleResponseDto,
+    SetReportScheduleActiveDto,
+    UpdateReportScheduleDto,
+} from '../dto/report-schedule.dto';
 import { AdminInsightsReportsService } from '../services/admin-insights-reports.service';
+import { ReportScheduleService } from '../services/report-schedule.service';
 
 /**
  * Role-gated admin reporting catalogue.
@@ -57,6 +79,7 @@ export class AdminReportsController {
 
     constructor(
         private readonly adminInsightsReportsService: AdminInsightsReportsService,
+        private readonly reportScheduleService: ReportScheduleService,
     ) {}
 
     @Get('overview')
@@ -326,6 +349,121 @@ export class AdminReportsController {
                 filters,
             );
         return this.ok('Effectiveness trends retrieved successfully', data);
+    }
+
+    // ─── Scheduling / generate / preview ───────────────────────────────
+
+    @Get('preview')
+    @ApiOperation({ summary: 'Preview admin report payload (no email)' })
+    async previewReport(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query() filters: AdminReportFiltersDto,
+    ): Promise<StandardApiResponse<unknown>> {
+        const data = await this.reportScheduleService.preview(scope, filters);
+        return this.ok('Report preview generated successfully', data);
+    }
+
+    @Post('generate')
+    @ApiOperation({
+        summary: 'Generate admin report on demand (optional email + CSV)',
+    })
+    async generateReport(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Body() dto: GenerateAdminReportDto,
+    ): Promise<StandardApiResponse<GenerateAdminReportResultDto>> {
+        const data = await this.reportScheduleService.generateOnDemand(
+            scope,
+            dto,
+        );
+        return this.ok('Report generated successfully', data);
+    }
+
+    @Get('schedules')
+    @ApiOperation({ summary: 'List report schedules for the organization' })
+    async listSchedules(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+    ): Promise<StandardApiResponse<ReportScheduleResponseDto[]>> {
+        const data = await this.reportScheduleService.findAll(scope);
+        return this.ok('Report schedules retrieved successfully', data);
+    }
+
+    @Post('schedules')
+    @ApiOperation({ summary: 'Create a weekly/monthly report schedule' })
+    async createSchedule(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Body() dto: CreateReportScheduleDto,
+    ): Promise<StandardApiResponse<ReportScheduleResponseDto>> {
+        const data = await this.reportScheduleService.create(scope, dto);
+        return this.ok('Report schedule created successfully', data);
+    }
+
+    @Get('schedules/:id')
+    @ApiOperation({ summary: 'Get a report schedule by id' })
+    async getSchedule(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<StandardApiResponse<ReportScheduleResponseDto>> {
+        const data = await this.reportScheduleService.findOne(scope, id);
+        return this.ok('Report schedule retrieved successfully', data);
+    }
+
+    @Patch('schedules/:id')
+    @ApiOperation({ summary: 'Update a report schedule' })
+    async updateSchedule(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: UpdateReportScheduleDto,
+    ): Promise<StandardApiResponse<ReportScheduleResponseDto>> {
+        const data = await this.reportScheduleService.update(scope, id, dto);
+        return this.ok('Report schedule updated successfully', data);
+    }
+
+    @Patch('schedules/:id/active')
+    @ApiOperation({
+        summary: 'Activate or deactivate a report schedule',
+        description:
+            'Inactive schedules are skipped by cron and do not send emails. Accessible to master_admin, owner, and admin.',
+    })
+    async setScheduleActive(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Param('id', ParseUUIDPipe) id: string,
+        @Body() dto: SetReportScheduleActiveDto,
+    ): Promise<StandardApiResponse<ReportScheduleResponseDto>> {
+        const data = await this.reportScheduleService.setActive(
+            scope,
+            id,
+            dto,
+        );
+        return this.ok(
+            dto.isActive
+                ? 'Report schedule activated successfully'
+                : 'Report schedule deactivated successfully',
+            data,
+        );
+    }
+
+    @Delete('schedules/:id')
+    @ApiOperation({ summary: 'Delete a report schedule' })
+    async deleteSchedule(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Param('id', ParseUUIDPipe) id: string,
+    ): Promise<StandardApiResponse<{ id: string }>> {
+        await this.reportScheduleService.remove(scope, id);
+        return this.ok('Report schedule deleted successfully', { id });
+    }
+
+    @Get('runs')
+    @ApiOperation({ summary: 'List recent report runs for the organization' })
+    @ApiQuery({ name: 'scheduleId', required: false })
+    async listRuns(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query('scheduleId') scheduleId?: string,
+    ): Promise<StandardApiResponse<ReportRunResponseDto[]>> {
+        const data = await this.reportScheduleService.listRuns(
+            scope,
+            scheduleId,
+        );
+        return this.ok('Report runs retrieved successfully', data);
     }
 
     private ok<T>(message: string, data: T): StandardApiResponse<T> {

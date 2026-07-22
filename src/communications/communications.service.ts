@@ -978,6 +978,105 @@ export class CommunicationsService {
         }
     }
 
+    /**
+     * Queues an admin reporting email with optional CSV attachment.
+     * Used by scheduled and on-demand admin report delivery.
+     */
+    async sendAdminReportEmail(templateData: {
+        recipientEmail: string;
+        recipientName: string;
+        organizationId?: string;
+        reportTitle: string;
+        timeframe: string;
+        generatedAt: string;
+        averageKnowledgeScore: number;
+        overallPassRate: number;
+        activeLearners: number;
+        totalTrainingHours: number;
+        atRiskUserCount: number;
+        keyAreaCount: number;
+        topPerformersSummary: string[];
+        keyAreasSummary: string[];
+        leaderboardLines: string[];
+        csvAttachment?: {
+            filename: string;
+            content: Buffer;
+            contentType?: string;
+        };
+    }): Promise<void> {
+        try {
+            const baseData = this.getBaseTemplateData(
+                templateData.recipientEmail,
+                templateData.recipientName,
+            );
+            const orgData = await this.getOrganizationDataForEmail(
+                templateData.organizationId,
+            );
+            const organizationLogo = await this.resolveOrganizationLogo(
+                orgData.organization?.logoUrl,
+            );
+
+            const fullTemplateData = {
+                ...baseData,
+                ...templateData,
+                organizationName: orgData.organization?.name,
+                organizationLogo,
+                organizationWebsite: orgData.organization?.website,
+                hasLeaderboard: templateData.leaderboardLines.length > 0,
+                hasCsv: Boolean(templateData.csvAttachment),
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.ADMIN_REPORT,
+                fullTemplateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: templateData.recipientEmail,
+                recipientName: templateData.recipientName,
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.ADMIN_REPORT,
+                templateUsed: 'admin-report',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    reportTitle: templateData.reportTitle,
+                    timeframe: templateData.timeframe,
+                    hasCsv: Boolean(templateData.csvAttachment),
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+            await this.emailQueueService.queueEmail({
+                to: templateData.recipientEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+                attachments: templateData.csvAttachment
+                    ? [
+                          {
+                              filename: templateData.csvAttachment.filename,
+                              content: templateData.csvAttachment.content,
+                              contentType:
+                                  templateData.csvAttachment.contentType ??
+                                  'text/csv',
+                          },
+                      ]
+                    : undefined,
+            });
+
+            this.logger.log(
+                `Admin report email queued for ${templateData.recipientEmail}`,
+            );
+        } catch (error) {
+            this.logger.error('Failed to send admin report email:', error);
+            throw error;
+        }
+    }
+
     async sendTestInvitationEmail(
         invitationId: string,
         testId: number,
