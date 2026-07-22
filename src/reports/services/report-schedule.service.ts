@@ -79,6 +79,7 @@ export class ReportScheduleService {
             recipientEmails: dto.recipientEmails ?? null,
             recipientRoles: dto.recipientRoles ?? null,
             includeCsv: dto.includeCsv ?? true,
+            includePdf: dto.includePdf ?? false,
             includeMotivationalLeaderboard:
                 dto.includeMotivationalLeaderboard ?? false,
             isActive: dto.isActive ?? true,
@@ -173,6 +174,10 @@ export class ReportScheduleService {
                 dto.includeCsv !== undefined
                     ? dto.includeCsv
                     : schedule.includeCsv,
+            includePdf:
+                dto.includePdf !== undefined
+                    ? dto.includePdf
+                    : schedule.includePdf,
             includeMotivationalLeaderboard:
                 dto.includeMotivationalLeaderboard !== undefined
                     ? dto.includeMotivationalLeaderboard
@@ -233,7 +238,7 @@ export class ReportScheduleService {
         return rows.map(row => this.toRunDto(row));
     }
 
-    /** On-demand generate / optional email with CSV attachment. */
+    /** On-demand generate / optional email with CSV/PDF attachment. */
     async generateOnDemand(
         scope: OrgBranchScope,
         dto: GenerateAdminReportDto,
@@ -245,6 +250,7 @@ export class ReportScheduleService {
             scheduleId: null,
             filters: (dto.filters as AdminReportFiltersDto) ?? {},
             includeCsv: dto.includeCsv ?? true,
+            includePdf: dto.includePdf ?? false,
             includeMotivationalLeaderboard:
                 dto.includeMotivationalLeaderboard ?? false,
             sendEmail: dto.sendEmail ?? false,
@@ -290,6 +296,7 @@ export class ReportScheduleService {
                     filters:
                         (schedule.filters as AdminReportFiltersDto) ?? {},
                     includeCsv: schedule.includeCsv,
+                    includePdf: schedule.includePdf,
                     includeMotivationalLeaderboard:
                         schedule.includeMotivationalLeaderboard,
                     sendEmail: true,
@@ -326,6 +333,7 @@ export class ReportScheduleService {
         scheduleId: string | null;
         filters: AdminReportFiltersDto;
         includeCsv: boolean;
+        includePdf: boolean;
         includeMotivationalLeaderboard: boolean;
         sendEmail: boolean;
         recipientUserIds?: string[];
@@ -351,12 +359,31 @@ export class ReportScheduleService {
             let csvContent: string | undefined;
             let csvRowCount: number | undefined;
             let csvFilename: string | undefined;
+            let pdfAttachment:
+                | {
+                      filename: string;
+                      content: Buffer;
+                      contentType: string;
+                  }
+                | undefined;
 
             if (params.includeCsv) {
                 const csv = this.reportExportService.buildOverviewCsv(overview);
                 csvContent = csv.content;
                 csvRowCount = csv.rowCount;
                 csvFilename = csv.filename;
+            }
+
+            if (params.includePdf) {
+                const pdf = await this.reportExportService.buildOverviewPdf(
+                    overview,
+                    params.scheduleName,
+                );
+                pdfAttachment = {
+                    filename: pdf.filename,
+                    content: pdf.content,
+                    contentType: pdf.contentType,
+                };
             }
 
             let emailsQueued = 0;
@@ -374,14 +401,14 @@ export class ReportScheduleService {
                     );
                 }
 
-                const leaderboardLines = params.includeMotivationalLeaderboard
-                    ? overview.topPerformers
-                          .slice(0, 5)
-                          .map(
-                              (p, index) =>
-                                  `${index + 1}. ${p.firstName} ${p.lastName} — ${p.averageScore}%`,
-                          )
-                    : [];
+                const digest = params.includeMotivationalLeaderboard
+                    ? this.reportExportService.buildMotivationalDigest(overview)
+                    : {
+                          leaderboardLines: [] as string[],
+                          risingStarsLines: [] as string[],
+                          branchChampionLines: [] as string[],
+                          celebrationHeadline: '',
+                      };
 
                 for (const recipient of recipients) {
                     await this.communicationsService.sendAdminReportEmail({
@@ -397,6 +424,8 @@ export class ReportScheduleService {
                         activeLearners: overview.kpis.activeLearners,
                         totalTrainingHours: overview.kpis.totalTrainingHours,
                         atRiskUserCount: overview.kpis.atRiskUserCount,
+                        highPotentialUserCount:
+                            overview.kpis.highPotentialUserCount,
                         keyAreaCount: overview.kpis.keyAreaCount,
                         topPerformersSummary: overview.topPerformers
                             .slice(0, 5)
@@ -407,7 +436,10 @@ export class ReportScheduleService {
                         keyAreasSummary: overview.keyAreas
                             .slice(0, 5)
                             .map(a => a.title),
-                        leaderboardLines,
+                        celebrationHeadline: digest.celebrationHeadline,
+                        leaderboardLines: digest.leaderboardLines,
+                        risingStarsLines: digest.risingStarsLines,
+                        branchChampionLines: digest.branchChampionLines,
                         csvAttachment:
                             csvContent && csvFilename
                                 ? {
@@ -416,6 +448,7 @@ export class ReportScheduleService {
                                       contentType: 'text/csv',
                                   }
                                 : undefined,
+                        pdfAttachment,
                     });
                     emailsQueued += 1;
                 }
@@ -430,12 +463,16 @@ export class ReportScheduleService {
                 timeframe: overview.timeframe,
                 emailsQueued,
                 includeCsv: params.includeCsv,
+                includePdf: params.includePdf,
+                includeMotivationalLeaderboard:
+                    params.includeMotivationalLeaderboard,
             };
             await this.runRepository.save(run);
 
             return {
                 run: this.toRunDto(run),
                 csv: csvContent,
+                pdfGenerated: Boolean(pdfAttachment),
                 overview,
                 emailsQueued,
             };
@@ -608,6 +645,7 @@ export class ReportScheduleService {
             recipientEmails: row.recipientEmails ?? null,
             recipientRoles: row.recipientRoles ?? null,
             includeCsv: row.includeCsv,
+            includePdf: row.includePdf,
             includeMotivationalLeaderboard: row.includeMotivationalLeaderboard,
             isActive: row.isActive,
             lastRunAt: row.lastRunAt ?? null,

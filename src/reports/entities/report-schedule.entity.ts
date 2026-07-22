@@ -114,6 +114,10 @@ export class ReportSchedule {
     includeCsv: boolean;
 
     @Column({ default: false })
+    @ApiProperty({ description: 'Attach PDF summary when emailing' })
+    includePdf: boolean;
+
+    @Column({ default: false })
     @ApiProperty({
         description: 'Include motivational leaderboard section in email',
     })

@@ -16,6 +16,10 @@
         ul { padding-left: 18px; }
         .footer { padding: 20px 24px; background: #f8fafc; font-size: 12px; color: #6b7280; text-align: center; }
         .badge { display: inline-block; background: #ede9fe; color: #5b21b6; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+        .digest { background: linear-gradient(180deg, #f5f3ff 0%, #f8fafc 100%); border: 1px solid #ede9fe; border-radius: 10px; padding: 16px; margin: 20px 0; }
+        .digest h3 { margin-top: 0; color: #413DFB; }
+        .digest h4 { margin-bottom: 6px; color: #4c1d95; }
+        .celebrate { font-size: 15px; font-weight: 600; color: #111827; margin-bottom: 12px; }
     </style>
 </head>
 <body>
@@ -36,7 +40,7 @@
                 <div class="kpi"><div class="kpi-label">Training hours</div><div class="kpi-value">{{totalTrainingHours}}h</div></div>
             </div>
 
-            <p><strong>Attention:</strong> {{atRiskUserCount}} at-risk users · {{keyAreaCount}} key training areas</p>
+            <p><strong>Attention:</strong> {{atRiskUserCount}} at-risk users · {{keyAreaCount}} key training areas · {{highPotentialUserCount}} high-potential learners</p>
 
             {{#if topPerformersSummary.length}}
             <h3>Top performers</h3>
@@ -56,17 +60,47 @@
             </ul>
             {{/if}}
 
-            {{#if hasLeaderboard}}
-            <h3>Motivational leaderboard</h3>
-            <ul>
-                {{#each leaderboardLines}}
-                <li>{{this}}</li>
-                {{/each}}
-            </ul>
+            {{#if hasMotivationalDigest}}
+            <div class="digest">
+                <h3>Motivational digest</h3>
+                {{#if celebrationHeadline}}
+                <p class="celebrate">{{celebrationHeadline}}</p>
+                {{/if}}
+
+                {{#if hasLeaderboard}}
+                <h4>Leaderboard shout-outs</h4>
+                <ul>
+                    {{#each leaderboardLines}}
+                    <li>{{this}}</li>
+                    {{/each}}
+                </ul>
+                {{/if}}
+
+                {{#if hasRisingStars}}
+                <h4>Rising stars</h4>
+                <ul>
+                    {{#each risingStarsLines}}
+                    <li>{{this}}</li>
+                    {{/each}}
+                </ul>
+                {{/if}}
+
+                {{#if hasBranchChampions}}
+                <h4>Branch champions</h4>
+                <ul>
+                    {{#each branchChampionLines}}
+                    <li>{{this}}</li>
+                    {{/each}}
+                </ul>
+                {{/if}}
+            </div>
             {{/if}}
 
             {{#if hasCsv}}
             <p>A CSV summary is attached for deeper analysis.</p>
+            {{/if}}
+            {{#if hasPdf}}
+            <p>A PDF report is attached for sharing with leadership.</p>
             {{/if}}
         </div>
         <div class="footer">

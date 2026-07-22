@@ -98,10 +98,10 @@ Automatically detect courses/tests where employees need more training based on:
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **Phase 1** | Admin insights API + role/org scoping | ✅ **Completed** |
-| **Phase 2** | Scheduling, email, CSV export (PDF later) | ✅ **Completed** |
+| **Phase 2** | Scheduling, email, CSV + PDF export | ✅ **Completed** |
 | **Phase 3** | Web Admin Reporting hub (dashboard consuming Phase 1) | ✅ **Completed** (hub + schedules UI) |
 | **Phase 4** | Mobile Admin Reporting screens | ✅ **Completed** |
-| **Phase 5** | Polish: PDF attachments, motivational digests polish, offline cache | ⬜ Pending |
+| **Phase 5** | Polish: PDF attachments, motivational digests polish, offline cache | ✅ **Completed** |
 
 ---
 
@@ -225,7 +225,23 @@ Gate with `isAdmin` (admin / owner / master_admin). Schedule toggles use the sam
 2. ~~**Phase 3 (hub only)** — Web dashboard consuming Phase 1~~ ✅
 3. ~~**Phase 2** — Schedules + email + CSV~~ ✅
 4. ~~**Phase 4** — Mobile hub mirroring web~~ ✅
-5. **Phase 5** — PDF attachments, richer motivational digests, offline-friendly mobile cache
+5. ~~**Phase 5** — PDF attachments, richer motivational digests, offline-friendly mobile cache~~ ✅
+
+---
+
+## Phase 5 — PDF, digests, offline cache
+
+**Status:** ✅ Completed (2026-07-22)
+
+| Action | Path | Done |
+|--------|------|------|
+| Add | `pdfkit` PDF export in `report-export.service.ts` | ✅ |
+| Add | Migration `includePdf` on `report_schedule` | ✅ |
+| Extend | Schedule/generate DTOs + email attachments (CSV + PDF) | ✅ |
+| Extend | Admin report email templates — richer motivational digest | ✅ |
+| Extend | Web + mobile schedule UI — Attach PDF toggle | ✅ |
+| Add | Mobile AsyncStorage React Query persist (`persist-query-client.ts`) | ✅ |
+| Extend | Admin reports offline banner + `networkMode: offlineFirst` | ✅ |
 
 ---
 
@@ -234,4 +250,4 @@ Gate with `isAdmin` (admin / owner / master_admin). Schedule toggles use the sam
 - Knowledge scores are derived from `Result.percentage` (no dedicated knowledge-score entity).
 - Training hours come from `TrainingSession` / `TrainingHoursService`.
 - Existing learner-facing `/reports/*` endpoints remain available to authenticated users; admin-sensitive catalogue is under `/reports/admin/*` with role guards.
-- PDF export remains deferred; CSV attachments ship with scheduled/on-demand emails.
+- Scheduled/on-demand emails can attach CSV and/or PDF; motivational digests include leaderboard, rising stars, and branch champions.

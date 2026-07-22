@@ -979,8 +979,8 @@ export class CommunicationsService {
     }
 
     /**
-     * Queues an admin reporting email with optional CSV attachment.
-     * Used by scheduled and on-demand admin report delivery.
+     * Queues an admin reporting email with optional CSV/PDF attachments
+     * and an optional richer motivational digest section.
      */
     async sendAdminReportEmail(templateData: {
         recipientEmail: string;
@@ -994,11 +994,20 @@ export class CommunicationsService {
         activeLearners: number;
         totalTrainingHours: number;
         atRiskUserCount: number;
+        highPotentialUserCount?: number;
         keyAreaCount: number;
         topPerformersSummary: string[];
         keyAreasSummary: string[];
+        celebrationHeadline?: string;
         leaderboardLines: string[];
+        risingStarsLines?: string[];
+        branchChampionLines?: string[];
         csvAttachment?: {
+            filename: string;
+            content: Buffer;
+            contentType?: string;
+        };
+        pdfAttachment?: {
             filename: string;
             content: Buffer;
             contentType?: string;
@@ -1016,20 +1025,61 @@ export class CommunicationsService {
                 orgData.organization?.logoUrl,
             );
 
+            const risingStarsLines = templateData.risingStarsLines ?? [];
+            const branchChampionLines = templateData.branchChampionLines ?? [];
+            const hasLeaderboard = templateData.leaderboardLines.length > 0;
+            const hasRisingStars = risingStarsLines.length > 0;
+            const hasBranchChampions = branchChampionLines.length > 0;
+            const hasMotivationalDigest =
+                hasLeaderboard || hasRisingStars || hasBranchChampions;
+
             const fullTemplateData = {
                 ...baseData,
                 ...templateData,
+                risingStarsLines,
+                branchChampionLines,
                 organizationName: orgData.organization?.name,
                 organizationLogo,
                 organizationWebsite: orgData.organization?.website,
-                hasLeaderboard: templateData.leaderboardLines.length > 0,
+                hasLeaderboard,
+                hasRisingStars,
+                hasBranchChampions,
+                hasMotivationalDigest,
                 hasCsv: Boolean(templateData.csvAttachment),
+                hasPdf: Boolean(templateData.pdfAttachment),
+                highPotentialUserCount:
+                    templateData.highPotentialUserCount ?? 0,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
                 EmailType.ADMIN_REPORT,
                 fullTemplateData,
             );
+
+            const attachments = [
+                ...(templateData.csvAttachment
+                    ? [
+                          {
+                              filename: templateData.csvAttachment.filename,
+                              content: templateData.csvAttachment.content,
+                              contentType:
+                                  templateData.csvAttachment.contentType ??
+                                  'text/csv',
+                          },
+                      ]
+                    : []),
+                ...(templateData.pdfAttachment
+                    ? [
+                          {
+                              filename: templateData.pdfAttachment.filename,
+                              content: templateData.pdfAttachment.content,
+                              contentType:
+                                  templateData.pdfAttachment.contentType ??
+                                  'application/pdf',
+                          },
+                      ]
+                    : []),
+            ];
 
             const communication = this.communicationRepository.create({
                 recipientEmail: templateData.recipientEmail,
@@ -1046,6 +1096,8 @@ export class CommunicationsService {
                     reportTitle: templateData.reportTitle,
                     timeframe: templateData.timeframe,
                     hasCsv: Boolean(templateData.csvAttachment),
+                    hasPdf: Boolean(templateData.pdfAttachment),
+                    hasMotivationalDigest,
                 },
             });
 
@@ -1055,17 +1107,7 @@ export class CommunicationsService {
                 subject: rendered.subject,
                 html: rendered.html,
                 text: rendered.text,
-                attachments: templateData.csvAttachment
-                    ? [
-                          {
-                              filename: templateData.csvAttachment.filename,
-                              content: templateData.csvAttachment.content,
-                              contentType:
-                                  templateData.csvAttachment.contentType ??
-                                  'text/csv',
-                          },
-                      ]
-                    : undefined,
+                attachments: attachments.length > 0 ? attachments : undefined,
             });
 
             this.logger.log(

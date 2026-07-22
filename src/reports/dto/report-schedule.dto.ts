@@ -105,6 +105,11 @@ export class CreateReportScheduleDto {
     @ApiPropertyOptional({ default: false })
     @IsOptional()
     @IsBoolean()
+    includePdf?: boolean;
+
+    @ApiPropertyOptional({ default: false })
+    @IsOptional()
+    @IsBoolean()
     includeMotivationalLeaderboard?: boolean;
 
     @ApiPropertyOptional({
@@ -145,6 +150,11 @@ export class GenerateAdminReportDto {
     @IsOptional()
     @IsBoolean()
     includeCsv?: boolean;
+
+    @ApiPropertyOptional({ default: false })
+    @IsOptional()
+    @IsBoolean()
+    includePdf?: boolean;
 
     @ApiPropertyOptional({ default: false })
     @IsOptional()
@@ -216,6 +226,9 @@ export class ReportScheduleResponseDto {
     includeCsv: boolean;
 
     @ApiProperty()
+    includePdf: boolean;
+
+    @ApiProperty()
     includeMotivationalLeaderboard: boolean;
 
     @ApiProperty()
@@ -274,6 +287,11 @@ export class GenerateAdminReportResultDto {
         description: 'CSV content when includeCsv was true (preview/download)',
     })
     csv?: string;
+
+    @ApiPropertyOptional({
+        description: 'Whether a PDF was generated for this run',
+    })
+    pdfGenerated?: boolean;
 
     @ApiPropertyOptional()
     overview?: unknown;

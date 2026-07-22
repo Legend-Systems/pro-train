@@ -13,6 +13,7 @@ KPIs
 - Active learners: {{activeLearners}}
 - Training hours: {{totalTrainingHours}}h
 - At-risk users: {{atRiskUserCount}}
+- High-potential learners: {{highPotentialUserCount}}
 - Key areas: {{keyAreaCount}}
 
 {{#if topPerformersSummary.length}}
@@ -29,15 +30,39 @@ Key areas needing training:
 {{/each}}
 {{/if}}
 
+{{#if hasMotivationalDigest}}
+Motivational digest
+{{#if celebrationHeadline}}
+{{celebrationHeadline}}
+{{/if}}
+
 {{#if hasLeaderboard}}
-Motivational leaderboard:
+Leaderboard shout-outs:
 {{#each leaderboardLines}}
 - {{this}}
 {{/each}}
 {{/if}}
 
+{{#if hasRisingStars}}
+Rising stars:
+{{#each risingStarsLines}}
+- {{this}}
+{{/each}}
+{{/if}}
+
+{{#if hasBranchChampions}}
+Branch champions:
+{{#each branchChampionLines}}
+- {{this}}
+{{/each}}
+{{/if}}
+{{/if}}
+
 {{#if hasCsv}}
 A CSV summary is attached.
+{{/if}}
+{{#if hasPdf}}
+A PDF report is attached.
 {{/if}}
 
 {{companyName}}
