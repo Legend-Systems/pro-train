@@ -608,6 +608,7 @@ export class AuthService {
         const userResponse: UserResponseDto = {
             uid: updatedUser.id,
             email: updatedUser.email,
+            username: updatedUser.username,
             firstName: updatedUser.firstName,
             lastName: updatedUser.lastName,
             avatar: this.transformAvatarForResponse(updatedUser.avatar),
@@ -649,12 +650,17 @@ export class AuthService {
         userAgent?: string,
     ): Promise<StandardApiResponse<SessionResponseDto>> {
         const { email, password } = signInDto;
+        const loginIdentifier = email.trim();
 
-        // Always verify credentials against the database (never a stale cache entry)
+        // Accept email or username in the `email` field (see SignInDto).
         const user =
-            await this.userService.findByEmailForAuthentication(email);
+            await this.userService.findByEmailOrUsernameForAuthentication(
+                loginIdentifier,
+            );
         if (!user) {
-            this.logger.warn(`Sign in failed for email: ${email}`);
+            this.logger.warn(
+                `Sign in failed for identifier: ${loginIdentifier}`,
+            );
             throw new UnauthorizedException('Invalid credentials');
         }
 
@@ -665,7 +671,7 @@ export class AuthService {
                 typeof user.password === 'string' &&
                 /^\$2[aby]?\$\d{2}\$/.test(user.password);
             this.logger.warn(
-                `Invalid password for email: ${email} ` +
+                `Invalid password for identifier: ${loginIdentifier} ` +
                     `(userId=${user.id}, ` +
                     `storedHashLooksLikeBcrypt=${storedHashLooksLikeBcrypt}, ` +
                     `storedHashLength=${user.password?.length ?? 0}, ` +
@@ -674,7 +680,9 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials');
         }
 
-        this.logger.log(`Sign in successful for email: ${email}`);
+        this.logger.log(
+            `Sign in successful for identifier: ${loginIdentifier} (userId=${user.id})`,
+        );
 
         // Generate JWT tokens
         const tokenPair = await this.tokenManagerService.generateTokenPair({
@@ -718,6 +726,7 @@ export class AuthService {
         const userResponse: UserResponseDto = {
             uid: user.id,
             email: user.email,
+            username: user.username,
             firstName: user.firstName,
             lastName: user.lastName,
             avatar: this.transformAvatarForResponse(user.avatar),

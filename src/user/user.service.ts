@@ -1134,6 +1134,68 @@ export class UserService {
         );
     }
 
+    /**
+     * Finds an active user by username (case-insensitive) for profile uniqueness checks.
+     */
+    async findByUsername(username: string): Promise<User | null> {
+        const trimmed = username.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        return this.retryService.executeDatabase(async () => {
+            return this.userRepository
+                .createQueryBuilder('user')
+                .where('LOWER(user.username) = LOWER(:username)', {
+                    username: trimmed,
+                })
+                .andWhere('user.status = :status', {
+                    status: UserStatus.ACTIVE,
+                })
+                .getOne();
+        });
+    }
+
+    /**
+     * Finds a user by email OR username for sign-in (case-insensitive match).
+     * Always reads from the database with the password hash intact.
+     */
+    async findByEmailOrUsernameForAuthentication(
+        identifier: string,
+    ): Promise<User | null> {
+        const trimmed = identifier.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        return this.retryService.executeDatabase(
+            async () => {
+                const user = await this.userRepository
+                    .createQueryBuilder('user')
+                    .leftJoinAndSelect('user.orgId', 'orgId')
+                    .leftJoinAndSelect('user.branchId', 'branchId')
+                    .leftJoinAndSelect('user.avatar', 'avatar')
+                    .where('user.status = :status', {
+                        status: UserStatus.ACTIVE,
+                    })
+                    .andWhere(
+                        '(LOWER(user.email) = LOWER(:identifier) OR LOWER(user.username) = LOWER(:identifier))',
+                        { identifier: trimmed },
+                    )
+                    .getOne();
+
+                if (!user?.password) {
+                    return null;
+                }
+
+                await this.clearUserCacheForAuthentication(user.email, user.id);
+
+                return this.loadAvatarVariants(user);
+            },
+            { operation: 'database_operation' },
+        );
+    }
+
     async findById(id: string): Promise<User | null> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first

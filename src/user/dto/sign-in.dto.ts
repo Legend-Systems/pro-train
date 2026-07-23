@@ -1,16 +1,18 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SignInDto {
     @ApiProperty({
-        description: 'Registered email address for user authentication',
+        description:
+            'Registered email address or username for user authentication',
         example: 'john.doe@example.com',
-        format: 'email',
         type: String,
-        title: 'Email Address',
+        title: 'Email or Username',
         maxLength: 255,
     })
-    @IsEmail({}, { message: 'Please provide a valid email address' })
+    // Field name remains `email` for API compatibility; value may be email OR username.
+    @IsString({ message: 'Email or username is required' })
+    @MinLength(1, { message: 'Email or username is required' })
     email: string;
 
     @ApiProperty({

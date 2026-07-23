@@ -3,6 +3,7 @@ import {
     IsNumber,
     IsOptional,
     IsString,
+    MaxLength,
     MinLength,
     IsEnum,
     Matches,
@@ -53,6 +54,24 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     @IsString({ message: 'Last name must be a string' })
     @MinLength(2, { message: 'Last name must be at least 2 characters long' })
     lastName?: string;
+
+    @ApiProperty({
+        description: 'Unique username for sign-in and profile display',
+        example: 'jdoe',
+        required: false,
+        type: String,
+        title: 'Username',
+        maxLength: 255,
+    })
+    @IsOptional()
+    @IsString({ message: 'Username must be a string' })
+    @MinLength(2, { message: 'Username must be at least 2 characters long' })
+    @MaxLength(255, { message: 'Username must be at most 255 characters long' })
+    @Matches(/^[a-zA-Z0-9._-]+$/, {
+        message:
+            'Username may only contain letters, numbers, dots, underscores, and hyphens',
+    })
+    username?: string;
 
     @ApiProperty({
         description:

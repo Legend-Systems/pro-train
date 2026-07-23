@@ -821,7 +821,7 @@ export class AuthController {
         @Body() signInDto: SignInDto,
         @Request() req: any,
     ): Promise<StandardApiResponse<SessionResponseDto>> {
-        this.logger.log(`Sign in attempt for email: ${signInDto.email}`);
+        this.logger.log(`Sign in attempt for identifier: ${signInDto.email}`);
         
         // Extract IP address and user agent for security logging
         const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'];

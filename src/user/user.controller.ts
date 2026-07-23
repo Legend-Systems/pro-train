@@ -910,6 +910,22 @@ export class UserController {
                 }
             }
 
+            // Username uniqueness when learners update their own profile
+            if (updateUserDto.username) {
+                const existingUsername = await this.userService.findByUsername(
+                    updateUserDto.username,
+                );
+                if (
+                    existingUsername &&
+                    existingUsername.id !== req.user.id
+                ) {
+                    this.logger.warn(
+                        `Username already exists: ${updateUserDto.username}`,
+                    );
+                    throw new ConflictException('Username already in use');
+                }
+            }
+
             if (updateUserDto.avatar !== undefined) {
                 this.logger.log(
                     `Updating profile avatar for user ${req.user.id} to mediaId ${updateUserDto.avatar}`,
