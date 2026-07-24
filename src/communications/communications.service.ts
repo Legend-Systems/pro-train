@@ -11,7 +11,7 @@ import { CreateCommunicationDto } from './dto/create-communication.dto';
 import { UpdateCommunicationDto } from './dto/update-communication.dto';
 import { Communication } from './entities/communication.entity';
 import { EmailTemplateService } from './services/email-template.service';
-import { EmailQueueService } from './services/email-queue.service';
+import { EmailQueueService, EmailJobPriority } from './services/email-queue.service';
 import { EmailSMTPService } from './services/email-smtp.service';
 import {
     WelcomeOrganizationTemplateData,
@@ -978,6 +978,147 @@ export class CommunicationsService {
         }
     }
 
+    /**
+     * Queues an admin reporting email with optional CSV/PDF attachments
+     * and an optional richer motivational digest section.
+     */
+    async sendAdminReportEmail(templateData: {
+        recipientEmail: string;
+        recipientName: string;
+        organizationId?: string;
+        reportTitle: string;
+        timeframe: string;
+        generatedAt: string;
+        averageKnowledgeScore: number;
+        overallPassRate: number;
+        activeLearners: number;
+        totalTrainingHours: number;
+        atRiskUserCount: number;
+        highPotentialUserCount?: number;
+        keyAreaCount: number;
+        topPerformersSummary: string[];
+        keyAreasSummary: string[];
+        celebrationHeadline?: string;
+        leaderboardLines: string[];
+        risingStarsLines?: string[];
+        branchChampionLines?: string[];
+        csvAttachment?: {
+            filename: string;
+            content: Buffer;
+            contentType?: string;
+        };
+        pdfAttachment?: {
+            filename: string;
+            content: Buffer;
+            contentType?: string;
+        };
+    }): Promise<void> {
+        try {
+            const baseData = this.getBaseTemplateData(
+                templateData.recipientEmail,
+                templateData.recipientName,
+            );
+            const orgData = await this.getOrganizationDataForEmail(
+                templateData.organizationId,
+            );
+            const organizationLogo = await this.resolveOrganizationLogo(
+                orgData.organization?.logoUrl,
+            );
+
+            const risingStarsLines = templateData.risingStarsLines ?? [];
+            const branchChampionLines = templateData.branchChampionLines ?? [];
+            const hasLeaderboard = templateData.leaderboardLines.length > 0;
+            const hasRisingStars = risingStarsLines.length > 0;
+            const hasBranchChampions = branchChampionLines.length > 0;
+            const hasMotivationalDigest =
+                hasLeaderboard || hasRisingStars || hasBranchChampions;
+
+            const fullTemplateData = {
+                ...baseData,
+                ...templateData,
+                risingStarsLines,
+                branchChampionLines,
+                organizationName: orgData.organization?.name,
+                organizationLogo,
+                organizationWebsite: orgData.organization?.website,
+                hasLeaderboard,
+                hasRisingStars,
+                hasBranchChampions,
+                hasMotivationalDigest,
+                hasCsv: Boolean(templateData.csvAttachment),
+                hasPdf: Boolean(templateData.pdfAttachment),
+                highPotentialUserCount:
+                    templateData.highPotentialUserCount ?? 0,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                EmailType.ADMIN_REPORT,
+                fullTemplateData,
+            );
+
+            const attachments = [
+                ...(templateData.csvAttachment
+                    ? [
+                          {
+                              filename: templateData.csvAttachment.filename,
+                              content: templateData.csvAttachment.content,
+                              contentType:
+                                  templateData.csvAttachment.contentType ??
+                                  'text/csv',
+                          },
+                      ]
+                    : []),
+                ...(templateData.pdfAttachment
+                    ? [
+                          {
+                              filename: templateData.pdfAttachment.filename,
+                              content: templateData.pdfAttachment.content,
+                              contentType:
+                                  templateData.pdfAttachment.contentType ??
+                                  'application/pdf',
+                          },
+                      ]
+                    : []),
+            ];
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: templateData.recipientEmail,
+                recipientName: templateData.recipientName,
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType: EmailType.ADMIN_REPORT,
+                templateUsed: 'admin-report',
+                status: EmailStatus.PENDING,
+                metadata: {
+                    reportTitle: templateData.reportTitle,
+                    timeframe: templateData.timeframe,
+                    hasCsv: Boolean(templateData.csvAttachment),
+                    hasPdf: Boolean(templateData.pdfAttachment),
+                    hasMotivationalDigest,
+                },
+            });
+
+            await this.communicationRepository.save(communication);
+            await this.emailQueueService.queueEmail({
+                to: templateData.recipientEmail,
+                subject: rendered.subject,
+                html: rendered.html,
+                text: rendered.text,
+                attachments: attachments.length > 0 ? attachments : undefined,
+            });
+
+            this.logger.log(
+                `Admin report email queued for ${templateData.recipientEmail}`,
+            );
+        } catch (error) {
+            this.logger.error('Failed to send admin report email:', error);
+            throw error;
+        }
+    }
+
     async sendTestInvitationEmail(
         invitationId: string,
         testId: number,
@@ -1164,6 +1305,132 @@ export class CommunicationsService {
         }
     }
 
+    /**
+     * Queues a 3-day or exam-day reminder for an upcoming test (examDate).
+     * Returns the saved communication id for audit linkage.
+     */
+    async sendTestExamReminderEmail(templateData: {
+        recipientEmail: string;
+        recipientName: string;
+        organizationId?: string;
+        testId: number;
+        testTitle: string;
+        courseId: number;
+        courseTitle: string;
+        examDate: Date;
+        notificationType: 'three_day' | 'day_of';
+        timeRemainingLabel?: string;
+        userId: string;
+    }): Promise<string> {
+        try {
+            const clientUrl = this.configService.get<string>(
+                'CLIENT_URL',
+                'http://localhost:3000',
+            );
+            const deepLinkScheme = this.configService.get<string>(
+                'APP_DEEP_LINK_SCHEME',
+                'protrain',
+            );
+
+            const baseData = this.getBaseTemplateData(
+                templateData.recipientEmail,
+                templateData.recipientName,
+            );
+            const orgData = await this.getOrganizationDataForEmail(
+                templateData.organizationId,
+            );
+            const organizationLogo = await this.resolveOrganizationLogo(
+                orgData.organization?.logoUrl,
+            );
+
+            const [appLogoDataUri, companyLogoDataUri, appIconDataUri] =
+                await Promise.all([
+                    this.loadAssetDataUri('prt-trans.png'),
+                    this.loadAssetDataUri('bit-white.png'),
+                    this.loadAssetDataUri('pt-logo-adaptive-foreground.png'),
+                ]);
+
+            const takeTestUrl = `${clientUrl}/test/${templateData.testId}`;
+            const deepLinkUrl = `${deepLinkScheme}://test/${templateData.testId}`;
+            const openAppUrl = `${clientUrl}/open-app?path=${encodeURIComponent(`/test/${templateData.testId}`)}`;
+
+            const emailType =
+                templateData.notificationType === 'three_day'
+                    ? EmailType.TEST_EXAM_REMINDER_3DAY
+                    : EmailType.TEST_EXAM_REMINDER_DAYOF;
+            const templateUsed =
+                templateData.notificationType === 'three_day'
+                    ? 'test-exam-reminder-3day'
+                    : 'test-exam-reminder-dayof';
+
+            const fullTemplateData = {
+                ...baseData,
+                testId: templateData.testId,
+                testTitle: templateData.testTitle,
+                courseId: templateData.courseId,
+                courseTitle: templateData.courseTitle,
+                formattedExamDate: this.formatDate(templateData.examDate),
+                timeRemainingLabel:
+                    templateData.timeRemainingLabel ?? 'About 3 days',
+                takeTestUrl,
+                openAppUrl,
+                deepLinkUrl,
+                organizationName: orgData.organization?.name,
+                organizationLogo,
+                organizationWebsite: orgData.organization?.website,
+                appLogoDataUri,
+                companyLogoDataUri,
+                appIconDataUri,
+            };
+
+            const rendered = await this.emailTemplateService.renderByType(
+                emailType,
+                fullTemplateData,
+            );
+
+            const communication = this.communicationRepository.create({
+                recipientEmail: templateData.recipientEmail,
+                recipientName: templateData.recipientName,
+                senderEmail: orgData.sender.email,
+                senderName: orgData.sender.name,
+                subject: rendered.subject,
+                body: rendered.html || '',
+                plainTextBody: rendered.text,
+                emailType,
+                templateUsed,
+                status: EmailStatus.PENDING,
+                metadata: {
+                    testId: templateData.testId,
+                    userId: templateData.userId,
+                    notificationType: templateData.notificationType,
+                    examDate: templateData.examDate.toISOString(),
+                    takeTestUrl,
+                    deepLinkUrl,
+                },
+            });
+
+            const saved =
+                await this.communicationRepository.save(communication);
+            await this.emailQueueService.queueEmail(
+                {
+                    to: templateData.recipientEmail,
+                    subject: rendered.subject,
+                    html: rendered.html,
+                    text: rendered.text,
+                },
+                EmailJobPriority.HIGH,
+            );
+
+            this.logger.log(
+                `Test exam reminder (${templateData.notificationType}) queued for ${templateData.recipientEmail}`,
+            );
+            return saved.id;
+        } catch (error) {
+            this.logger.error('Failed to send test exam reminder email:', error);
+            throw error;
+        }
+    }
+
     // Remove the old test email methods and replace with invitation-based ones
     private formatDate(date: Date): string {
         return new Intl.DateTimeFormat('en-US', {
@@ -1174,6 +1441,37 @@ export class CommunicationsService {
             minute: '2-digit',
             timeZoneName: 'short',
         }).format(date);
+    }
+
+    private assetDataUriCache = new Map<string, string | null>();
+
+    /** Loads a branding PNG from src/assets/images as a data URI for email clients. */
+    private async loadAssetDataUri(
+        filename: string,
+    ): Promise<string | undefined> {
+        if (this.assetDataUriCache.has(filename)) {
+            return this.assetDataUriCache.get(filename) ?? undefined;
+        }
+        try {
+            const logoPath = path.join(
+                process.cwd(),
+                'src',
+                'assets',
+                'images',
+                filename,
+            );
+            const logoBuffer = await fs.readFile(logoPath);
+            const dataUri = `data:image/png;base64,${logoBuffer.toString('base64')}`;
+            this.assetDataUriCache.set(filename, dataUri);
+            return dataUri;
+        } catch (error) {
+            this.assetDataUriCache.set(filename, null);
+            this.logger.warn(
+                `Brand asset unavailable for email rendering: ${filename}`,
+                error,
+            );
+            return undefined;
+        }
     }
 
     create(

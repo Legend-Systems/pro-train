@@ -83,6 +83,15 @@ export class User {
     @IsString()
     lastName: string;
 
+    @Column({ nullable: true, unique: true })
+    @ApiProperty({
+        description: 'Unique username for the user account',
+        example: 'jdoe',
+        required: false,
+    })
+    @IsString()
+    username?: string;
+
     @ManyToOne(() => MediaFile, { nullable: true })
     @ApiProperty({
         description: 'User avatar image from media library',

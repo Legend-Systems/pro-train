@@ -32,7 +32,15 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
 import { CourseMaterialsService } from '../course-materials/course-materials.service';
-import { MaterialType, MaterialStatus } from '../course-materials/entities/course-material.entity';
+import {
+    CourseMaterial,
+    MaterialType,
+    MaterialStatus,
+} from '../course-materials/entities/course-material.entity';
+import { CourseMaterialResponseDto } from '../course-materials/dto/course-material-response.dto';
+import {
+    ImageVariant,
+} from '../media-manager/entities/media-manager.entity';
 import {
     CourseLearnerProgressPayloadDto,
     KnowledgeTestContributionDto,
@@ -205,20 +213,88 @@ export class CourseService {
         }
     }
 
-    private mapActiveCourseMaterials(
-        materials: CourseDetailDto['courseMaterials'],
-    ): CourseDetailDto['courseMaterials'] {
-        return (materials || [])
+    private mapActiveCourseMaterials<
+        T extends {
+            isActive?: boolean;
+            status?: MaterialStatus | string;
+            sortOrder?: number;
+        },
+    >(materials: T[] | undefined): T[] {
+        // Explicit generic keeps filter/sort typed and avoids returning any[]
+        // (CourseDetailDto.courseMaterials was previously any[], which tripped no-unsafe-return).
+        const source: T[] = materials ?? [];
+        return source
             .filter(
                 material =>
                     material.isActive !== false &&
-                    (material as { status?: MaterialStatus }).status !==
-                        MaterialStatus.DELETED,
+                    material.status !== MaterialStatus.DELETED,
             )
             .sort(
-                (a, b) =>
-                    (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+                (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
             );
+    }
+
+    /**
+     * Maps a TypeORM CourseMaterial entity to CourseMaterialResponseDto.
+     * Do not spread the entity — nested course.orgId is an Organization, while
+     * the DTO expects string ids (same shape as CourseMaterialsService.mapToResponseDto).
+     */
+    private mapCourseMaterialToResponseDto(
+        material: CourseMaterial,
+    ): CourseMaterialResponseDto {
+        return {
+            materialId: material.materialId,
+            title: material.title,
+            description: material.description,
+            mediaFile: material.mediaFile
+                ? {
+                      id: material.mediaFile.id,
+                      originalName: material.mediaFile.originalName,
+                      url: material.mediaFile.url,
+                      thumbnail: material.mediaFile.variants?.find(
+                          v => v?.variant === ImageVariant.THUMBNAIL,
+                      )?.url,
+                      medium: material.mediaFile.variants?.find(
+                          v => v?.variant === ImageVariant.MEDIUM,
+                      )?.url,
+                      original:
+                          material.mediaFile.variants?.find(
+                              v => v.variant === ImageVariant.ORIGINAL,
+                          )?.url || material.mediaFile.url,
+                      type: material.mediaFile.type,
+                      size: material.mediaFile.size,
+                      mimeType: material.mediaFile.mimeType,
+                      variants: material.mediaFile.variants,
+                  }
+                : undefined,
+            externalUrl: material.externalUrl,
+            type: material.type,
+            sortOrder: material.sortOrder,
+            isActive: material.isActive,
+            status: material.status,
+            courseId: material.courseId,
+            createdBy: material.createdBy,
+            updatedBy: material.updatedBy,
+            createdAt: material.createdAt,
+            updatedAt: material.updatedAt,
+            course: material.course
+                ? {
+                      courseId: material.course.courseId,
+                      title: material.course.title,
+                      description: material.course.description,
+                      orgId: material.course.orgId?.id,
+                      branchId: material.course.branchId?.id,
+                  }
+                : undefined,
+            creator: material.creator
+                ? {
+                      id: material.creator.id,
+                      firstName: material.creator.firstName,
+                      lastName: material.creator.lastName,
+                      email: material.creator.email,
+                  }
+                : undefined,
+        };
     }
 
     /**
@@ -828,12 +904,9 @@ export class CourseService {
                 ...course,
                 creator: course.creator,
                 courseMaterials: this.mapActiveCourseMaterials(
-                    (course.courseMaterials || []).map(material => ({
-                        ...material,
-                        creator: material.creator,
-                        updater: material.updater,
-                        mediaFile: material.mediaFile,
-                    })),
+                    (course.courseMaterials || []).map(material =>
+                        this.mapCourseMaterialToResponseDto(material),
+                    ),
                 ),
                 tests: (course.tests || [])
                     .filter(test => test.isActive)
@@ -899,7 +972,7 @@ export class CourseService {
         scope?: OrgBranchScope,
     ): Promise<CourseListResponseDto> {
         const fullFilters = { ...filters, createdBy: userId };
-        return this.findAll(fullFilters as CourseFilterDto, scope);
+        return this.findAll(fullFilters, scope);
     }
 
     async update(
@@ -908,7 +981,8 @@ export class CourseService {
         scope: OrgBranchScope,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            // Validate ownership (which also checks if course exists)
+            // Ownership check includes inactive/draft courses so activate/deactivate
+            // can run through this same update path (mobile sends { status: 'active' }).
             await this.validateOwnership(id, scope.userId, scope);
 
             // Update the course directly using repository since we already have validated access
@@ -920,6 +994,7 @@ export class CourseService {
                 throw new NotFoundException(`Course with ID ${id} not found`);
             }
 
+            const previousStatus = existingCourse.status;
             Object.assign(existingCourse, updateCourseDto);
             if (updateCourseDto.courseThumbnail === null) {
                 existingCourse.courseThumbnail = undefined;
@@ -950,9 +1025,18 @@ export class CourseService {
                 scope.branchId,
             );
 
-            this.logger.log(
-                `Course ${id} updated successfully by user ${scope.userId}`,
-            );
+            if (
+                updateCourseDto.status &&
+                updateCourseDto.status !== previousStatus
+            ) {
+                this.logger.log(
+                    `Course ${id} status changed from ${previousStatus} to ${updateCourseDto.status} by user ${scope.userId}`,
+                );
+            } else {
+                this.logger.log(
+                    `Course ${id} updated successfully by user ${scope.userId}`,
+                );
+            }
 
             return {
                 message: 'Course updated successfully',
@@ -1384,11 +1468,18 @@ export class CourseService {
         userId: string,
         scope?: OrgBranchScope,
     ): Promise<void> {
-        // Get course directly from repository to avoid circular calls
+        // Allow manage/update for any non-deleted course (active, inactive, draft).
+        // Previously this only matched ACTIVE, so reactivating an inactive course
+        // via PATCH update failed with "Course not found" even though the row existed.
+        // Soft-deleted courses must use restoreCourse / validateOwnershipWithDeleted.
         const course = await this.courseRepository.findOne({
             where: {
                 courseId,
-                status: CourseStatus.ACTIVE,
+                status: In([
+                    CourseStatus.ACTIVE,
+                    CourseStatus.INACTIVE,
+                    CourseStatus.DRAFT,
+                ]),
                 ...(scope?.orgId && { orgId: { id: scope.orgId } }),
                 ...(scope?.branchId && { branchId: { id: scope.branchId } }),
             },

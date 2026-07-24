@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { CourseMaterialResponseDto } from '../../course-materials/dto/course-material-response.dto';
 
 // Simplified creator DTO to avoid complex nested structures in Swagger
 export class CourseCreatorDto {
@@ -282,27 +283,10 @@ export class CourseDetailDto extends CourseResponseDto {
 
     @ApiProperty({
         description: 'Course materials',
-        type: 'array',
-        items: {
-            type: 'object',
-            properties: {
-                materialId: { type: 'number', example: 1 },
-                title: { type: 'string', example: 'Course Introduction' },
-                description: {
-                    type: 'string',
-                    example: 'Introduction to the course materials',
-                },
-                sortOrder: { type: 'number', example: 1 },
-                isActive: { type: 'boolean', example: true },
-                mediaFile: { type: 'object' },
-                creator: { type: 'object' },
-                createdAt: { type: 'string', format: 'date-time' },
-                updatedAt: { type: 'string', format: 'date-time' },
-            },
-        },
+        type: [CourseMaterialResponseDto],
         required: false,
     })
-    courseMaterials?: any[];
+    courseMaterials?: CourseMaterialResponseDto[];
 
     @ApiProperty({
         description: 'Course tests',

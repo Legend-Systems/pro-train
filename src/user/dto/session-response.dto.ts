@@ -84,6 +84,13 @@ export class UserResponseDto {
     email: string;
 
     @ApiProperty({
+        description: 'Unique username (optional sign-in identifier)',
+        example: 'jdoe',
+        required: false,
+    })
+    username?: string;
+
+    @ApiProperty({
         description: 'User first name',
         example: 'Brandon',
     })
