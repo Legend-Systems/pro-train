@@ -6,8 +6,38 @@
 
 ---
 
+## Colleague Rollout Message
+
+Copy and send the message below to colleagues ahead of next week’s rollout and training.
+
+---
+
+Good Day,
+
+We will be rolling out **ProTrain** — BIT Group’s employee training platform — **next week**. You will receive live training on how to use the platform, as **tests and exams will be conducted next week**. Please ensure you attend the session so you are ready to sign in, complete your assigned courses, and submit your assessments on time.
+
+If you are unable to make the scheduled session, the training **can be rescheduled for later today at 13:00 PM**.
+
+During training, I will walk you through the key features of ProTrain, including:
+
+- **Getting started** — signing in on the web app.
+- **Authentication & profile** — enhanced login that accepts either your **email or username**, plus profile updates (name, email, username, and password)
+- **Home dashboard** — upcoming exam reminders, your stats, assigned courses, and available tests
+- **Training & courses** — course materials (PDFs, videos), progress tracking, and the BitDrywall Technical Book download
+- **Tests & exam submission** — how to start, answer, and submit quizzes and exams (including pass mark and attempt limits)
+- **Results & leaderboard** — viewing past results, course knowledge scores, and XP rankings
+- **Email notifications** — reminders sent 3 days before and on the day of scheduled exams
+- **Account support** — updating your profile and resetting a forgotten password
+
+Please come prepared with your login details and a device (laptop or mobile phone) so you can follow along during the session.
+
+Thank you.
+
+---
+
 ## Table of Contents
 
+0. [Colleague Rollout Message](#colleague-rollout-message)
 1. [Getting Started](#1-getting-started)
 2. [Your Home Dashboard](#2-your-home-dashboard)
 3. [Training & Courses](#3-training--courses)

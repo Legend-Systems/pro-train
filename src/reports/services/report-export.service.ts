@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import PDFDocument from 'pdfkit';
+// pdfkit uses CommonJS (`module.exports = PDFDocument`); default import breaks at runtime
+// without esModuleInterop — use `import = require` so `new PDFDocument()` works in Nest.
+import PDFDocument = require('pdfkit');
 import type { AdminOverviewReportDto } from '../dto/admin-insights.dto';
 
 /** CSV attachment payload for admin report emails. */
