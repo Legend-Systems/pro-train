@@ -23,11 +23,21 @@ import {
     ApiForbiddenResponse,
     ApiHeader,
     ApiSecurity,
+    ApiOkResponse,
 } from '@nestjs/swagger';
 import { LeaderboardService } from './leaderboard.service';
+import { LeaderboardOverviewService } from './leaderboard-overview.service';
 import { LeaderboardResponseDto } from './dto/leaderboard-response.dto';
+import {
+    LeaderboardOverviewPeriod,
+    LeaderboardOverviewQueryDto,
+    LeaderboardOverviewResponseDto,
+} from './dto/leaderboard-overview.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import {
+    OrgBranchScope,
+    type OrgBranchScope as OrgBranchScopeType,
+} from '../auth/decorators/org-branch-scope.decorator';
 
 @ApiTags('🏆 Leaderboards & Competition Rankings')
 @Controller('leaderboards')
@@ -43,333 +53,111 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 export class LeaderboardController {
     private readonly logger = new Logger(LeaderboardController.name);
 
-    constructor(private readonly leaderboardService: LeaderboardService) {}
+    constructor(
+        private readonly leaderboardService: LeaderboardService,
+        private readonly leaderboardOverviewService: LeaderboardOverviewService,
+    ) {}
+
+    @Get()
+    @ApiOperation({
+        summary: 'Org course-points leaderboard with filters and insights',
+        description:
+            'Returns paginated course-score rankings for the organization. ' +
+            'Supports all-time (leaderboards table) or monthly (results by createdAt), ' +
+            'optional course/branch/search filters, summary cards, and improvers.',
+        operationId: 'getOrgLeaderboard',
+    })
+    @ApiOkResponse({ type: LeaderboardOverviewResponseDto })
+    @ApiUnauthorizedResponse({
+        description: 'Unauthorized - Invalid or missing JWT token',
+    })
+    async getOrgLeaderboard(
+        @Query() query: LeaderboardOverviewQueryDto,
+        @OrgBranchScope() scope: OrgBranchScopeType,
+    ): Promise<LeaderboardOverviewResponseDto> {
+        this.logger.log(
+            `Org leaderboard period=${query.period} month=${query.month} course=${query.courseId} user=${scope.userId}`,
+        );
+        return this.leaderboardOverviewService.getOverview(scope, query);
+    }
 
     @Get('course/:courseId')
     @ApiOperation({
-        summary: '🥇 Get Course Leaderboard',
-        description: `
-        **Retrieves comprehensive leaderboard rankings for a specific course**
-        
-        This endpoint provides detailed competitive analytics and rankings including:
-        - Student performance rankings
-        - Score comparisons and statistics
-        - Achievement levels and badges
-        - Performance trends and insights
-        - Participation metrics
-        
-        **Features:**
-        - Paginated results for efficient loading
-        - Real-time ranking calculations
-        - Multiple sorting and filtering options
-        - Performance analytics and insights
-        - Achievement recognition system
-        
-        **Gamification Elements:**
-        - Rank changes and improvements
-        - Achievement levels (beginner to expert)
-        - Performance badges and recognition
-        - Competition periods and cycles
-        - Social learning insights
-        
-        **Use Cases:**
-        - Student motivation and engagement
-        - Competitive learning environments
-        - Performance tracking and analytics
-        - Course effectiveness measurement
-        - Social learning features
-        `,
+        summary: 'Get course leaderboard with filters and insights',
         operationId: 'getCourseLeaderboard',
     })
     @ApiParam({
         name: 'courseId',
         type: Number,
-        description: 'Course identifier to retrieve leaderboard rankings',
+        description: 'Course identifier',
         example: 1,
     })
+    @ApiQuery({ name: 'page', required: false, type: Number })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
     @ApiQuery({
-        name: 'page',
-        type: Number,
-        description: 'Page number for pagination (starting from 1)',
+        name: 'period',
         required: false,
-        example: 1,
+        enum: LeaderboardOverviewPeriod,
     })
-    @ApiQuery({
-        name: 'limit',
-        type: Number,
-        description: 'Number of leaderboard entries per page (max 100)',
-        required: false,
-        example: 20,
-    })
-    @ApiResponse({
-        status: HttpStatus.OK,
-        description: '✅ Course leaderboard retrieved successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean', example: true },
-                message: {
-                    type: 'string',
-                    example: 'Leaderboard retrieved successfully',
-                },
-                data: {
-                    type: 'object',
-                    properties: {
-                        entries: {
-                            type: 'array',
-                            description: 'Leaderboard entries with rankings',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    leaderboardId: {
-                                        type: 'number',
-                                        example: 1,
-                                    },
-                                    userId: {
-                                        type: 'string',
-                                        example: 'user-123',
-                                    },
-                                    firstName: {
-                                        type: 'string',
-                                        example: 'John',
-                                    },
-                                    lastName: {
-                                        type: 'string',
-                                        example: 'Doe',
-                                    },
-                                    email: {
-                                        type: 'string',
-                                        example: 'brandon@orrbit.co.za',
-                                    },
-                                    totalScore: {
-                                        type: 'number',
-                                        example: 450,
-                                    },
-                                    rank: { type: 'number', example: 3 },
-                                    previousRank: {
-                                        type: 'number',
-                                        example: 5,
-                                    },
-                                    rankChange: { type: 'number', example: 2 },
-                                    testsCompleted: {
-                                        type: 'number',
-                                        example: 8,
-                                    },
-                                    averageScore: {
-                                        type: 'number',
-                                        example: 85.5,
-                                    },
-                                    achievementLevel: {
-                                        type: 'string',
-                                        example: 'intermediate',
-                                    },
-                                },
-                            },
-                        },
-                        metadata: {
-                            type: 'object',
-                            properties: {
-                                courseId: { type: 'number', example: 1 },
-                                courseTitle: {
-                                    type: 'string',
-                                    example: 'Web Development Bootcamp',
-                                },
-                                totalParticipants: {
-                                    type: 'number',
-                                    example: 150,
-                                },
-                                activeParticipants: {
-                                    type: 'number',
-                                    example: 120,
-                                },
-                                averageScore: { type: 'number', example: 75.2 },
-                                topScore: { type: 'number', example: 98.5 },
-                            },
-                        },
-                        total: { type: 'number', example: 150 },
-                        page: { type: 'number', example: 1 },
-                        limit: { type: 'number', example: 20 },
-                        totalPages: { type: 'number', example: 8 },
-                    },
-                },
-            },
-        },
-    })
+    @ApiQuery({ name: 'month', required: false, description: 'YYYY-MM' })
+    @ApiQuery({ name: 'branchId', required: false })
+    @ApiQuery({ name: 'search', required: false })
+    @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
+    @ApiOkResponse({ type: LeaderboardOverviewResponseDto })
     @ApiUnauthorizedResponse({
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        description: 'Unauthorized - Invalid or missing JWT token',
     })
     @ApiBadRequestResponse({
-        description: '❌ Invalid course ID or pagination parameters',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 400 },
-                message: { type: 'string', example: 'Invalid course ID' },
-                error: { type: 'string', example: 'Bad Request' },
-            },
-        },
+        description: 'Invalid course ID or pagination parameters',
     })
     @ApiNotFoundResponse({
-        description: '❌ Course not found or no leaderboard data available',
+        description: 'Course not found or no leaderboard data available',
     })
     async getCourseLeaderboard(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 10,
-        @OrgBranchScope() scope: OrgBranchScope,
-    ) {
+        @Query() query: LeaderboardOverviewQueryDto,
+        @OrgBranchScope() scope: OrgBranchScopeType,
+    ): Promise<LeaderboardOverviewResponseDto> {
         this.logger.log(
-            `Getting leaderboard for course: ${courseId}, page: ${page}, limit: ${limit}, user: ${scope.userId}`,
+            `Course leaderboard course=${courseId} period=${query.period} user=${scope.userId}`,
         );
 
         if (!courseId || courseId <= 0) {
             throw new BadRequestException('Invalid course ID');
         }
 
-        if (limit > 100) {
-            limit = 100;
-        }
-
-        return this.leaderboardService.getCourseLeaderboard(
+        return this.leaderboardOverviewService.getOverview(scope, {
+            ...query,
             courseId,
-            page,
-            limit,
-        );
+        });
     }
 
     @Get('my-rank/:courseId')
     @ApiOperation({
-        summary: '🎯 Get My Course Rank',
-        description: `
-        **Retrieves the authenticated user's current ranking and performance in a course**
-        
-        This endpoint provides personalized ranking information including:
-        - Current position in course leaderboard
-        - Performance metrics and statistics
-        - Rank change history and trends
-        - Achievement level and progress
-        - Comparative performance analysis
-        
-        **Personal Analytics:**
-        - Individual rank and position
-        - Score progression over time
-        - Performance compared to course average
-        - Achievement milestones reached
-        - Areas for improvement identification
-        
-        **Motivational Features:**
-        - Rank improvement tracking
-        - Achievement recognition
-        - Goal setting and progress monitoring
-        - Peer comparison insights
-        - Personalized recommendations
-        
-        **Use Cases:**
-        - Personal progress tracking
-        - Motivation and goal setting
-        - Performance self-assessment
-        - Learning path optimization
-        - Achievement recognition
-        `,
+        summary: 'Get my course rank',
         operationId: 'getMyRankInCourse',
     })
     @ApiParam({
         name: 'courseId',
         type: Number,
-        description: 'Course identifier to get user ranking',
+        description: 'Course identifier',
         example: 1,
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ User rank retrieved successfully',
+        description: 'User rank retrieved successfully',
         type: LeaderboardResponseDto,
-        schema: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean', example: true },
-                message: {
-                    type: 'string',
-                    example: 'User rank retrieved successfully',
-                },
-                data: {
-                    type: 'object',
-                    properties: {
-                        leaderboardId: { type: 'number', example: 1 },
-                        courseId: { type: 'number', example: 1 },
-                        userId: { type: 'string', example: 'user-123' },
-                        rank: { type: 'number', example: 15 },
-                        totalScore: { type: 'number', example: 420 },
-                        averageScore: { type: 'number', example: 84.0 },
-                        testsCompleted: { type: 'number', example: 5 },
-                        totalPoints: { type: 'number', example: 420 },
-                        lastUpdated: {
-                            type: 'string',
-                            example: '2025-01-15T14:30:00.000Z',
-                        },
-                        user: {
-                            type: 'object',
-                            properties: {
-                                id: { type: 'string', example: 'user-123' },
-                                username: {
-                                    type: 'string',
-                                    example: 'johndoe',
-                                },
-                                fullName: {
-                                    type: 'string',
-                                    example: 'John Doe',
-                                },
-                            },
-                        },
-                        course: {
-                            type: 'object',
-                            properties: {
-                                courseId: { type: 'number', example: 1 },
-                                title: {
-                                    type: 'string',
-                                    example: 'Web Development Bootcamp',
-                                },
-                                description: {
-                                    type: 'string',
-                                    example: 'Complete web development course',
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
     })
     @ApiUnauthorizedResponse({
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        description: 'Unauthorized - Invalid or missing JWT token',
     })
-    @ApiBadRequestResponse({
-        description: '❌ Invalid course ID',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 400 },
-                message: { type: 'string', example: 'Invalid course ID' },
-                error: { type: 'string', example: 'Bad Request' },
-            },
-        },
-    })
+    @ApiBadRequestResponse({ description: 'Invalid course ID' })
     @ApiNotFoundResponse({
-        description:
-            '❌ User not found in course leaderboard or course does not exist',
-        schema: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean', example: false },
-                message: {
-                    type: 'string',
-                    example: 'User not found in course leaderboard',
-                },
-            },
-        },
+        description: 'User not found in course leaderboard',
     })
     async getUserRank(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @OrgBranchScope() scope: OrgBranchScopeType,
     ): Promise<LeaderboardResponseDto | null> {
         this.logger.log(
             `Getting user rank for course: ${courseId}, user: ${scope.userId}`,
@@ -384,110 +172,29 @@ export class LeaderboardController {
 
     @Post('refresh/:courseId')
     @ApiOperation({
-        summary: '🔄 Refresh Course Leaderboard',
-        description: `
-        **Recalculates and updates the leaderboard rankings for a specific course**
-        
-        This endpoint handles comprehensive leaderboard refresh including:
-        - Real-time score recalculation
-        - Rank position updates
-        - Performance statistics refresh
-        - Achievement level reassessment
-        - Historical data consistency
-        
-        **Administrative Features:**
-        - Manual leaderboard refresh triggers
-        - Data consistency maintenance
-        - Performance recalculation
-        - Ranking algorithm updates
-        - System maintenance support
-        
-        **Technical Operations:**
-        - Aggregated score calculations
-        - Rank position algorithms
-        - Achievement level determination
-        - Performance metrics updates
-        - Cache invalidation and refresh
-        
-        **Access Control:**
-        - Restricted to administrators and instructors
-        - Course ownership validation
-        - Permission-based access control
-        - Audit logging for changes
-        
-        **Use Cases:**
-        - Administrative maintenance
-        - Data consistency fixes
-        - Performance optimization
-        - System updates and patches
-        - Manual ranking corrections
-        `,
+        summary: 'Refresh course leaderboard rankings',
         operationId: 'refreshCourseLeaderboard',
     })
     @ApiParam({
         name: 'courseId',
         type: Number,
-        description: 'Course identifier for leaderboard refresh',
+        description: 'Course identifier',
         example: 1,
     })
     @ApiResponse({
         status: HttpStatus.OK,
-        description: '✅ Leaderboard refreshed successfully',
-        schema: {
-            type: 'object',
-            properties: {
-                success: { type: 'boolean', example: true },
-                message: {
-                    type: 'string',
-                    example: 'Leaderboard refreshed successfully',
-                },
-                data: {
-                    type: 'object',
-                    properties: {
-                        courseId: { type: 'number', example: 1 },
-                        updatedEntries: { type: 'number', example: 45 },
-                        refreshedAt: {
-                            type: 'string',
-                            example: '2025-01-15T14:30:00.000Z',
-                        },
-                        processingTime: { type: 'number', example: 1.25 },
-                    },
-                },
-            },
-        },
+        description: 'Leaderboard refreshed successfully',
     })
     @ApiUnauthorizedResponse({
-        description: '🚫 Unauthorized - Invalid or missing JWT token',
+        description: 'Unauthorized - Invalid or missing JWT token',
     })
     @ApiForbiddenResponse({
-        description:
-            '🚷 Forbidden - Insufficient permissions to refresh leaderboard',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 403 },
-                message: {
-                    type: 'string',
-                    example: 'Insufficient permissions',
-                },
-                error: { type: 'string', example: 'Forbidden' },
-            },
-        },
+        description: 'Insufficient permissions to refresh leaderboard',
     })
-    @ApiBadRequestResponse({
-        description: '❌ Invalid course ID',
-        schema: {
-            type: 'object',
-            properties: {
-                statusCode: { type: 'number', example: 400 },
-                message: { type: 'string', example: 'Invalid course ID' },
-                error: { type: 'string', example: 'Bad Request' },
-            },
-        },
-    })
+    @ApiBadRequestResponse({ description: 'Invalid course ID' })
     async refreshLeaderboard(
         @Param('courseId', ParseIntPipe) courseId: number,
-        @OrgBranchScope() scope: OrgBranchScope,
+        @OrgBranchScope() scope: OrgBranchScopeType,
     ): Promise<{ message: string }> {
         this.logger.log(
             `Refreshing leaderboard for course: ${courseId} by user: ${scope.userId}`,

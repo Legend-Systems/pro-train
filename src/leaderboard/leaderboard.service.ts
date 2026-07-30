@@ -256,20 +256,12 @@ export class LeaderboardService {
     }
 
     private async getPreviousRank(
-        userId: string,
-        courseId: number,
+        _userId: string,
+        _courseId: number,
     ): Promise<number | null> {
-        // This would typically come from a rank history table
-        // For now, we'll simulate by adding some variance
-        const currentEntry = await this.leaderboardRepository.findOne({
-            where: { userId, courseId },
-        });
-
-        if (!currentEntry) return null;
-
-        // Simulate previous rank (in a real implementation, store rank history)
-        const variance = Math.floor(Math.random() * 5) - 2; // -2 to +2
-        return Math.max(1, currentEntry.rank + variance);
+        // Period-over-period deltas live on GET /leaderboards (overview service).
+        // Per-entry course snapshots do not store rank history.
+        return null;
     }
 
     private async calculatePerformanceAnalytics(
