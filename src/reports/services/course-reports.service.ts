@@ -195,7 +195,8 @@ export class CourseReportsService {
             .where('t.courseId = :courseId', { courseId })
             .andWhere('ta.attemptNumber = 1')
             .andWhere('ta.status = :status', { status: 'submitted' })
-            .andWhere('r.score >= 70') // Assuming 70% is passing
+            // Pass mark raised from 70% score assumption to Result.passed (80% threshold)
+            .andWhere('r.passed = true')
             .getCount();
 
         const totalFirstAttempts = await this.testAttemptRepository
@@ -237,7 +238,8 @@ export class CourseReportsService {
             .select('t.title')
             .addSelect('COUNT(ta.attemptId)', 'totalAttempts')
             .addSelect(
-                'COUNT(CASE WHEN r.score >= 70 THEN 1 END)',
+                // Pass mark raised from 70% score assumption to Result.passed (80% threshold)
+                'COUNT(CASE WHEN r.passed = true THEN 1 END)',
                 'successfulAttempts',
             )
             .groupBy('t.testId, t.title')

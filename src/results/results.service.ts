@@ -28,6 +28,10 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
 import { UserRole } from '../user/entities/user.entity';
 import { RewardsService } from '../rewards/rewards.service';
+import {
+    PASSING_SCORE_PERCENTAGE,
+    isPassingPercentage,
+} from './constants/passing-score.constants';
 import { TrainingHoursService } from '../training-hours/training-hours.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
@@ -231,8 +235,8 @@ export class ResultsService {
                 percentage,
             });
 
-            // Determine if passed (assuming 60% pass rate)
-            const passed = percentage >= 60;
+            // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
+            const passed = isPassingPercentage(percentage);
 
             // Ensure we have org/branch data - inherit from attempt or use defaults
             let orgId = attempt.orgId;
@@ -1879,7 +1883,8 @@ export class ResultsService {
                 score,
                 maxScore,
                 percentage,
-                passed: percentage >= 60, // Assuming 60% pass rate
+                // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
+                passed: isPassingPercentage(percentage),
                 calculatedAt: new Date(),
             });
 
@@ -2669,7 +2674,9 @@ export class ResultsService {
                 organizationId: attempt.orgId?.id || result.orgId?.id,
                 // Additional data for better display
                 scoreDisplay: `${Number(result.score) || 0}/${Number(result.maxScore) || questionCount}`,
-                isPassed: percentage >= 60,
+                // Pass mark raised from 60% to 80%; drives Passed/Failed copy in results-summary emails
+                isPassed: isPassingPercentage(percentage),
+                passingScore: PASSING_SCORE_PERCENTAGE,
             };
 
             this.logger.debug(
@@ -2733,7 +2740,8 @@ export class ResultsService {
                 testType: result.test.testType,
                 durationMinutes: result.test.durationMinutes,
                 maxAttempts: result.test.maxAttempts || 1,
-                passingScore: 60, // Default value (not in Test entity)
+                // Pass mark raised from 60% to 80%; Test entity has no per-test override
+                passingScore: PASSING_SCORE_PERCENTAGE,
                 totalQuestions: additionalStats.totalQuestions,
                 totalPoints: result.maxScore,
                 status: result.test.isActive ? 'active' : 'inactive',

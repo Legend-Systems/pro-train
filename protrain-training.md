@@ -252,12 +252,12 @@ If a test has a **duration** (e.g. 60 minutes):
 
 ### Pass mark
 
-You **pass** a test when your score is **60% or higher**.
+You **pass** a test when your score is **80% or higher**.
 
 | Score | Result |
 |-------|--------|
-| **≥ 60%** | **Passed** |
-| **< 60%** | **Failed** — you may retake if attempts remain |
+| **≥ 80%** | **Passed** |
+| **< 80%** | **Failed** — you may retake if attempts remain |
 
 ### After submission
 
@@ -678,7 +678,7 @@ Use this agenda for a live 60–90 minute session:
 | 5 | Test types | Explain Exam vs Quiz vs Training |
 | 6 | Take a sample quiz | Walk through start → answer → submit |
 | 7 | Max attempts | Show attempt counter on test card |
-| 8 | Pass mark (60%) | Show a sample result — pass vs fail |
+| 8 | Pass mark (80%) | Show a sample result — pass vs fail |
 | 9 | Mandatory exams | Show exam checklist on course page |
 | 10 | Knowledge Score | Explain latest-score average |
 | 11 | Results | Open Past Results and a detail view |

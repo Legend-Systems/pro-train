@@ -20,6 +20,7 @@ import {
 } from './interfaces/template.interface';
 import { EmailType } from './entities/communication.entity';
 import { EmailStatus } from './entities/communication.entity';
+import { PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
 
 @Injectable()
 export class CommunicationsService {
@@ -918,6 +919,8 @@ export class CommunicationsService {
         organizationId?: string;
         scoreDisplay?: string;
         isPassed?: boolean;
+        /** Global minimum percentage required to pass (raised from 60% to 80%). */
+        passingScore?: number;
     }): Promise<void> {
         try {
             const baseData = this.getBaseTemplateData(
@@ -1175,6 +1178,8 @@ export class CommunicationsService {
                 hasTimeLimit: !!durationMinutes,
                 hasExpiry: !!expiresAt,
                 hasCustomMessage: !!message,
+                // Pass mark raised from 60% to 80%; shown in test-invitation templates
+                passingScore: PASSING_SCORE_PERCENTAGE,
                 organizationName: orgData.organization?.name,
                 organizationLogo: orgData.organization?.logoUrl,
                 organizationWebsite: orgData.organization?.website,

@@ -56,7 +56,7 @@ async function bootstrap() {
 
     // Setup Swagger documentation
     const config = new DocumentBuilder()
-        .setTitle('trainpro api playground')
+        .setTitle('protrain api playground')
         .setDescription(
             `🚀 **trainpro api playground** - Interactive Learning Management & Assessment Platform
 

@@ -30,6 +30,7 @@ import {
     AttemptStatus,
 } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
+import { isPassingPercentage, PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 import { RetryService } from '../common/services/retry.service';
@@ -575,10 +576,9 @@ export class TestService {
             highestScore = Math.max(...percentages);
             lowestScore = Math.min(...percentages);
 
-            // Calculate pass rate (assuming 70% is passing)
-            const passingGrade = 70;
-            const passedCount = percentages.filter(
-                p => p >= passingGrade,
+            // Pass mark raised from 70% (local assumption) to global 80%
+            const passedCount = percentages.filter(p =>
+                isPassingPercentage(p),
             ).length;
             passRate = (passedCount / results.length) * 100;
 
@@ -1053,7 +1053,8 @@ export class TestService {
                 content: {
                     totalQuestions,
                     totalPoints,
-                    passingPercentage: 70, // Default passing percentage
+                    // Pass mark raised from 70% default to global 80%
+                    passingPercentage: PASSING_SCORE_PERCENTAGE,
                     showCorrectAnswers: false, // Default value
                     shuffleQuestions: true, // Default value
                 },

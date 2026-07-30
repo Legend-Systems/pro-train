@@ -148,7 +148,7 @@ export class TrainingProgress {
         "testId": 15,
         "title": "JavaScript Fundamentals Assessment",
         "maxScore": 100,
-        "passingScore": 70
+        "passingScore": 80
       },
       "learningMetrics": {
         "averageTimePerQuestion": 8.0,

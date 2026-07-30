@@ -27,6 +27,7 @@ import { Branch } from '../branch/entities/branch.entity';
 import { Test, TestType } from '../test/entities/test.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
+import { isPassingPercentage } from '../results/constants/passing-score.constants';
 import { UserService } from '../user/user.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseCreatedEvent } from '../common/events';
@@ -1188,9 +1189,9 @@ export class CourseService {
                         );
                         averageScore = totalScore / results.length;
 
-                        // Calculate pass rate (assuming 60% is passing)
-                        const passedResults = results.filter(
-                            result => result.score >= 60,
+                        // Pass mark raised from 60% to 80%; use percentage (not raw score)
+                        const passedResults = results.filter(result =>
+                            isPassingPercentage(Number(result.percentage) || 0),
                         );
                         passRate =
                             (passedResults.length / results.length) * 100;

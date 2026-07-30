@@ -81,7 +81,9 @@ export class TemplateTestingService {
                     feedback:
                         'Great job! You have a solid understanding of JavaScript fundamentals. Consider reviewing array methods for improvement.',
                     scoreDisplay: '85/100',
+                    // Pass mark raised from 60% to 80%; sample score 85% is a pass
                     isPassed: true,
+                    passingScore: 80,
                 } as ResultsSummaryTemplateData;
 
             case EmailType.COURSE_ENROLLMENT:

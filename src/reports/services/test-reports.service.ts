@@ -125,7 +125,7 @@ export class TestReportsService {
 
         const averageScore = Number(avgScoreResult?.avgScore || 0);
 
-        // Calculate pass rate (assuming 70% is passing)
+        // Calculate pass rate from stored Result.passed (set at 80% pass mark)
         const passedResults = await this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')

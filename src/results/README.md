@@ -183,7 +183,7 @@ export class Result {
       "curvedScore": 87.2,
       "weightedScore": 85.5,
       "passingStatus": true,
-      "passingThreshold": 70.0,
+      "passingThreshold": 80.0,
       "questionsCorrect": 21,
       "questionsIncorrect": 4,
       "questionsTotal": 25,
@@ -376,7 +376,7 @@ export class Result {
       "title": "JavaScript Fundamentals Quiz",
       "totalQuestions": 25,
       "maxScore": 100,
-      "passingScore": 70
+      "passingScore": 80
     },
     "overallStatistics": {
       "totalAttempts": 125,
