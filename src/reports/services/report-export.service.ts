@@ -2,7 +2,15 @@ import { Injectable } from '@nestjs/common';
 // pdfkit uses CommonJS (`module.exports = PDFDocument`); default import breaks at runtime
 // without esModuleInterop — use `import = require` so `new PDFDocument()` works in Nest.
 import PDFDocument = require('pdfkit');
-import type { AdminOverviewReportDto } from '../dto/admin-insights.dto';
+import type {
+    AdminOverviewReportDto,
+    AdminRankingEntryDto,
+} from '../dto/admin-insights.dto';
+import {
+    DEFAULT_REPORT_SECTIONS,
+    isMotivationalSelection,
+    ReportSection,
+} from '../constants/report-sections.constant';
 
 /** CSV attachment payload for admin report emails. */
 export interface AdminReportCsvAttachment {
@@ -20,129 +28,74 @@ export interface AdminReportPdfAttachment {
     pageCount: number;
 }
 
+/** Motivational copy blocks injected into the report email body. */
+export interface AdminReportDigest {
+    leaderboardLines: string[];
+    risingStarsLines: string[];
+    branchChampionLines: string[];
+    celebrationHeadline: string;
+}
+
+/** Per-block visibility flags consumed by the admin report email template. */
+export interface AdminReportEmailVisibility {
+    showAverageKnowledgeScore: boolean;
+    showOverallPassRate: boolean;
+    showActiveLearners: boolean;
+    showTrainingHours: boolean;
+    showAttentionSummary: boolean;
+    showTestCompletion: boolean;
+}
+
+/**
+ * Person-row rendering mode.
+ *
+ * `motivational` reports celebrate participation, so rows carry rank and tests
+ * completed instead of an average score that could expose a weak performer.
+ */
+interface PersonRowStyle {
+    isMotivational: boolean;
+    rankByUserId: Map<string, AdminRankingEntryDto>;
+}
+
+/** Y position past which a new PDF page is started before writing. */
+const PDF_PAGE_BREAK_Y = 720;
+
+/** Y position past which a list row starts a new page. */
+const PDF_ROW_BREAK_Y = 740;
+
+/** Rankings are chunked so a huge org does not produce an unreadable wall. */
+const PDF_RANKING_PAGE_BREAK_Y = 745;
+
 /**
  * Builds CSV and PDF summaries from admin overview payloads.
+ *
+ * Every section is opt-in: callers pass the resolved `ReportSection` list so a
+ * leaderboard-only report never renders diagnostic sections such as
+ * "Needs support" or "Key areas needing training".
  */
 @Injectable()
 export class ReportExportService {
     /**
-     * Flattens overview KPIs and key lists into a multi-section CSV string.
+     * Flattens the selected sections into a multi-section CSV string.
+     * Leaderboard rows intentionally omit average score and pass rate.
      */
-    buildOverviewCsv(overview: AdminOverviewReportDto): AdminReportCsvAttachment {
+    buildOverviewCsv(
+        overview: AdminOverviewReportDto,
+        sections: readonly ReportSection[] = DEFAULT_REPORT_SECTIONS,
+    ): AdminReportCsvAttachment {
+        const selected = new Set(sections);
+        const style = this.buildPersonRowStyle(overview, sections);
         const lines: string[] = [];
         const stamp = new Date().toISOString().slice(0, 10);
 
-        lines.push('Section,Metric,Value');
-        lines.push(
-            this.row('KPIs', 'Average knowledge score', overview.kpis.averageKnowledgeScore),
-        );
-        lines.push(
-            this.row('KPIs', 'Overall pass rate', overview.kpis.overallPassRate),
-        );
-        lines.push(this.row('KPIs', 'Total results', overview.kpis.totalResults));
-        lines.push(
-            this.row('KPIs', 'Active learners', overview.kpis.activeLearners),
-        );
-        lines.push(
-            this.row('KPIs', 'Training hours', overview.kpis.totalTrainingHours),
-        );
-        lines.push(
-            this.row('KPIs', 'At-risk users', overview.kpis.atRiskUserCount),
-        );
-        lines.push(
-            this.row(
-                'KPIs',
-                'High-potential users',
-                overview.kpis.highPotentialUserCount,
-            ),
-        );
-        lines.push(this.row('KPIs', 'Key areas', overview.kpis.keyAreaCount));
-        lines.push('');
-
-        lines.push('Section,Name,Branch,AverageScore,PassRate,Results');
-        overview.topPerformers.forEach(p => {
-            lines.push(
-                this.row(
-                    'Top performers',
-                    `${p.firstName} ${p.lastName}`,
-                    p.branchName ?? '',
-                    p.averageScore,
-                    p.passRate,
-                    p.resultsCount,
-                ),
-            );
-        });
-        overview.worstPerformers.forEach(p => {
-            lines.push(
-                this.row(
-                    'Needs support',
-                    `${p.firstName} ${p.lastName}`,
-                    p.branchName ?? '',
-                    p.averageScore,
-                    p.passRate,
-                    p.resultsCount,
-                ),
-            );
-        });
-        lines.push('');
-
-        lines.push('Section,Test,Course,Failed,Passed,PassRate,AverageScore');
-        overview.mostFailedTests.forEach(t => {
-            lines.push(
-                this.row(
-                    'Most failed tests',
-                    t.testTitle,
-                    t.courseTitle ?? '',
-                    t.failedCount,
-                    t.passedCount,
-                    t.passRate,
-                    t.averageScore,
-                ),
-            );
-        });
-        overview.mostPassedTests.forEach(t => {
-            lines.push(
-                this.row(
-                    'Most passed tests',
-                    t.testTitle,
-                    t.courseTitle ?? '',
-                    t.failedCount,
-                    t.passedCount,
-                    t.passRate,
-                    t.averageScore,
-                ),
-            );
-        });
-        lines.push('');
-
-        lines.push('Section,Title,Type,FailureRate,AverageScore,Signals');
-        overview.keyAreas.forEach(area => {
-            lines.push(
-                this.row(
-                    'Key areas',
-                    area.title,
-                    area.areaType,
-                    area.failureRate,
-                    area.averageScore,
-                    area.signals.join('; '),
-                ),
-            );
-        });
-        lines.push('');
-
-        lines.push('Section,Branch,AverageScore,PassRate,Hours,Learners');
-        overview.branchComparison.forEach(b => {
-            lines.push(
-                this.row(
-                    'Branch comparison',
-                    b.branchName,
-                    b.averageScore,
-                    b.passRate,
-                    b.totalHours,
-                    b.activeLearners,
-                ),
-            );
-        });
+        this.appendKpiCsv(lines, overview, selected);
+        this.appendRankingsCsv(lines, overview, selected);
+        this.appendBranchTopPerformersCsv(lines, overview, selected);
+        this.appendTopScorersCsv(lines, overview, selected);
+        this.appendPerformerCsv(lines, overview, selected, style);
+        this.appendTestCsv(lines, overview, selected);
+        this.appendKeyAreaCsv(lines, overview, selected);
+        this.appendBranchComparisonCsv(lines, overview, selected);
 
         const content = lines.join('\n');
         const rowCount = lines.filter(
@@ -158,12 +111,15 @@ export class ReportExportService {
     }
 
     /**
-     * Builds a multi-page PDF summary suitable for email attachment.
+     * Builds a multi-page PDF containing only the selected sections.
      */
     async buildOverviewPdf(
         overview: AdminOverviewReportDto,
         reportTitle = 'ProTrain Admin Report',
+        sections: readonly ReportSection[] = DEFAULT_REPORT_SECTIONS,
     ): Promise<AdminReportPdfAttachment> {
+        const selected = new Set(sections);
+        const style = this.buildPersonRowStyle(overview, sections);
         const stamp = new Date().toISOString().slice(0, 10);
         const doc = new PDFDocument({
             margin: 48,
@@ -190,76 +146,18 @@ export class ReportExportService {
             doc.on('error', reject);
         });
 
-        doc.fillColor('#413DFB')
-            .fontSize(20)
-            .text(reportTitle, { align: 'left' });
-        doc.moveDown(0.4);
-        doc.fillColor('#6b7280')
-            .fontSize(10)
-            .text(
-                `Timeframe: ${overview.timeframe}  ·  Generated: ${overview.generatedAt.toISOString()}`,
-            );
-        doc.moveDown(1);
-
-        this.writePdfHeading(doc, 'Key performance indicators');
-        this.writePdfKpiGrid(doc, [
-            ['Avg knowledge score', `${overview.kpis.averageKnowledgeScore}%`],
-            ['Pass rate', `${overview.kpis.overallPassRate}%`],
-            ['Active learners', String(overview.kpis.activeLearners)],
-            ['Training hours', `${overview.kpis.totalTrainingHours}h`],
-            ['At-risk users', String(overview.kpis.atRiskUserCount)],
-            [
-                'High-potential users',
-                String(overview.kpis.highPotentialUserCount),
-            ],
-            ['Key areas', String(overview.kpis.keyAreaCount)],
-            ['Total results', String(overview.kpis.totalResults)],
-        ]);
-
-        this.writePdfHeading(doc, 'Top performers');
-        this.writePdfPeopleList(
-            doc,
-            overview.topPerformers.slice(0, 10).map(p => ({
-                name: `${p.firstName} ${p.lastName}`,
-                detail: `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
-            })),
-        );
-
-        this.writePdfHeading(doc, 'Needs support');
-        this.writePdfPeopleList(
-            doc,
-            overview.worstPerformers.slice(0, 8).map(p => ({
-                name: `${p.firstName} ${p.lastName}`,
-                detail: `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
-            })),
-        );
-
-        this.writePdfHeading(doc, 'Key areas needing training');
-        this.writePdfPeopleList(
-            doc,
-            overview.keyAreas.slice(0, 10).map(area => ({
-                name: area.title,
-                detail: `${area.areaType} · failure ${area.failureRate}% · avg ${area.averageScore}%`,
-            })),
-        );
-
-        this.writePdfHeading(doc, 'Branch comparison');
-        this.writePdfPeopleList(
-            doc,
-            overview.branchComparison.slice(0, 12).map(b => ({
-                name: b.branchName,
-                detail: `avg ${b.averageScore}% · pass ${b.passRate}% · ${b.totalHours}h · ${b.activeLearners} learners`,
-            })),
-        );
-
-        this.writePdfHeading(doc, 'High-potential shout-outs');
-        this.writePdfPeopleList(
-            doc,
-            overview.highPotentialUsers.slice(0, 8).map(p => ({
-                name: `${p.firstName} ${p.lastName}`,
-                detail: `${p.branchName ?? 'No branch'} · ${p.averageScore}% · Δ ${p.improvementDelta >= 0 ? '+' : ''}${p.improvementDelta}`,
-            })),
-        );
+        this.writePdfTitle(doc, reportTitle, overview);
+        this.writePdfKpiSection(doc, overview, selected);
+        this.writePdfCompletionSection(doc, overview, selected);
+        this.writePdfTopScorersSection(doc, overview, selected);
+        this.writePdfBranchTopPerformersSection(doc, overview, selected);
+        this.writePdfRankingsSection(doc, overview, selected);
+        this.writePdfTopPerformersSection(doc, overview, selected, style);
+        this.writePdfHighPotentialSection(doc, overview, selected, style);
+        this.writePdfBranchComparisonSection(doc, overview, selected);
+        this.writePdfTestSections(doc, overview, selected);
+        this.writePdfNeedsSupportSection(doc, overview, selected);
+        this.writePdfKeyAreasSection(doc, overview, selected);
 
         doc.end();
         const content = await done;
@@ -273,67 +171,916 @@ export class ReportExportService {
     }
 
     /**
-     * Builds richer motivational digest lines for email templates.
+     * Builds motivational digest lines for the email body.
+     * Leaderboard lines use rank + tests completed rather than scores.
      */
-    buildMotivationalDigest(overview: AdminOverviewReportDto): {
-        leaderboardLines: string[];
-        risingStarsLines: string[];
-        branchChampionLines: string[];
-        celebrationHeadline: string;
-    } {
-        const leaderboardLines = overview.topPerformers
-            .slice(0, 8)
-            .map((person, index) => {
-                const branch = person.branchName
-                    ? ` · ${person.branchName}`
-                    : '';
-                return `${index + 1}. ${person.firstName} ${person.lastName}${branch} — ${person.averageScore}% (pass ${person.passRate}%)`;
-            });
+    buildMotivationalDigest(
+        overview: AdminOverviewReportDto,
+        sections: readonly ReportSection[] = DEFAULT_REPORT_SECTIONS,
+    ): AdminReportDigest {
+        const selected = new Set(sections);
 
-        const risingStarsLines = overview.highPotentialUsers
-            .slice(0, 5)
-            .map(person => {
-                const delta =
-                    person.improvementDelta >= 0
-                        ? `+${person.improvementDelta}`
-                        : String(person.improvementDelta);
-                return `${person.firstName} ${person.lastName} — ${person.averageScore}% (improvement ${delta})`;
-            });
+        const leaderboardLines = selected.has(ReportSection.LEADERBOARD_RANKINGS)
+            ? (overview.fullRankings ?? []).slice(0, 8).map(entry => {
+                  const branch = entry.branchName ? ` · ${entry.branchName}` : '';
+                  return `#${entry.rank} ${entry.firstName} ${entry.lastName}${branch} — ${entry.testsCompleted} tests completed, ${entry.testsPassed} passed`;
+              })
+            : [];
 
-        const sortedBranches = [...overview.branchComparison].sort(
-            (a, b) => b.averageScore - a.averageScore,
-        );
-        const branchChampionLines = sortedBranches.slice(0, 3).map(branch => {
-            return `${branch.branchName} — avg ${branch.averageScore}% · pass ${branch.passRate}% · ${branch.activeLearners} learners`;
-        });
+        const risingStarsLines = selected.has(ReportSection.HIGH_POTENTIAL_USERS)
+            ? overview.highPotentialUsers.slice(0, 5).map(person => {
+                  const delta =
+                      person.improvementDelta >= 0
+                          ? `+${person.improvementDelta}`
+                          : String(person.improvementDelta);
+                  return `${person.firstName} ${person.lastName} — improvement ${delta}`;
+              })
+            : [];
 
-        const topName = overview.topPerformers[0]
-            ? `${overview.topPerformers[0].firstName} ${overview.topPerformers[0].lastName}`
-            : null;
-        const celebrationHeadline = topName
-            ? `Celebrate ${topName} and this period’s learning champions`
-            : 'Celebrate this period’s learning champions';
+        const branchChampionLines = selected.has(
+            ReportSection.BRANCH_TOP_PERFORMERS,
+        )
+            ? (overview.branchTopPerformers ?? []).slice(0, 6).map(branch => {
+                  const names = branch.topPerformers
+                      .map(
+                          person =>
+                              `${person.firstName} ${person.lastName} (#${person.branchRank})`,
+                      )
+                      .join(', ');
+                  return `${branch.branchName} — ${names}`;
+              })
+            : [];
 
         return {
             leaderboardLines,
             risingStarsLines,
             branchChampionLines,
-            celebrationHeadline,
+            celebrationHeadline: this.buildCelebrationHeadline(
+                overview,
+                selected,
+            ),
         };
     }
 
-    private writePdfHeading(
-        doc: PDFKit.PDFDocument,
-        title: string,
+    /**
+     * Maps selected sections onto email-template visibility flags so the
+     * emailed summary matches the attached PDF/CSV exactly.
+     */
+    buildEmailVisibility(
+        sections: readonly ReportSection[] = DEFAULT_REPORT_SECTIONS,
+    ): AdminReportEmailVisibility {
+        const selected = new Set(sections);
+        const hasOverview = selected.has(ReportSection.ADMIN_OVERVIEW);
+
+        return {
+            showAverageKnowledgeScore:
+                hasOverview &&
+                selected.has(ReportSection.KPI_AVERAGE_KNOWLEDGE_SCORE),
+            showOverallPassRate:
+                hasOverview && selected.has(ReportSection.KPI_OVERALL_PASS_RATE),
+            showActiveLearners:
+                hasOverview && selected.has(ReportSection.KPI_ACTIVE_LEARNERS),
+            showTrainingHours:
+                hasOverview && selected.has(ReportSection.KPI_TRAINING_HOURS),
+            showAttentionSummary:
+                selected.has(ReportSection.KPI_AT_RISK_USERS) ||
+                selected.has(ReportSection.KPI_KEY_AREAS),
+            showTestCompletion: selected.has(ReportSection.TEST_COMPLETION),
+        };
+    }
+
+    // ─── CSV sections ──────────────────────────────────────────────────
+
+    private appendKpiCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
     ): void {
+        if (!selected.has(ReportSection.ADMIN_OVERVIEW)) {
+            return;
+        }
+
+        const kpiRows: Array<[ReportSection, string, number]> = [
+            [
+                ReportSection.KPI_AVERAGE_KNOWLEDGE_SCORE,
+                'Average knowledge score',
+                overview.kpis.averageKnowledgeScore,
+            ],
+            [
+                ReportSection.KPI_OVERALL_PASS_RATE,
+                'Overall pass rate',
+                overview.kpis.overallPassRate,
+            ],
+            [
+                ReportSection.KPI_TOTAL_RESULTS,
+                'Total results',
+                overview.kpis.totalResults,
+            ],
+            [
+                ReportSection.KPI_ACTIVE_LEARNERS,
+                'Active learners',
+                overview.kpis.activeLearners,
+            ],
+            [
+                ReportSection.KPI_TRAINING_HOURS,
+                'Training hours',
+                overview.kpis.totalTrainingHours,
+            ],
+            [
+                ReportSection.KPI_AT_RISK_USERS,
+                'At-risk users',
+                overview.kpis.atRiskUserCount,
+            ],
+            [
+                ReportSection.KPI_HIGH_POTENTIAL_USERS,
+                'High-potential users',
+                overview.kpis.highPotentialUserCount,
+            ],
+            [
+                ReportSection.KPI_KEY_AREAS,
+                'Key areas',
+                overview.kpis.keyAreaCount,
+            ],
+        ].filter(([section]) =>
+            selected.has(section as ReportSection),
+        ) as Array<[ReportSection, string, number]>;
+
+        if (kpiRows.length === 0) {
+            return;
+        }
+
+        lines.push('Section,Metric,Value');
+        kpiRows.forEach(([, label, value]) => {
+            lines.push(this.row('KPIs', label, value));
+        });
+
+        if (
+            selected.has(ReportSection.TEST_COMPLETION) &&
+            overview.testCompletion
+        ) {
+            lines.push(
+                this.row(
+                    'KPIs',
+                    'Tests completed this period',
+                    overview.testCompletion.totalTestsCompleted,
+                ),
+            );
+            lines.push(
+                this.row(
+                    'KPIs',
+                    'Tests passed this period',
+                    overview.testCompletion.totalTestsPassed,
+                ),
+            );
+            lines.push(
+                this.row(
+                    'KPIs',
+                    'Average tests per learner',
+                    overview.testCompletion.averageTestsPerLearner,
+                ),
+            );
+        }
+
+        lines.push('');
+    }
+
+    private appendRankingsCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        const rankings = overview.fullRankings ?? [];
+        if (
+            !selected.has(ReportSection.LEADERBOARD_RANKINGS) ||
+            rankings.length === 0
+        ) {
+            return;
+        }
+
+        // Rank-focused columns only — no average score or pass rate.
+        lines.push(
+            'Section,Rank,Name,Surname,Branch,BranchRank,Points,TestsCompleted,TestsPassed',
+        );
+        rankings.forEach(entry => {
+            lines.push(
+                this.row(
+                    'Full rankings',
+                    entry.rank,
+                    entry.firstName,
+                    entry.lastName,
+                    entry.branchName ?? 'No branch',
+                    entry.branchRank,
+                    entry.totalPoints,
+                    entry.testsCompleted,
+                    entry.testsPassed,
+                ),
+            );
+        });
+        lines.push('');
+    }
+
+    private appendBranchTopPerformersCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        const branches = overview.branchTopPerformers ?? [];
+        if (
+            !selected.has(ReportSection.BRANCH_TOP_PERFORMERS) ||
+            branches.length === 0
+        ) {
+            return;
+        }
+
+        lines.push(
+            'Section,Branch,BranchRank,Name,Surname,Points,TestsCompleted,TestsPassed',
+        );
+        branches.forEach(branch => {
+            branch.topPerformers.forEach(person => {
+                lines.push(
+                    this.row(
+                        'Branch top 3',
+                        branch.branchName,
+                        person.branchRank,
+                        person.firstName,
+                        person.lastName,
+                        person.totalPoints,
+                        person.testsCompleted,
+                        person.testsPassed,
+                    ),
+                );
+            });
+        });
+        lines.push('');
+    }
+
+    private appendTopScorersCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        const topScorers = overview.topScorers ?? [];
+        if (!selected.has(ReportSection.TOP_SCORERS) || topScorers.length === 0) {
+            return;
+        }
+
+        lines.push('Section,Name,Surname,Branch,Test,Course,HighestScore');
+        topScorers.forEach(scorer => {
+            lines.push(
+                this.row(
+                    'Highest test scores',
+                    scorer.firstName,
+                    scorer.lastName,
+                    scorer.branchName ?? 'No branch',
+                    scorer.testTitle,
+                    scorer.courseTitle ?? '',
+                    scorer.scorePercentage,
+                ),
+            );
+        });
+        lines.push('');
+    }
+
+    private appendPerformerCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+        style: PersonRowStyle,
+    ): void {
+        const showTop = selected.has(ReportSection.TOP_PERFORMERS);
+        const showSupport = selected.has(ReportSection.NEEDS_SUPPORT);
+        const showAtRisk = selected.has(ReportSection.AT_RISK_USERS);
+        const showHighPotential = selected.has(ReportSection.HIGH_POTENTIAL_USERS);
+
+        if (!showTop && !showSupport && !showAtRisk && !showHighPotential) {
+            return;
+        }
+
+        if (style.isMotivational) {
+            this.appendMotivationalPerformerCsv(lines, overview, selected, style);
+            return;
+        }
+
+        lines.push('Section,Name,Branch,AverageScore,PassRate,Results');
+        if (showTop) {
+            overview.topPerformers.forEach(p => {
+                lines.push(
+                    this.row(
+                        'Top performers',
+                        `${p.firstName} ${p.lastName}`,
+                        p.branchName ?? '',
+                        p.averageScore,
+                        p.passRate,
+                        p.resultsCount,
+                    ),
+                );
+            });
+        }
+        if (showHighPotential) {
+            overview.highPotentialUsers.forEach(p => {
+                lines.push(
+                    this.row(
+                        'High potential',
+                        `${p.firstName} ${p.lastName}`,
+                        p.branchName ?? '',
+                        p.averageScore,
+                        p.improvementDelta,
+                        p.resultsCount,
+                    ),
+                );
+            });
+        }
+        if (showSupport) {
+            overview.worstPerformers.forEach(p => {
+                lines.push(
+                    this.row(
+                        'Needs support',
+                        `${p.firstName} ${p.lastName}`,
+                        p.branchName ?? '',
+                        p.averageScore,
+                        p.passRate,
+                        p.resultsCount,
+                    ),
+                );
+            });
+        }
+        if (showAtRisk) {
+            overview.atRiskUsers.forEach(p => {
+                lines.push(
+                    this.row(
+                        'At risk',
+                        `${p.firstName} ${p.lastName}`,
+                        p.branchName ?? '',
+                        p.averageScore,
+                        p.improvementDelta,
+                        p.resultsCount,
+                    ),
+                );
+            });
+        }
+        lines.push('');
+    }
+
+    /**
+     * Recognition rows for leaderboard reports: rank, branch and tests only.
+     * Diagnostic groups never reach here — they are stripped from the selection.
+     */
+    private appendMotivationalPerformerCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+        style: PersonRowStyle,
+    ): void {
+        lines.push(
+            'Section,Rank,Name,Surname,Branch,TestsCompleted,TestsPassed',
+        );
+
+        const append = (
+            section: string,
+            people: ReadonlyArray<{
+                userId: string;
+                firstName: string;
+                lastName: string;
+                branchName?: string | null;
+            }>,
+        ): void => {
+            people.forEach(person => {
+                const ranking = style.rankByUserId.get(person.userId);
+                lines.push(
+                    this.row(
+                        section,
+                        ranking?.rank ?? '',
+                        person.firstName,
+                        person.lastName,
+                        person.branchName ?? 'No branch',
+                        ranking?.testsCompleted ?? 0,
+                        ranking?.testsPassed ?? 0,
+                    ),
+                );
+            });
+        };
+
+        if (selected.has(ReportSection.TOP_PERFORMERS)) {
+            append('Top performers', overview.topPerformers);
+        }
+        if (selected.has(ReportSection.HIGH_POTENTIAL_USERS)) {
+            append('High potential', overview.highPotentialUsers);
+        }
+        lines.push('');
+    }
+
+    private appendTestCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        const showFailed = selected.has(ReportSection.MOST_FAILED_TESTS);
+        const showPassed = selected.has(ReportSection.MOST_PASSED_TESTS);
+        if (!showFailed && !showPassed) {
+            return;
+        }
+
+        lines.push('Section,Test,Course,Failed,Passed,PassRate,AverageScore');
+        if (showPassed) {
+            overview.mostPassedTests.forEach(t => {
+                lines.push(
+                    this.row(
+                        'Most passed tests',
+                        t.testTitle,
+                        t.courseTitle ?? '',
+                        t.failedCount,
+                        t.passedCount,
+                        t.passRate,
+                        t.averageScore,
+                    ),
+                );
+            });
+        }
+        if (showFailed) {
+            overview.mostFailedTests.forEach(t => {
+                lines.push(
+                    this.row(
+                        'Most failed tests',
+                        t.testTitle,
+                        t.courseTitle ?? '',
+                        t.failedCount,
+                        t.passedCount,
+                        t.passRate,
+                        t.averageScore,
+                    ),
+                );
+            });
+        }
+        lines.push('');
+    }
+
+    private appendKeyAreaCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.KEY_AREAS)) {
+            return;
+        }
+
+        lines.push('Section,Title,Type,FailureRate,AverageScore,Signals');
+        overview.keyAreas.forEach(area => {
+            lines.push(
+                this.row(
+                    'Key areas',
+                    area.title,
+                    area.areaType,
+                    area.failureRate,
+                    area.averageScore,
+                    area.signals.join('; '),
+                ),
+            );
+        });
+        lines.push('');
+    }
+
+    private appendBranchComparisonCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.BRANCH_COMPARISON)) {
+            return;
+        }
+
+        lines.push('Section,Branch,AverageScore,PassRate,Hours,Learners');
+        overview.branchComparison.forEach(b => {
+            lines.push(
+                this.row(
+                    'Branch comparison',
+                    b.branchName,
+                    b.averageScore,
+                    b.passRate,
+                    b.totalHours,
+                    b.activeLearners,
+                ),
+            );
+        });
+    }
+
+    // ─── PDF sections ──────────────────────────────────────────────────
+
+    private writePdfTitle(
+        doc: PDFKit.PDFDocument,
+        reportTitle: string,
+        overview: AdminOverviewReportDto,
+    ): void {
+        doc.fillColor('#413DFB').fontSize(20).text(reportTitle, { align: 'left' });
+        doc.moveDown(0.4);
+        doc.fillColor('#6b7280')
+            .fontSize(10)
+            .text(
+                `Timeframe: ${overview.timeframe}  ·  Generated: ${overview.generatedAt.toISOString()}`,
+            );
+        doc.moveDown(1);
+    }
+
+    private writePdfKpiSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.ADMIN_OVERVIEW)) {
+            return;
+        }
+
+        const items: Array<[string, string]> = [];
+        const push = (
+            section: ReportSection,
+            label: string,
+            value: string,
+        ): void => {
+            if (selected.has(section)) {
+                items.push([label, value]);
+            }
+        };
+
+        push(
+            ReportSection.KPI_AVERAGE_KNOWLEDGE_SCORE,
+            'Avg knowledge score',
+            `${overview.kpis.averageKnowledgeScore}%`,
+        );
+        push(
+            ReportSection.KPI_OVERALL_PASS_RATE,
+            'Pass rate',
+            `${overview.kpis.overallPassRate}%`,
+        );
+        push(
+            ReportSection.KPI_ACTIVE_LEARNERS,
+            'Active learners',
+            String(overview.kpis.activeLearners),
+        );
+        push(
+            ReportSection.KPI_TRAINING_HOURS,
+            'Training hours',
+            `${overview.kpis.totalTrainingHours}h`,
+        );
+        push(
+            ReportSection.KPI_AT_RISK_USERS,
+            'At-risk users',
+            String(overview.kpis.atRiskUserCount),
+        );
+        push(
+            ReportSection.KPI_HIGH_POTENTIAL_USERS,
+            'High-potential users',
+            String(overview.kpis.highPotentialUserCount),
+        );
+        push(
+            ReportSection.KPI_KEY_AREAS,
+            'Key areas',
+            String(overview.kpis.keyAreaCount),
+        );
+        push(
+            ReportSection.KPI_TOTAL_RESULTS,
+            'Total results',
+            String(overview.kpis.totalResults),
+        );
+
+        if (items.length === 0) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Key performance indicators');
+        this.writePdfKpiGrid(doc, items);
+    }
+
+    private writePdfCompletionSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (
+            !selected.has(ReportSection.TEST_COMPLETION) ||
+            !overview.testCompletion
+        ) {
+            return;
+        }
+
+        const completion = overview.testCompletion;
+        this.writePdfHeading(doc, 'Training activity this period');
+        this.writePdfKpiGrid(doc, [
+            ['Tests completed', String(completion.totalTestsCompleted)],
+            ['Tests passed', String(completion.totalTestsPassed)],
+            ['Learners taking part', String(completion.participatingLearners)],
+            [
+                'Average tests per learner',
+                String(completion.averageTestsPerLearner),
+            ],
+        ]);
+    }
+
+    private writePdfTopScorersSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TOP_SCORERS)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Highest test scores');
+        this.writePdfPeopleList(
+            doc,
+            (overview.topScorers ?? []).map(scorer => ({
+                name: `${scorer.firstName} ${scorer.lastName} — ${scorer.scorePercentage}%`,
+                detail: `${scorer.testTitle}${scorer.courseTitle ? ` · ${scorer.courseTitle}` : ''} · ${scorer.branchName ?? 'No branch'}`,
+            })),
+            'No test scores recorded for this period yet.',
+        );
+    }
+
+    private writePdfBranchTopPerformersSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.BRANCH_TOP_PERFORMERS)) {
+            return;
+        }
+
+        const branches = overview.branchTopPerformers ?? [];
+        this.writePdfHeading(doc, 'Top 3 per branch');
+
+        if (branches.length === 0) {
+            doc.fontSize(10)
+                .fillColor('#6b7280')
+                .text('No branch rankings available yet.');
+            return;
+        }
+
+        branches.forEach(branch => {
+            if (doc.y > PDF_ROW_BREAK_Y) {
+                doc.addPage();
+            }
+            doc.fontSize(11).fillColor('#413DFB').text(branch.branchName);
+            branch.topPerformers.forEach(person => {
+                if (doc.y > PDF_ROW_BREAK_Y) {
+                    doc.addPage();
+                }
+                doc.fontSize(10)
+                    .fillColor('#111827')
+                    .text(
+                        `  #${person.branchRank}  ${person.firstName} ${person.lastName}`,
+                    );
+                doc.fontSize(9)
+                    .fillColor('#6b7280')
+                    .text(
+                        `      ${person.testsCompleted} tests completed · ${person.testsPassed} passed`,
+                    );
+            });
+            doc.moveDown(0.4);
+        });
+    }
+
+    private writePdfRankingsSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.LEADERBOARD_RANKINGS)) {
+            return;
+        }
+
+        const rankings = overview.fullRankings ?? [];
+        this.writePdfHeading(doc, 'Full rankings');
+
+        if (rankings.length === 0) {
+            doc.fontSize(10)
+                .fillColor('#6b7280')
+                .text('No learners are ranked yet.');
+            return;
+        }
+
+        this.writeRankingTableHeader(doc);
+        rankings.forEach(entry => {
+            if (doc.y > PDF_RANKING_PAGE_BREAK_Y) {
+                doc.addPage();
+                this.writeRankingTableHeader(doc);
+            }
+            this.writeRankingRow(doc, entry);
+        });
+    }
+
+    private writePdfTopPerformersSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+        style: PersonRowStyle,
+    ): void {
+        if (!selected.has(ReportSection.TOP_PERFORMERS)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Top performers');
+        this.writePdfPeopleList(
+            doc,
+            overview.topPerformers.slice(0, 10).map(p => ({
+                name: `${p.firstName} ${p.lastName}`,
+                detail: style.isMotivational
+                    ? this.motivationalDetail(p, style)
+                    : `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
+            })),
+        );
+    }
+
+    private writePdfHighPotentialSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+        style: PersonRowStyle,
+    ): void {
+        if (!selected.has(ReportSection.HIGH_POTENTIAL_USERS)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'High-potential shout-outs');
+        this.writePdfPeopleList(
+            doc,
+            overview.highPotentialUsers.slice(0, 8).map(p => ({
+                name: `${p.firstName} ${p.lastName}`,
+                detail: style.isMotivational
+                    ? this.motivationalDetail(p, style)
+                    : `${p.branchName ?? 'No branch'} · improvement ${p.improvementDelta >= 0 ? '+' : ''}${p.improvementDelta}`,
+            })),
+        );
+    }
+
+    private writePdfBranchComparisonSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.BRANCH_COMPARISON)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Branch comparison');
+        this.writePdfPeopleList(
+            doc,
+            overview.branchComparison.slice(0, 12).map(b => ({
+                name: b.branchName,
+                detail: `avg ${b.averageScore}% · pass ${b.passRate}% · ${b.totalHours}h · ${b.activeLearners} learners`,
+            })),
+        );
+    }
+
+    private writePdfTestSections(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (selected.has(ReportSection.MOST_PASSED_TESTS)) {
+            this.writePdfHeading(doc, 'Most passed tests');
+            this.writePdfPeopleList(
+                doc,
+                overview.mostPassedTests.slice(0, 10).map(t => ({
+                    name: t.testTitle,
+                    detail: `${t.courseTitle ?? 'Unassigned course'} · ${t.passedCount} passed · pass ${t.passRate}%`,
+                })),
+            );
+        }
+
+        if (selected.has(ReportSection.MOST_FAILED_TESTS)) {
+            this.writePdfHeading(doc, 'Most failed tests');
+            this.writePdfPeopleList(
+                doc,
+                overview.mostFailedTests.slice(0, 10).map(t => ({
+                    name: t.testTitle,
+                    detail: `${t.courseTitle ?? 'Unassigned course'} · ${t.failedCount} failed · pass ${t.passRate}%`,
+                })),
+            );
+        }
+    }
+
+    private writePdfNeedsSupportSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (selected.has(ReportSection.NEEDS_SUPPORT)) {
+            this.writePdfHeading(doc, 'Needs support');
+            this.writePdfPeopleList(
+                doc,
+                overview.worstPerformers.slice(0, 8).map(p => ({
+                    name: `${p.firstName} ${p.lastName}`,
+                    detail: `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
+                })),
+            );
+        }
+
+        if (selected.has(ReportSection.AT_RISK_USERS)) {
+            this.writePdfHeading(doc, 'At-risk learners');
+            this.writePdfPeopleList(
+                doc,
+                overview.atRiskUsers.slice(0, 8).map(p => ({
+                    name: `${p.firstName} ${p.lastName}`,
+                    detail: `${p.branchName ?? 'No branch'} · ${p.riskReasons.join(' · ')}`,
+                })),
+            );
+        }
+    }
+
+    private writePdfKeyAreasSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.KEY_AREAS)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Key areas needing training');
+        this.writePdfPeopleList(
+            doc,
+            overview.keyAreas.slice(0, 10).map(area => ({
+                name: area.title,
+                detail: `${area.areaType} · failure ${area.failureRate}% · avg ${area.averageScore}%`,
+            })),
+        );
+    }
+
+    // ─── PDF primitives ────────────────────────────────────────────────
+
+    private writeRankingTableHeader(doc: PDFKit.PDFDocument): void {
+        const y = doc.y;
+        doc.fontSize(9).fillColor('#6b7280');
+        doc.text('#', 48, y, { width: 34 });
+        doc.text('Name', 82, y, { width: 150 });
+        doc.text('Surname', 232, y, { width: 130 });
+        doc.text('Branch', 362, y, { width: 130 });
+        doc.text('Tests', 492, y, { width: 60, align: 'right' });
+        doc.moveDown(0.4);
+        doc.strokeColor('#ede9fe')
+            .moveTo(doc.page.margins.left, doc.y)
+            .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+            .stroke();
+        doc.moveDown(0.3);
+    }
+
+    private writeRankingRow(
+        doc: PDFKit.PDFDocument,
+        entry: AdminRankingEntryDto,
+    ): void {
+        const y = doc.y;
+        doc.fontSize(9.5).fillColor('#111827');
+        doc.text(`#${entry.rank}`, 48, y, { width: 34 });
+        doc.text(entry.firstName, 82, y, { width: 150, ellipsis: true });
+        doc.text(entry.lastName, 232, y, { width: 130, ellipsis: true });
+        doc.fillColor('#6b7280').text(entry.branchName ?? 'No branch', 362, y, {
+            width: 130,
+            ellipsis: true,
+        });
+        doc.fillColor('#111827').text(
+            `${entry.testsPassed}/${entry.testsCompleted}`,
+            492,
+            y,
+            { width: 60, align: 'right' },
+        );
+        doc.moveDown(0.35);
+    }
+
+    /**
+     * Decides how person rows are rendered and indexes the rankings so any
+     * section can show a learner's rank and test totals without re-querying.
+     */
+    private buildPersonRowStyle(
+        overview: AdminOverviewReportDto,
+        sections: readonly ReportSection[],
+    ): PersonRowStyle {
+        return {
+            isMotivational: isMotivationalSelection(sections),
+            rankByUserId: new Map(
+                (overview.fullRankings ?? []).map(entry => [entry.userId, entry]),
+            ),
+        };
+    }
+
+    /** Rank + branch + tests, with no score that could embarrass a learner. */
+    private motivationalDetail(
+        person: { userId: string; branchName?: string | null },
+        style: PersonRowStyle,
+    ): string {
+        const branch = person.branchName ?? 'No branch';
+        const ranking = style.rankByUserId.get(person.userId);
+        if (!ranking) {
+            return branch;
+        }
+        return `Rank #${ranking.rank} · ${branch} · ${ranking.testsPassed}/${ranking.testsCompleted} tests passed`;
+    }
+
+    private writePdfHeading(doc: PDFKit.PDFDocument, title: string): void {
         doc.moveDown(0.6);
-        if (doc.y > 720) {
+        if (doc.y > PDF_PAGE_BREAK_Y) {
             doc.addPage();
         }
-        doc.fillColor('#111827').fontSize(13).text(title);
+        doc.fillColor('#111827').fontSize(13).text(title, doc.page.margins.left);
         doc.moveDown(0.3);
-        doc
-            .strokeColor('#ede9fe')
+        doc.strokeColor('#ede9fe')
             .moveTo(doc.page.margins.left, doc.y)
             .lineTo(doc.page.width - doc.page.margins.right, doc.y)
             .stroke();
@@ -356,23 +1103,45 @@ export class ReportExportService {
     private writePdfPeopleList(
         doc: PDFKit.PDFDocument,
         rows: Array<{ name: string; detail: string }>,
+        emptyMessage = 'No data for this period.',
     ): void {
         if (rows.length === 0) {
-            doc.fontSize(10).fillColor('#6b7280').text('No data for this period.');
+            doc.fontSize(10).fillColor('#6b7280').text(emptyMessage);
             return;
         }
         rows.forEach(row => {
-            if (doc.y > 740) {
+            if (doc.y > PDF_ROW_BREAK_Y) {
                 doc.addPage();
             }
             doc.fontSize(10)
                 .fillColor('#111827')
                 .text(row.name, { continued: false });
-            doc.fontSize(9)
-                .fillColor('#6b7280')
-                .text(row.detail);
+            doc.fontSize(9).fillColor('#6b7280').text(row.detail);
             doc.moveDown(0.25);
         });
+    }
+
+    // ─── Shared helpers ────────────────────────────────────────────────
+
+    private buildCelebrationHeadline(
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): string {
+        const leader = selected.has(ReportSection.LEADERBOARD_RANKINGS)
+            ? overview.fullRankings?.[0]
+            : undefined;
+        if (leader) {
+            return `Celebrate ${leader.firstName} ${leader.lastName} and this period’s learning champions`;
+        }
+
+        const topPerformer = selected.has(ReportSection.TOP_PERFORMERS)
+            ? overview.topPerformers[0]
+            : undefined;
+        if (topPerformer) {
+            return `Celebrate ${topPerformer.firstName} ${topPerformer.lastName} and this period’s learning champions`;
+        }
+
+        return 'Celebrate this period’s learning champions';
     }
 
     private row(...cells: Array<string | number>): string {

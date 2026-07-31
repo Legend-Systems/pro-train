@@ -235,6 +235,115 @@ export class AdminLeaderboardEntryDto {
     courseTitle: string | null;
 }
 
+/**
+ * One learner's standing in the organization-wide leaderboard.
+ * Deliberately achievement-only: no average score or pass-rate is exposed at
+ * row level so full rankings can be shared without embarrassing anyone.
+ */
+export class AdminRankingEntryDto {
+    @ApiProperty()
+    userId: string;
+
+    @ApiProperty()
+    firstName: string;
+
+    @ApiProperty()
+    lastName: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    branchId: string | null;
+
+    @ApiPropertyOptional({ nullable: true })
+    branchName: string | null;
+
+    @ApiProperty({ description: 'Dense rank across the organization' })
+    rank: number;
+
+    @ApiProperty({ description: 'Rank within the learner\u2019s own branch' })
+    branchRank: number;
+
+    @ApiProperty()
+    totalPoints: number;
+
+    @ApiProperty({ description: 'Tests with a recorded result' })
+    testsCompleted: number;
+
+    @ApiProperty()
+    testsPassed: number;
+}
+
+/** Celebratory top 3 for a single branch. */
+export class AdminBranchTopPerformersDto {
+    @ApiProperty()
+    branchId: string;
+
+    @ApiProperty()
+    branchName: string;
+
+    @ApiProperty({ type: [AdminRankingEntryDto] })
+    topPerformers: AdminRankingEntryDto[];
+}
+
+/** Highest single test score achieved in the reporting window. */
+export class AdminTopScorerDto {
+    @ApiProperty()
+    userId: string;
+
+    @ApiProperty()
+    firstName: string;
+
+    @ApiProperty()
+    lastName: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    branchName: string | null;
+
+    @ApiProperty()
+    testId: number;
+
+    @ApiProperty()
+    testTitle: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    courseTitle: string | null;
+
+    @ApiProperty({ description: 'Best percentage achieved on this test' })
+    scorePercentage: number;
+
+    @ApiProperty()
+    achievedAt: Date;
+}
+
+/** Org-level completion totals used for the motivational summary. */
+export class AdminTestCompletionSummaryDto {
+    @ApiProperty()
+    totalTestsCompleted: number;
+
+    @ApiProperty()
+    totalTestsPassed: number;
+
+    @ApiProperty()
+    participatingLearners: number;
+
+    @ApiProperty()
+    averageTestsPerLearner: number;
+}
+
+/** Bundle of leaderboard-only datasets used by motivational reports. */
+export class AdminLeaderboardInsightsDto {
+    @ApiProperty({ type: [AdminRankingEntryDto] })
+    fullRankings: AdminRankingEntryDto[];
+
+    @ApiProperty({ type: [AdminBranchTopPerformersDto] })
+    branchTopPerformers: AdminBranchTopPerformersDto[];
+
+    @ApiProperty({ type: [AdminTopScorerDto] })
+    topScorers: AdminTopScorerDto[];
+
+    @ApiProperty({ type: AdminTestCompletionSummaryDto })
+    testCompletion: AdminTestCompletionSummaryDto;
+}
+
 export class AdminBranchComparisonDto {
     @ApiProperty()
     branchId: string;
@@ -453,6 +562,22 @@ export class AdminOverviewReportDto {
 
     @ApiProperty({ type: [AdminEffectivenessTrendPointDto] })
     effectivenessTrends: AdminEffectivenessTrendPointDto[];
+
+    /**
+     * Leaderboard datasets are resolved lazily — only reports that select a
+     * leaderboard section pay the cost of the extra queries.
+     */
+    @ApiPropertyOptional({ type: [AdminRankingEntryDto] })
+    fullRankings?: AdminRankingEntryDto[];
+
+    @ApiPropertyOptional({ type: [AdminBranchTopPerformersDto] })
+    branchTopPerformers?: AdminBranchTopPerformersDto[];
+
+    @ApiPropertyOptional({ type: [AdminTopScorerDto] })
+    topScorers?: AdminTopScorerDto[];
+
+    @ApiPropertyOptional({ type: AdminTestCompletionSummaryDto })
+    testCompletion?: AdminTestCompletionSummaryDto;
 
     @ApiProperty()
     generatedAt: Date;

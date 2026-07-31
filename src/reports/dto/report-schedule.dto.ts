@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
-    ArrayNotEmpty,
     IsArray,
     IsBoolean,
     IsEmail,
@@ -19,6 +18,11 @@ import {
 } from 'class-validator';
 import { ReportScheduleFrequency } from '../entities/report-schedule.entity';
 import { ReportRunStatus } from '../entities/report-run.entity';
+import {
+    ALL_REPORT_SECTIONS,
+    ReportPreset,
+    ReportSection,
+} from '../constants/report-sections.constant';
 
 /** Supported report type keys included in a schedule. */
 export const ADMIN_REPORT_TYPE_VALUES = [
@@ -36,14 +40,42 @@ export class CreateReportScheduleDto {
     @MaxLength(160)
     name: string;
 
-    @ApiProperty({
+    @ApiPropertyOptional({
         type: [String],
+        description: 'Legacy report slices. Prefer `reportPreset` + `sections`.',
         example: ['overview', 'performers', 'key-areas'],
     })
+    @IsOptional()
     @IsArray()
-    @ArrayNotEmpty()
     @IsString({ each: true })
-    reportTypes: string[];
+    reportTypes?: string[];
+
+    @ApiPropertyOptional({
+        enum: ReportPreset,
+        default: ReportPreset.ADMIN,
+        description:
+            'Leaderboard reports automatically exclude sections that highlight individual underperformance.',
+    })
+    @IsOptional()
+    @IsEnum(ReportPreset)
+    reportPreset?: ReportPreset;
+
+    @ApiPropertyOptional({
+        type: [String],
+        enum: ALL_REPORT_SECTIONS,
+        isArray: true,
+        description:
+            'Explicit sections to include. Omit to use the preset defaults.',
+        example: [
+            ReportSection.ADMIN_OVERVIEW,
+            ReportSection.LEADERBOARD_RANKINGS,
+            ReportSection.TOP_SCORERS,
+        ],
+    })
+    @IsOptional()
+    @IsArray()
+    @IsEnum(ReportSection, { each: true })
+    sections?: ReportSection[];
 
     @ApiPropertyOptional({ type: Object })
     @IsOptional()
@@ -146,6 +178,22 @@ export class GenerateAdminReportDto {
     @IsString({ each: true })
     reportTypes?: string[];
 
+    @ApiPropertyOptional({ enum: ReportPreset, default: ReportPreset.ADMIN })
+    @IsOptional()
+    @IsEnum(ReportPreset)
+    reportPreset?: ReportPreset;
+
+    @ApiPropertyOptional({
+        type: [String],
+        enum: ALL_REPORT_SECTIONS,
+        isArray: true,
+        description: 'Explicit sections to include. Omit to use preset defaults.',
+    })
+    @IsOptional()
+    @IsArray()
+    @IsEnum(ReportSection, { each: true })
+    sections?: ReportSection[];
+
     @ApiPropertyOptional({ default: true })
     @IsOptional()
     @IsBoolean()
@@ -194,6 +242,15 @@ export class ReportScheduleResponseDto {
 
     @ApiProperty({ type: [String] })
     reportTypes: string[];
+
+    @ApiProperty({ enum: ReportPreset })
+    reportPreset: ReportPreset;
+
+    @ApiProperty({
+        type: [String],
+        description: 'Resolved sections this schedule will render',
+    })
+    sections: string[];
 
     @ApiPropertyOptional()
     filters?: Record<string, unknown> | null;

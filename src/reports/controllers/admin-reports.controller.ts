@@ -23,6 +23,11 @@ import {
 
 import { Roles } from '../../auth/decorators/roles.decorator';
 import {
+    ALL_REPORT_SECTIONS,
+    ReportPreset,
+    resolveReportSections,
+} from '../constants/report-sections.constant';
+import {
     OrgBranchScope,
     type OrgBranchScope as OrgBranchScopeType,
 } from '../../auth/decorators/org-branch-scope.decorator';
@@ -39,6 +44,7 @@ import {
     AdminKeyAreaDto,
     AdminKnowledgeImprovementDto,
     AdminLeaderboardEntryDto,
+    AdminLeaderboardInsightsDto,
     AdminOverviewReportDto,
     AdminPassRateDto,
     AdminPerformerDto,
@@ -226,6 +232,28 @@ export class AdminReportsController {
         return this.ok('Leaderboards retrieved successfully', data);
     }
 
+    @Get('leaderboard-insights')
+    @ApiOperation({
+        summary: 'Motivational leaderboard datasets',
+        description:
+            'Full organization rankings, top 3 per branch, highest test scores, and completion totals. Contains no per-user average score or pass rate.',
+    })
+    @ApiOkResponse({ type: AdminLeaderboardInsightsDto })
+    @ApiQuery({ name: 'branchId', required: false })
+    @ApiQuery({ name: 'timeframe', required: false, enum: ['week', 'month'] })
+    @ApiQuery({ name: 'limit', required: false, example: 10 })
+    async getLeaderboardInsights(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query() filters: AdminReportFiltersDto,
+    ): Promise<StandardApiResponse<AdminLeaderboardInsightsDto>> {
+        const data =
+            await this.adminInsightsReportsService.getLeaderboardInsights(
+                scope,
+                filters,
+            );
+        return this.ok('Leaderboard insights retrieved successfully', data);
+    }
+
     @Get('branch-comparison')
     @ApiOperation({ summary: 'Branch performance comparison' })
     @ApiQuery({ name: 'timeframe', required: false, enum: ['week', 'month'] })
@@ -354,12 +382,32 @@ export class AdminReportsController {
     // ─── Scheduling / generate / preview ───────────────────────────────
 
     @Get('preview')
-    @ApiOperation({ summary: 'Preview admin report payload (no email)' })
+    @ApiOperation({
+        summary: 'Preview admin report payload (no email)',
+        description:
+            'Returns exactly the data the PDF/CSV would contain for the given preset and sections.',
+    })
+    @ApiQuery({ name: 'reportPreset', required: false, enum: ReportPreset })
+    @ApiQuery({
+        name: 'sections',
+        required: false,
+        isArray: true,
+        enum: ALL_REPORT_SECTIONS,
+    })
     async previewReport(
         @OrgBranchScope() scope: OrgBranchScopeType,
         @Query() filters: AdminReportFiltersDto,
-    ): Promise<StandardApiResponse<unknown>> {
-        const data = await this.reportScheduleService.preview(scope, filters);
+        @Query('reportPreset') reportPreset?: ReportPreset,
+        @Query('sections') sections?: string | string[],
+    ): Promise<StandardApiResponse<AdminOverviewReportDto>> {
+        const data = await this.reportScheduleService.preview(
+            scope,
+            filters,
+            resolveReportSections({
+                preset: reportPreset,
+                sections: this.toStringArray(sections),
+            }),
+        );
         return this.ok('Report preview generated successfully', data);
     }
 
@@ -464,6 +512,14 @@ export class AdminReportsController {
             scheduleId,
         );
         return this.ok('Report runs retrieved successfully', data);
+    }
+
+    /** Normalises a repeated query param that Express may collapse to a string. */
+    private toStringArray(value?: string | string[]): string[] {
+        if (!value) {
+            return [];
+        }
+        return Array.isArray(value) ? value : value.split(',');
     }
 
     private ok<T>(message: string, data: T): StandardApiResponse<T> {

@@ -19,7 +19,16 @@ import {
     SetReportScheduleActiveDto,
     UpdateReportScheduleDto,
 } from '../dto/report-schedule.dto';
-import { AdminReportFiltersDto } from '../dto/admin-insights.dto';
+import {
+    AdminOverviewReportDto,
+    AdminReportFiltersDto,
+} from '../dto/admin-insights.dto';
+import {
+    ReportPreset,
+    ReportSection,
+    requiresLeaderboardInsights,
+    resolveReportSections,
+} from '../constants/report-sections.constant';
 import {
     ReportSchedule,
     ReportScheduleFrequency,
@@ -58,11 +67,20 @@ export class ReportScheduleService {
         const orgId = this.requireOrg(scope);
         this.assertHasRecipients(dto);
 
+        const reportPreset = dto.reportPreset ?? ReportPreset.ADMIN;
+        const sections = resolveReportSections({
+            preset: reportPreset,
+            sections: dto.sections,
+            legacyReportTypes: dto.reportTypes,
+        });
+
         const schedule = this.scheduleRepository.create({
             orgId,
             createdByUserId: scope.userId,
             name: dto.name,
-            reportTypes: dto.reportTypes,
+            reportTypes: dto.reportTypes ?? [],
+            reportPreset,
+            sections,
             filters: dto.filters ?? null,
             frequency: dto.frequency,
             dayOfWeek:
@@ -145,9 +163,26 @@ export class ReportScheduleService {
             });
         }
 
+        const reportPreset = dto.reportPreset ?? schedule.reportPreset;
+        // Re-resolve whenever content inputs change so the leaderboard preset
+        // can strip newly added sensitive sections.
+        const shouldResolveSections =
+            dto.reportPreset !== undefined ||
+            dto.sections !== undefined ||
+            dto.reportTypes !== undefined;
+
         Object.assign(schedule, {
             name: dto.name ?? schedule.name,
             reportTypes: dto.reportTypes ?? schedule.reportTypes,
+            reportPreset,
+            sections: shouldResolveSections
+                ? resolveReportSections({
+                      preset: reportPreset,
+                      sections: dto.sections ?? schedule.sections,
+                      legacyReportTypes:
+                          dto.reportTypes ?? schedule.reportTypes,
+                  })
+                : schedule.sections,
             filters: dto.filters !== undefined ? dto.filters : schedule.filters,
             frequency: dto.frequency ?? schedule.frequency,
             dayOfWeek:
@@ -249,6 +284,11 @@ export class ReportScheduleService {
             scope,
             scheduleId: null,
             filters: (dto.filters as AdminReportFiltersDto) ?? {},
+            sections: resolveReportSections({
+                preset: dto.reportPreset ?? ReportPreset.ADMIN,
+                sections: dto.sections,
+                legacyReportTypes: dto.reportTypes,
+            }),
             includeCsv: dto.includeCsv ?? true,
             includePdf: dto.includePdf ?? false,
             includeMotivationalLeaderboard:
@@ -261,12 +301,45 @@ export class ReportScheduleService {
         });
     }
 
-    /** Preview = overview payload (no email). */
+    /**
+     * Preview = overview payload (no email), enriched with leaderboard data
+     * so the caller can render exactly what the PDF/CSV would contain.
+     */
     async preview(
         scope: OrgBranchScope,
         filters: AdminReportFiltersDto = {},
-    ): Promise<unknown> {
-        return this.adminInsightsReportsService.getOverview(scope, filters);
+        sections: ReportSection[] = resolveReportSections({
+            preset: ReportPreset.ADMIN,
+        }),
+    ): Promise<AdminOverviewReportDto> {
+        return this.buildReportPayload(scope, filters, sections);
+    }
+
+    /**
+     * Loads the overview and, only when a leaderboard section is selected,
+     * the heavier full-ranking datasets.
+     */
+    private async buildReportPayload(
+        scope: OrgBranchScope,
+        filters: AdminReportFiltersDto,
+        sections: readonly ReportSection[],
+    ): Promise<AdminOverviewReportDto> {
+        const overview = await this.adminInsightsReportsService.getOverview(
+            scope,
+            filters,
+        );
+
+        if (!requiresLeaderboardInsights(sections)) {
+            return overview;
+        }
+
+        const insights =
+            await this.adminInsightsReportsService.getLeaderboardInsights(
+                scope,
+                filters,
+            );
+
+        return { ...overview, ...insights };
     }
 
     /** Cron entry: process due active schedules only. */
@@ -295,6 +368,11 @@ export class ReportScheduleService {
                     scheduleId: schedule.id,
                     filters:
                         (schedule.filters as AdminReportFiltersDto) ?? {},
+                    sections: resolveReportSections({
+                        preset: schedule.reportPreset,
+                        sections: schedule.sections,
+                        legacyReportTypes: schedule.reportTypes,
+                    }),
                     includeCsv: schedule.includeCsv,
                     includePdf: schedule.includePdf,
                     includeMotivationalLeaderboard:
@@ -332,6 +410,7 @@ export class ReportScheduleService {
         scope: OrgBranchScope;
         scheduleId: string | null;
         filters: AdminReportFiltersDto;
+        sections: ReportSection[];
         includeCsv: boolean;
         includePdf: boolean;
         includeMotivationalLeaderboard: boolean;
@@ -351,9 +430,10 @@ export class ReportScheduleService {
         await this.runRepository.save(run);
 
         try {
-            const overview = await this.adminInsightsReportsService.getOverview(
+            const overview = await this.buildReportPayload(
                 params.scope,
                 params.filters,
+                params.sections,
             );
 
             let csvContent: string | undefined;
@@ -368,7 +448,10 @@ export class ReportScheduleService {
                 | undefined;
 
             if (params.includeCsv) {
-                const csv = this.reportExportService.buildOverviewCsv(overview);
+                const csv = this.reportExportService.buildOverviewCsv(
+                    overview,
+                    params.sections,
+                );
                 csvContent = csv.content;
                 csvRowCount = csv.rowCount;
                 csvFilename = csv.filename;
@@ -378,6 +461,7 @@ export class ReportScheduleService {
                 const pdf = await this.reportExportService.buildOverviewPdf(
                     overview,
                     params.scheduleName,
+                    params.sections,
                 );
                 pdfAttachment = {
                     filename: pdf.filename,
@@ -402,13 +486,25 @@ export class ReportScheduleService {
                 }
 
                 const digest = params.includeMotivationalLeaderboard
-                    ? this.reportExportService.buildMotivationalDigest(overview)
+                    ? this.reportExportService.buildMotivationalDigest(
+                          overview,
+                          params.sections,
+                      )
                     : {
                           leaderboardLines: [] as string[],
                           risingStarsLines: [] as string[],
                           branchChampionLines: [] as string[],
                           celebrationHeadline: '',
                       };
+                const visibility = this.reportExportService.buildEmailVisibility(
+                    params.sections,
+                );
+                const showTopPerformers = params.sections.includes(
+                    ReportSection.TOP_PERFORMERS,
+                );
+                const showKeyAreas = params.sections.includes(
+                    ReportSection.KEY_AREAS,
+                );
 
                 for (const recipient of recipients) {
                     await this.communicationsService.sendAdminReportEmail({
@@ -427,15 +523,22 @@ export class ReportScheduleService {
                         highPotentialUserCount:
                             overview.kpis.highPotentialUserCount,
                         keyAreaCount: overview.kpis.keyAreaCount,
-                        topPerformersSummary: overview.topPerformers
-                            .slice(0, 5)
-                            .map(
-                                p =>
-                                    `${p.firstName} ${p.lastName} (${p.averageScore}%)`,
-                            ),
-                        keyAreasSummary: overview.keyAreas
-                            .slice(0, 5)
-                            .map(a => a.title),
+                        ...visibility,
+                        testsCompleted:
+                            overview.testCompletion?.totalTestsCompleted ?? 0,
+                        testsPassed:
+                            overview.testCompletion?.totalTestsPassed ?? 0,
+                        topPerformersSummary: showTopPerformers
+                            ? overview.topPerformers
+                                  .slice(0, 5)
+                                  .map(
+                                      p =>
+                                          `${p.firstName} ${p.lastName} (${p.averageScore}%)`,
+                                  )
+                            : [],
+                        keyAreasSummary: showKeyAreas
+                            ? overview.keyAreas.slice(0, 5).map(a => a.title)
+                            : [],
                         celebrationHeadline: digest.celebrationHeadline,
                         leaderboardLines: digest.leaderboardLines,
                         risingStarsLines: digest.risingStarsLines,
@@ -462,6 +565,7 @@ export class ReportScheduleService {
             run.metadata = {
                 timeframe: overview.timeframe,
                 emailsQueued,
+                sections: params.sections,
                 includeCsv: params.includeCsv,
                 includePdf: params.includePdf,
                 includeMotivationalLeaderboard:
@@ -634,7 +738,15 @@ export class ReportScheduleService {
             orgId: row.orgId,
             createdByUserId: row.createdByUserId,
             name: row.name,
-            reportTypes: row.reportTypes,
+            reportTypes: row.reportTypes ?? [],
+            reportPreset: row.reportPreset ?? ReportPreset.ADMIN,
+            // Always return the resolved list so clients can render exactly
+            // what will be delivered, including legacy schedules.
+            sections: resolveReportSections({
+                preset: row.reportPreset,
+                sections: row.sections,
+                legacyReportTypes: row.reportTypes,
+            }),
             filters: row.filters ?? null,
             frequency: row.frequency,
             dayOfWeek: row.dayOfWeek ?? null,

@@ -999,6 +999,15 @@ export class CommunicationsService {
         atRiskUserCount: number;
         highPotentialUserCount?: number;
         keyAreaCount: number;
+        /** Per-block visibility so the email mirrors the selected report sections. */
+        showAverageKnowledgeScore?: boolean;
+        showOverallPassRate?: boolean;
+        showActiveLearners?: boolean;
+        showTrainingHours?: boolean;
+        showAttentionSummary?: boolean;
+        showTestCompletion?: boolean;
+        testsCompleted?: number;
+        testsPassed?: number;
         topPerformersSummary: string[];
         keyAreasSummary: string[];
         celebrationHeadline?: string;
@@ -1052,6 +1061,19 @@ export class CommunicationsService {
                 hasPdf: Boolean(templateData.pdfAttachment),
                 highPotentialUserCount:
                     templateData.highPotentialUserCount ?? 0,
+                // Blocks default to visible so callers that predate report
+                // section selection keep their original email layout.
+                showAverageKnowledgeScore:
+                    templateData.showAverageKnowledgeScore ?? true,
+                showOverallPassRate: templateData.showOverallPassRate ?? true,
+                showActiveLearners: templateData.showActiveLearners ?? true,
+                showTrainingHours: templateData.showTrainingHours ?? true,
+                showAttentionSummary:
+                    templateData.showAttentionSummary ?? true,
+                showTestCompletion:
+                    templateData.showTestCompletion ?? false,
+                testsCompleted: templateData.testsCompleted ?? 0,
+                testsPassed: templateData.testsPassed ?? 0,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
