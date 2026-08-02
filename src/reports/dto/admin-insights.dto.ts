@@ -256,6 +256,14 @@ export class AdminRankingEntryDto {
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description:
+            'Short branch code. Preferred for narrow layouts such as the PDF rankings table, where full branch names overflow the column.',
+        example: 'BitTzaneen',
+    })
+    branchAlias: string | null;
+
     @ApiProperty({ description: 'Dense rank across the organization' })
     rank: number;
 
@@ -280,6 +288,13 @@ export class AdminBranchTopPerformersDto {
     @ApiProperty()
     branchName: string;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used as the heading in exports',
+        example: 'BitTzaneen',
+    })
+    branchAlias: string | null;
+
     @ApiProperty({ type: [AdminRankingEntryDto] })
     topPerformers: AdminRankingEntryDto[];
 }
@@ -297,6 +312,13 @@ export class AdminTopScorerDto {
 
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in exports',
+        example: 'BitTzaneen',
+    })
+    branchAlias: string | null;
 
     @ApiProperty()
     testId: number;

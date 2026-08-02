@@ -21,6 +21,7 @@ import {
 import { EmailType } from './entities/communication.entity';
 import { EmailStatus } from './entities/communication.entity';
 import { PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
+import { formatExamWindowRange } from '../test/utils/exam-window.util';
 
 @Injectable()
 export class CommunicationsService {
@@ -1333,7 +1334,9 @@ export class CommunicationsService {
     }
 
     /**
-     * Queues a 3-day or exam-day reminder for an upcoming test (examDate).
+     * Queues a 3-day or window-opening reminder for an upcoming test.
+     * Tests carry an exam window (`examStartDate`/`examEndDate`) rather than a
+     * single exam date, so the email shows the full range learners can use.
      * Returns the saved communication id for audit linkage.
      */
     async sendTestExamReminderEmail(templateData: {
@@ -1344,7 +1347,8 @@ export class CommunicationsService {
         testTitle: string;
         courseId: number;
         courseTitle: string;
-        examDate: Date;
+        examStartDate: Date;
+        examEndDate?: Date | null;
         notificationType: 'three_day' | 'day_of';
         timeRemainingLabel?: string;
         userId: string;
@@ -1396,7 +1400,19 @@ export class CommunicationsService {
                 testTitle: templateData.testTitle,
                 courseId: templateData.courseId,
                 courseTitle: templateData.courseTitle,
-                formattedExamDate: this.formatDate(templateData.examDate),
+                formattedExamStartDate: this.formatDate(
+                    templateData.examStartDate,
+                ),
+                formattedExamEndDate: templateData.examEndDate
+                    ? this.formatDate(templateData.examEndDate)
+                    : null,
+                formattedExamWindow: formatExamWindowRange(
+                    {
+                        examStartDate: templateData.examStartDate,
+                        examEndDate: templateData.examEndDate,
+                    },
+                    date => this.formatDate(date),
+                ),
                 timeRemainingLabel:
                     templateData.timeRemainingLabel ?? 'About 3 days',
                 takeTestUrl,
@@ -1430,7 +1446,9 @@ export class CommunicationsService {
                     testId: templateData.testId,
                     userId: templateData.userId,
                     notificationType: templateData.notificationType,
-                    examDate: templateData.examDate.toISOString(),
+                    examStartDate: templateData.examStartDate.toISOString(),
+                    examEndDate:
+                        templateData.examEndDate?.toISOString() ?? null,
                     takeTestUrl,
                     deepLinkUrl,
                 },

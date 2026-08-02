@@ -67,6 +67,21 @@ const PDF_ROW_BREAK_Y = 740;
 const PDF_RANKING_PAGE_BREAK_Y = 745;
 
 /**
+ * Fixed column geometry for the PDF rankings table, in points.
+ *
+ * Header and body rows share these values so the two can never drift apart.
+ * Widths add up to the A4 content width (595.28pt page less 48pt margins), so
+ * the right-most column stays inside the margin.
+ */
+const RANKING_COLUMNS = {
+    rank: { x: 48, width: 30 },
+    firstName: { x: 78, width: 140 },
+    lastName: { x: 218, width: 130 },
+    branch: { x: 348, width: 135 },
+    tests: { x: 483, width: 64 },
+} as const;
+
+/**
  * Builds CSV and PDF summaries from admin overview payloads.
  *
  * Every section is opt-in: callers pass the resolved `ReportSection` list so a
@@ -182,7 +197,10 @@ export class ReportExportService {
 
         const leaderboardLines = selected.has(ReportSection.LEADERBOARD_RANKINGS)
             ? (overview.fullRankings ?? []).slice(0, 8).map(entry => {
-                  const branch = entry.branchName ? ` · ${entry.branchName}` : '';
+                  const branch =
+                      entry.branchAlias ?? entry.branchName
+                          ? ` · ${this.branchLabel(entry)}`
+                          : '';
                   return `#${entry.rank} ${entry.firstName} ${entry.lastName}${branch} — ${entry.testsCompleted} tests completed, ${entry.testsPassed} passed`;
               })
             : [];
@@ -207,7 +225,7 @@ export class ReportExportService {
                               `${person.firstName} ${person.lastName} (#${person.branchRank})`,
                       )
                       .join(', ');
-                  return `${branch.branchName} — ${names}`;
+                  return `${this.branchLabel(branch)} — ${names}`;
               })
             : [];
 
@@ -368,7 +386,7 @@ export class ReportExportService {
                     entry.rank,
                     entry.firstName,
                     entry.lastName,
-                    entry.branchName ?? 'No branch',
+                    this.branchLabel(entry),
                     entry.branchRank,
                     entry.totalPoints,
                     entry.testsCompleted,
@@ -400,7 +418,7 @@ export class ReportExportService {
                 lines.push(
                     this.row(
                         'Branch top 3',
-                        branch.branchName,
+                        this.branchLabel(branch),
                         person.branchRank,
                         person.firstName,
                         person.lastName,
@@ -431,7 +449,7 @@ export class ReportExportService {
                     'Highest test scores',
                     scorer.firstName,
                     scorer.lastName,
-                    scorer.branchName ?? 'No branch',
+                    this.branchLabel(scorer),
                     scorer.testTitle,
                     scorer.courseTitle ?? '',
                     scorer.scorePercentage,
@@ -552,7 +570,7 @@ export class ReportExportService {
                         ranking?.rank ?? '',
                         person.firstName,
                         person.lastName,
-                        person.branchName ?? 'No branch',
+                        this.branchLabel(ranking ?? person),
                         ranking?.testsCompleted ?? 0,
                         ranking?.testsPassed ?? 0,
                     ),
@@ -788,7 +806,7 @@ export class ReportExportService {
             doc,
             (overview.topScorers ?? []).map(scorer => ({
                 name: `${scorer.firstName} ${scorer.lastName} — ${scorer.scorePercentage}%`,
-                detail: `${scorer.testTitle}${scorer.courseTitle ? ` · ${scorer.courseTitle}` : ''} · ${scorer.branchName ?? 'No branch'}`,
+                detail: `${scorer.testTitle}${scorer.courseTitle ? ` · ${scorer.courseTitle}` : ''} · ${this.branchLabel(scorer)}`,
             })),
             'No test scores recorded for this period yet.',
         );
@@ -817,7 +835,9 @@ export class ReportExportService {
             if (doc.y > PDF_ROW_BREAK_Y) {
                 doc.addPage();
             }
-            doc.fontSize(11).fillColor('#413DFB').text(branch.branchName);
+            doc.fontSize(11)
+                .fillColor('#413DFB')
+                .text(this.branchLabel(branch));
             branch.topPerformers.forEach(person => {
                 if (doc.y > PDF_ROW_BREAK_Y) {
                     doc.addPage();
@@ -1009,11 +1029,11 @@ export class ReportExportService {
     private writeRankingTableHeader(doc: PDFKit.PDFDocument): void {
         const y = doc.y;
         doc.fontSize(9).fillColor('#6b7280');
-        doc.text('#', 48, y, { width: 34 });
-        doc.text('Name', 82, y, { width: 150 });
-        doc.text('Surname', 232, y, { width: 130 });
-        doc.text('Branch', 362, y, { width: 130 });
-        doc.text('Tests', 492, y, { width: 60, align: 'right' });
+        this.writeRankingCell(doc, '#', RANKING_COLUMNS.rank, y);
+        this.writeRankingCell(doc, 'Name', RANKING_COLUMNS.firstName, y);
+        this.writeRankingCell(doc, 'Surname', RANKING_COLUMNS.lastName, y);
+        this.writeRankingCell(doc, 'Branch', RANKING_COLUMNS.branch, y);
+        this.writeRankingCell(doc, 'Tests', RANKING_COLUMNS.tests, y, 'right');
         doc.moveDown(0.4);
         doc.strokeColor('#ede9fe')
             .moveTo(doc.page.margins.left, doc.y)
@@ -1028,20 +1048,66 @@ export class ReportExportService {
     ): void {
         const y = doc.y;
         doc.fontSize(9.5).fillColor('#111827');
-        doc.text(`#${entry.rank}`, 48, y, { width: 34 });
-        doc.text(entry.firstName, 82, y, { width: 150, ellipsis: true });
-        doc.text(entry.lastName, 232, y, { width: 130, ellipsis: true });
-        doc.fillColor('#6b7280').text(entry.branchName ?? 'No branch', 362, y, {
-            width: 130,
-            ellipsis: true,
-        });
-        doc.fillColor('#111827').text(
-            `${entry.testsPassed}/${entry.testsCompleted}`,
-            492,
+        this.writeRankingCell(doc, `#${entry.rank}`, RANKING_COLUMNS.rank, y);
+        this.writeRankingCell(doc, entry.firstName, RANKING_COLUMNS.firstName, y);
+        this.writeRankingCell(doc, entry.lastName, RANKING_COLUMNS.lastName, y);
+        doc.fillColor('#6b7280');
+        this.writeRankingCell(
+            doc,
+            this.branchLabel(entry),
+            RANKING_COLUMNS.branch,
             y,
-            { width: 60, align: 'right' },
+        );
+        doc.fillColor('#111827');
+        this.writeRankingCell(
+            doc,
+            `${entry.testsPassed}/${entry.testsCompleted}`,
+            RANKING_COLUMNS.tests,
+            y,
+            'right',
         );
         doc.moveDown(0.35);
+    }
+
+    /**
+     * Writes one fixed-width table cell on a single line.
+     *
+     * The value is truncated to the measured column width before drawing, so a
+     * long value (a branch with no alias, say) cannot wrap and push the row
+     * into the one below it.
+     */
+    private writeRankingCell(
+        doc: PDFKit.PDFDocument,
+        value: string,
+        column: { x: number; width: number },
+        y: number,
+        align: 'left' | 'right' = 'left',
+    ): void {
+        doc.text(this.truncateToWidth(doc, value, column.width), column.x, y, {
+            width: column.width,
+            align,
+            lineBreak: false,
+        });
+    }
+
+    /** Trims a string until it fits `width`, marking the cut with an ellipsis. */
+    private truncateToWidth(
+        doc: PDFKit.PDFDocument,
+        value: string,
+        width: number,
+    ): string {
+        if (doc.widthOfString(value) <= width) {
+            return value;
+        }
+
+        let truncated = value;
+        while (
+            truncated.length > 1 &&
+            doc.widthOfString(`${truncated}…`) > width
+        ) {
+            truncated = truncated.slice(0, -1);
+        }
+        return `${truncated.trimEnd()}…`;
     }
 
     /**
@@ -1060,17 +1126,31 @@ export class ReportExportService {
         };
     }
 
+    /**
+     * Compact branch label for exports.
+     *
+     * Full branch names (e.g. "TZANEEN - BRADEIRENSE INTERNATIONAL TRADING
+     * (PTY) LTD") wrap over several lines and collide with neighbouring rows in
+     * the fixed-width PDF rankings table, so the short alias wins wherever it
+     * exists. Falls back to the full name for branches with no alias set.
+     */
+    private branchLabel(source: {
+        branchAlias?: string | null;
+        branchName?: string | null;
+    }): string {
+        return source.branchAlias ?? source.branchName ?? 'No branch';
+    }
+
     /** Rank + branch + tests, with no score that could embarrass a learner. */
     private motivationalDetail(
         person: { userId: string; branchName?: string | null },
         style: PersonRowStyle,
     ): string {
-        const branch = person.branchName ?? 'No branch';
         const ranking = style.rankByUserId.get(person.userId);
         if (!ranking) {
-            return branch;
+            return this.branchLabel(person);
         }
-        return `Rank #${ranking.rank} · ${branch} · ${ranking.testsPassed}/${ranking.testsCompleted} tests passed`;
+        return `Rank #${ranking.rank} · ${this.branchLabel(ranking)} · ${ranking.testsPassed}/${ranking.testsCompleted} tests passed`;
     }
 
     private writePdfHeading(doc: PDFKit.PDFDocument, title: string): void {

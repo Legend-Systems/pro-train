@@ -16,6 +16,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { TestType } from '../entities/test.entity';
 import { QuestionType } from '../../questions/entities/question.entity';
+import { IsExamWindowOrdered } from '../validators/exam-window-order.validator';
 
 /**
  * DTO for creating question options within a test creation request
@@ -251,9 +252,14 @@ export class CreateTestDto {
     @Min(1, { message: 'Maximum attempts must be at least 1' })
     maxAttempts?: number;
 
+    /**
+     * Exam availability window (replaces the former single `examDate`).
+     * Learners may take the test from `examStartDate` through `examEndDate`
+     * inclusive; omit both for a test with no schedule.
+     */
     @ApiProperty({
         description:
-            'Date (or date-time) when the exam should be taken; omit if not scheduled',
+            'First day the exam may be taken; omit if the test is not scheduled',
         example: '2026-05-18',
         required: false,
         nullable: true,
@@ -262,9 +268,25 @@ export class CreateTestDto {
     @IsOptional()
     @IsDateString(
         {},
-        { message: 'examDate must be a valid ISO 8601 date string' },
+        { message: 'examStartDate must be a valid ISO 8601 date string' },
     )
-    examDate?: string | null;
+    examStartDate?: string | null;
+
+    @ApiProperty({
+        description:
+            'Last day the exam may be taken (inclusive); omit for an open-ended window',
+        example: '2026-05-22',
+        required: false,
+        nullable: true,
+        type: String,
+    })
+    @IsOptional()
+    @IsDateString(
+        {},
+        { message: 'examEndDate must be a valid ISO 8601 date string' },
+    )
+    @IsExamWindowOrdered()
+    examEndDate?: string | null;
 
     @ApiProperty({
         description: 'Questions to be created with the test',

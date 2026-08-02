@@ -22,6 +22,7 @@ import { Test } from '../../test/entities/test.entity';
 import { User } from '../../user/entities/user.entity';
 import { Organization } from '../../org/entities/org.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { TestAttemptReset } from './test-attempt-reset.entity';
 
 export enum AttemptStatus {
     IN_PROGRESS = 'in_progress',
@@ -35,6 +36,7 @@ export enum AttemptStatus {
 @Index('IDX_TEST_ATTEMPT_USER', ['userId'])
 @Index('IDX_TEST_ATTEMPT_STATUS', ['status'])
 @Index('IDX_TEST_ATTEMPT_START_TIME', ['startTime'])
+@Index('IDX_TEST_ATTEMPT_VOIDED_BY_RESET', ['voidedByResetId'])
 @Check('CHK_ATTEMPT_NUMBER', 'attempt_number > 0')
 export class TestAttempt {
     @PrimaryGeneratedColumn()
@@ -122,6 +124,24 @@ export class TestAttempt {
     @IsNumber()
     progressPercentage: number;
 
+    /**
+     * Anti-cheat watermark. `NULL` means the attempt is live and visible to the
+     * learner; a non-null value names the admin reset that voided it, after
+     * which every learner-facing read path must hide the row (the marked
+     * results expose the correct answer for each question).
+     */
+    @Column({ type: 'int', nullable: true })
+    @ApiProperty({
+        description:
+            'Reset that voided this attempt — null while the attempt is live',
+        example: null,
+        required: false,
+        nullable: true,
+    })
+    @IsOptional()
+    @IsNumber()
+    voidedByResetId?: number | null;
+
     @CreateDateColumn()
     @ApiProperty({
         description: 'Test attempt creation timestamp',
@@ -159,6 +179,10 @@ export class TestAttempt {
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'userId' })
     user: User;
+
+    @ManyToOne(() => TestAttemptReset, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'voidedByResetId' })
+    voidedByReset?: TestAttemptReset | null;
 
     @OneToMany('Answer', 'attempt')
     answers: any[];

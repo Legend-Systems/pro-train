@@ -1066,6 +1066,7 @@ export class AdminInsightsReportsService {
             lastName: string;
             branchId: string | null;
             branchName: string | null;
+            branchAlias: string | null;
         }>
     > {
         const query = this.userRepository
@@ -1084,6 +1085,8 @@ export class AdminInsightsReportsService {
             .addSelect('user.lastName', 'lastName')
             .addSelect('branch.id', 'branchId')
             .addSelect('branch.name', 'branchName')
+            // Alias is the short branch code shown in narrow export columns.
+            .addSelect('branch.alias', 'branchAlias')
             .orderBy('user.lastName', 'ASC')
             .addOrderBy('user.firstName', 'ASC')
             .limit(MAX_RANKING_ROWS);
@@ -1098,6 +1101,7 @@ export class AdminInsightsReportsService {
             lastName: string;
             branchId: string | null;
             branchName: string | null;
+            branchAlias: string | null;
         }>();
 
         return rows.map(row => ({
@@ -1106,6 +1110,7 @@ export class AdminInsightsReportsService {
             lastName: row.lastName,
             branchId: row.branchId ?? null,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
         }));
     }
 
@@ -1206,6 +1211,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('userBranch.name', 'branchName')
+            .addSelect('userBranch.alias', 'branchAlias')
             .addSelect('test.testId', 'testId')
             .addSelect('test.title', 'testTitle')
             .addSelect('course.title', 'courseTitle')
@@ -1219,6 +1225,7 @@ export class AdminInsightsReportsService {
                 firstName: string;
                 lastName: string;
                 branchName: string | null;
+                branchAlias: string | null;
                 testId: string;
                 testTitle: string;
                 courseTitle: string | null;
@@ -1236,6 +1243,7 @@ export class AdminInsightsReportsService {
                 firstName: row.firstName,
                 lastName: row.lastName,
                 branchName: row.branchName ?? null,
+                branchAlias: row.branchAlias ?? null,
                 testId: Number(row.testId),
                 testTitle: row.testTitle,
                 courseTitle: row.courseTitle ?? null,
@@ -1258,6 +1266,7 @@ export class AdminInsightsReportsService {
             lastName: string;
             branchId: string | null;
             branchName: string | null;
+            branchAlias: string | null;
         }>,
         pointsByUser: Map<string, number>,
         totalsByUser: Map<string, { testsCompleted: number; testsPassed: number }>,
@@ -1270,6 +1279,7 @@ export class AdminInsightsReportsService {
                 lastName: learner.lastName,
                 branchId: learner.branchId,
                 branchName: learner.branchName,
+                branchAlias: learner.branchAlias,
                 rank: 0,
                 branchRank: 0,
                 totalPoints: pointsByUser.get(learner.userId) ?? 0,
@@ -1308,6 +1318,7 @@ export class AdminInsightsReportsService {
             const existing = byBranch.get(entry.branchId) ?? {
                 branchId: entry.branchId,
                 branchName: entry.branchName ?? 'Unnamed branch',
+                branchAlias: entry.branchAlias,
                 topPerformers: [],
             };
             if (existing.topPerformers.length < BRANCH_TOP_PERFORMER_COUNT) {

@@ -4,6 +4,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { TestAttemptsService } from './test_attempts.service';
 import { TestAttemptsController } from './test_attempts.controller';
 import { TestAttempt } from './entities/test_attempt.entity';
+import { TestAttemptReset } from './entities/test-attempt-reset.entity';
 import { Test } from '../test/entities/test.entity';
 import { User } from '../user/entities/user.entity';
 import { ResultsModule } from '../results/results.module';
@@ -13,7 +14,7 @@ import { CommonModule } from '../common/common.module';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([TestAttempt, Test, User]),
+        TypeOrmModule.forFeature([TestAttempt, TestAttemptReset, Test, User]),
         CacheModule.register(),
         CommonModule,
         ResultsModule,

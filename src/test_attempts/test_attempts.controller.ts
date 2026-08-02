@@ -31,8 +31,15 @@ import { SubmitTestAttemptDto } from './dto/submit-test-attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
+import { ResetTestAttemptsDto } from './dto/reset-test-attempts.dto';
+import { TestAttemptResetFilterDto } from './dto/test-attempt-reset-filter.dto';
+import { TestAttemptResetResponseDto } from './dto/test-attempt-reset-response.dto';
+import { TestAttemptResetListResponseDto } from './dto/test-attempt-reset-list-response.dto';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../user/entities/user.entity';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardApiResponse } from '../user/dto/common-response.dto';
@@ -384,6 +391,258 @@ export class TestAttemptsController {
         @Query('userId') userId?: string,
     ): Promise<TestAttemptStatsDto> {
         return this.testAttemptsService.getStats(scope, testId, userId);
+    }
+
+    // The `admin/...` routes are declared before every parameterised route so
+    // Nest can never match `admin` as an `:id` path segment.
+    @Post('admin/reset')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @ApiOperation({
+        summary: '♻️ Reset a Learner’s Test Attempts',
+        description: `
+        **Give one learner a fresh set of attempts on one test**
+
+        Every attempt, answer and result the learner produced before the reset is
+        voided in a single transaction:
+        - the learner's attempt allowance returns to \`maxAttempts\`
+        - any in-progress attempt is cancelled so it cannot be submitted afterwards
+        - previous attempts and results become invisible and return 404 to the learner
+
+        **Why voiding matters:** a submitted result exposes the correct answer for
+        every question. Leaving the old result readable would make the retake
+        worthless.
+
+        **Business Rules:**
+        - Nothing is deleted — administrators keep the full history
+        - Previously awarded XP is not reversed
+        - Repeating the reset with no live attempts returns 409 and writes no audit row
+
+        **Security:**
+        - Requires the admin, owner or master admin role
+        - The test and the learner must belong to the caller's organization (and
+          branch, when the caller is branch-scoped)
+        `,
+        operationId: 'resetUserTestAttempts',
+    })
+    @ApiBody({
+        type: ResetTestAttemptsDto,
+        description: 'Target test, target learner and optional justification',
+        examples: {
+            'with-reason': {
+                summary: '📝 Reset with a justification',
+                value: {
+                    testId: 42,
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                    reason: 'Learner lost connection during their final attempt',
+                },
+            },
+            'without-reason': {
+                summary: '⚡ Reset without a justification',
+                value: {
+                    testId: 42,
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.CREATED,
+        description: '✅ Attempts reset successfully',
+        type: TestAttemptResetResponseDto,
+        schema: {
+            example: {
+                success: true,
+                message: 'Test attempts reset successfully',
+                data: {
+                    resetId: 1,
+                    testId: 42,
+                    testTitle: 'JavaScript Fundamentals Quiz',
+                    userId: '123e4567-e89b-12d3-a456-426614174000',
+                    userName: 'Jane Doe',
+                    resetByUserId: '223e4567-e89b-12d3-a456-426614174111',
+                    resetByName: 'John Smith',
+                    reason: 'Learner lost connection during their final attempt',
+                    attemptsVoided: 3,
+                    resultsVoided: 3,
+                    resetAt: '2025-01-15T10:30:00.000Z',
+                    maxAttempts: 3,
+                    attemptsRemaining: 3,
+                },
+                meta: {
+                    timestamp: '2025-01-15T10:30:00.000Z',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.CONFLICT,
+        description: '❌ The learner has no live attempts for this test',
+        schema: {
+            example: {
+                statusCode: 409,
+                message:
+                    'This learner has no attempts to reset for this test',
+                error: 'Conflict',
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: '❌ Test or learner not found',
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description:
+            '⛔ Forbidden - Not an administrator, or the target is outside your organization',
+    })
+    async resetUserTestAttempts(
+        @Body() resetTestAttemptsDto: ResetTestAttemptsDto,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse<TestAttemptResetResponseDto>> {
+        try {
+            this.logger.log(
+                `Resetting attempts on test ${resetTestAttemptsDto.testId} for user ${resetTestAttemptsDto.userId} by ${scope.userId}`,
+            );
+
+            const result =
+                await this.testAttemptsService.resetUserTestAttempts(
+                    resetTestAttemptsDto,
+                    scope,
+                );
+
+            return {
+                success: true,
+                message: 'Test attempts reset successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error resetting attempts on test ${resetTestAttemptsDto.testId} for user ${resetTestAttemptsDto.userId}:`,
+                error,
+            );
+            throw error;
+        }
+    }
+
+    @Get('admin/resets')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @ApiOperation({
+        summary: '🗂️ Get Attempt Reset History',
+        description: `
+        **Audit trail of every attempt reset in the caller's scope**
+
+        Returns who reset whom, when, why, and how many attempts and results the
+        reset voided. Records are append-only and ordered newest first.
+        `,
+        operationId: 'getTestAttemptResets',
+    })
+    @ApiQuery({
+        name: 'testId',
+        description: 'Only return resets for this test',
+        required: false,
+        type: Number,
+        example: 42,
+    })
+    @ApiQuery({
+        name: 'userId',
+        description: 'Only return resets for this learner',
+        required: false,
+        type: String,
+        example: '123e4567-e89b-12d3-a456-426614174000',
+    })
+    @ApiQuery({
+        name: 'page',
+        description: 'Page number for pagination (1-based)',
+        required: false,
+        type: Number,
+        example: 1,
+    })
+    @ApiQuery({
+        name: 'limit',
+        description: 'Number of records per page (max 100)',
+        required: false,
+        type: Number,
+        example: 20,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: '✅ Reset history retrieved successfully',
+        type: TestAttemptResetListResponseDto,
+        schema: {
+            example: {
+                success: true,
+                message: 'Attempt reset history retrieved successfully',
+                data: {
+                    resets: [
+                        {
+                            resetId: 1,
+                            testId: 42,
+                            testTitle: 'JavaScript Fundamentals Quiz',
+                            userId: '123e4567-e89b-12d3-a456-426614174000',
+                            userName: 'Jane Doe',
+                            resetByUserId:
+                                '223e4567-e89b-12d3-a456-426614174111',
+                            resetByName: 'John Smith',
+                            reason: 'Learner lost connection during their final attempt',
+                            attemptsVoided: 3,
+                            resultsVoided: 3,
+                            resetAt: '2025-01-15T10:30:00.000Z',
+                            maxAttempts: 3,
+                            attemptsRemaining: 2,
+                        },
+                    ],
+                    total: 1,
+                    page: 1,
+                    limit: 20,
+                },
+                meta: {
+                    timestamp: '2025-01-15T10:30:00.000Z',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.UNAUTHORIZED,
+        description: '🚫 Unauthorized - Invalid or missing JWT token',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: '⛔ Forbidden - Insufficient permissions',
+    })
+    async getAttemptResets(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Query() filters: TestAttemptResetFilterDto,
+    ): Promise<StandardApiResponse<TestAttemptResetListResponseDto>> {
+        try {
+            const result = await this.testAttemptsService.findAttemptResets(
+                scope,
+                filters,
+            );
+
+            return {
+                success: true,
+                message: 'Attempt reset history retrieved successfully',
+                data: result,
+                meta: {
+                    timestamp: new Date().toISOString(),
+                },
+            };
+        } catch (error) {
+            this.logger.error(
+                `Error retrieving attempt reset history for user ${scope.userId}:`,
+                error,
+            );
+            throw error;
+        }
     }
 
     @Get('test/:testId')

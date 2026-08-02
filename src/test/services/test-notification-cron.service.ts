@@ -4,7 +4,8 @@ import { Cron } from '@nestjs/schedule';
 import { TestNotificationService } from './test-notification.service';
 
 /**
- * Daily examDate reminder runner (07:00 UTC).
+ * Daily exam-window reminder runner (07:00 UTC).
+ * Fires relative to each test's examStartDate.
  * Sends 3-day and day-of emails for active tests.
  */
 @Injectable()

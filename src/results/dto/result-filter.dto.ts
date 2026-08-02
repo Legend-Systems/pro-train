@@ -121,4 +121,15 @@ export class ResultFilterDto {
     @IsOptional()
     @IsEnum(['ASC', 'DESC'])
     sortOrder?: 'ASC' | 'DESC' = 'DESC';
+
+    @ApiPropertyOptional({
+        description:
+            'Administrator opt-in: also return results voided by an attempt reset. Ignored on learner-facing endpoints, which never expose voided rows.',
+        example: false,
+        default: false,
+    })
+    @IsOptional()
+    @Transform(({ value }) => value === true || value === 'true')
+    @IsBoolean()
+    includeVoided?: boolean;
 }

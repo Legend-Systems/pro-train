@@ -2,12 +2,18 @@ import {
     Injectable,
     NotFoundException,
     BadRequestException,
+    ConflictException,
     ForbiddenException,
     Logger,
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import {
+    Repository,
+    DataSource,
+    EntityManager,
+    SelectQueryBuilder,
+} from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CreateTestAttemptDto } from './dto/create-test_attempt.dto';
@@ -15,13 +21,25 @@ import { UpdateTestAttemptDto } from './dto/update-test_attempt.dto';
 import { SubmitTestAttemptDto } from './dto/submit-test-attempt.dto';
 import { TestAttemptResponseDto } from './dto/test-attempt-response.dto';
 import { TestAttempt, AttemptStatus } from './entities/test_attempt.entity';
+import { TestAttemptReset } from './entities/test-attempt-reset.entity';
 import { Test } from '../test/entities/test.entity';
+import { Result } from '../results/entities/result.entity';
+import {
+    EXAM_WINDOW_CLOSED_MESSAGE,
+    EXAM_WINDOW_NOT_OPEN_MESSAGE,
+    isExamWindowClosed,
+    isExamWindowPending,
+} from '../test/utils/exam-window.util';
 import { User, UserRole } from '../user/entities/user.entity';
 import { Organization } from '../org/entities/org.entity';
 import { Branch } from '../branch/entities/branch.entity';
 import { TestAttemptStatsDto } from './dto/test-attempt-stats.dto';
 import { TestAttemptFilterDto } from './dto/test-attempt-filter.dto';
 import { TestAttemptListResponseDto } from './dto/test-attempt-list-response.dto';
+import { ResetTestAttemptsDto } from './dto/reset-test-attempts.dto';
+import { TestAttemptResetFilterDto } from './dto/test-attempt-reset-filter.dto';
+import { TestAttemptResetResponseDto } from './dto/test-attempt-reset-response.dto';
+import { TestAttemptResetListResponseDto } from './dto/test-attempt-reset-list-response.dto';
 import { ResultsService } from '../results/results.service';
 import { AnswersService } from '../answers/answers.service';
 import { TestService } from '../test/test.service';
@@ -56,13 +74,17 @@ export class TestAttemptsService {
             branchId?: string,
         ) =>
             `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:validation:test:${testId}:user:${userId}`,
+        // `includeVoided` is part of the key because elevated callers get
+        // pre-reset rows counted in and learners must never be served that
+        // cached variant.
         ATTEMPT_STATS: (
             testId: number | undefined,
             userId: string | undefined,
+            includeVoided: boolean,
             orgId?: string,
             branchId?: string,
         ) =>
-            `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:stats:test:${testId || 'all'}:user:${userId || 'all'}`,
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:attempt:stats:test:${testId || 'all'}:user:${userId || 'all'}:voided:${includeVoided}`,
         TEST_ATTEMPTS: (
             testId: number,
             filters: string,
@@ -84,6 +106,8 @@ export class TestAttemptsService {
     constructor(
         @InjectRepository(TestAttempt)
         private readonly testAttemptRepository: Repository<TestAttempt>,
+        @InjectRepository(TestAttemptReset)
+        private readonly testAttemptResetRepository: Repository<TestAttemptReset>,
         @InjectRepository(Test)
         private readonly testRepository: Repository<Test>,
         @InjectRepository(User)
@@ -96,6 +120,121 @@ export class TestAttemptsService {
         private readonly testService: TestService,
         private readonly eventEmitter: EventEmitter2,
     ) {}
+
+    /** Roles allowed to reset learners and to read pre-reset (voided) rows. */
+    private static readonly ELEVATED_ROLES: readonly UserRole[] = [
+        UserRole.ADMIN,
+        UserRole.OWNER,
+        UserRole.MASTER_ADMIN,
+    ];
+
+    /**
+     * Whether the caller holds a leadership role.
+     *
+     * @param userRole - Role carried on the request scope.
+     * @returns True when the role may read voided attempts.
+     */
+    private isElevatedRole(userRole?: string): boolean {
+        return TestAttemptsService.ELEVATED_ROLES.includes(
+            userRole as UserRole,
+        );
+    }
+
+    /**
+     * Defence in depth alongside `RolesGuard`: the service refuses privileged
+     * work even if a caller reaches it without passing the controller guards.
+     *
+     * @param scope - Caller org/branch/role scope.
+     * @throws ForbiddenException when the caller is not elevated.
+     */
+    private assertAdminAccess(scope: OrgBranchScope): void {
+        if (!this.isElevatedRole(scope.userRole)) {
+            throw new ForbiddenException(
+                'Admin access required to manage test attempt resets',
+            );
+        }
+    }
+
+    /**
+     * Restrict a query to attempts that are still visible to the learner.
+     *
+     * Attempts voided by an admin reset carry the answer key of a test the
+     * learner is about to retake, so they must disappear from every
+     * learner-facing read path.
+     *
+     * @param query - Query builder aliased on the test attempt.
+     * @param includeVoided - Set only by elevated callers reading history.
+     * @param alias - Query alias for the attempt entity.
+     * @returns The same query builder for chaining.
+     */
+    private applyLiveAttemptFilter(
+        query: SelectQueryBuilder<TestAttempt>,
+        includeVoided = false,
+        alias = 'attempt',
+    ): SelectQueryBuilder<TestAttempt> {
+        if (includeVoided) {
+            return query;
+        }
+        return query.andWhere(`${alias}.voidedByResetId IS NULL`);
+    }
+
+    /**
+     * Apply the caller's organization and branch boundaries to a query.
+     *
+     * @param query - Query builder aliased on the test attempt.
+     * @param scope - Caller org/branch scope.
+     * @param alias - Query alias for the attempt entity.
+     * @returns The same query builder for chaining.
+     */
+    private applyAttemptScopeFilters(
+        query: SelectQueryBuilder<TestAttempt>,
+        scope: OrgBranchScope,
+        alias = 'attempt',
+    ): SelectQueryBuilder<TestAttempt> {
+        if (scope.orgId) {
+            query.andWhere(`${alias}.orgId = :scopedOrgId`, {
+                scopedOrgId: scope.orgId,
+            });
+        }
+        if (scope.branchId) {
+            query.andWhere(`${alias}.branchId = :scopedBranchId`, {
+                scopedBranchId: scope.branchId,
+            });
+        }
+        return query;
+    }
+
+    /**
+     * Count the attempts that consume the learner's `maxAttempts` allowance.
+     *
+     * A single rule governs every counter in the system: an attempt is
+     * chargeable when it has not been voided by a reset and was not cancelled.
+     * Routing `startAttempt`, `validateAttemptLimits` and the test overview
+     * through this helper is what makes a reset actually unlock the learner.
+     *
+     * @param testId - Test being counted.
+     * @param userId - Learner being counted.
+     * @param scope - Caller org/branch scope.
+     * @returns Number of attempts already charged against the allowance.
+     */
+    private async countChargeableAttempts(
+        testId: number,
+        userId: string,
+        scope: OrgBranchScope,
+    ): Promise<number> {
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .where('attempt.testId = :testId', { testId })
+            .andWhere('attempt.userId = :userId', { userId })
+            .andWhere('attempt.status != :cancelledStatus', {
+                cancelledStatus: AttemptStatus.CANCELLED,
+            });
+
+        this.applyAttemptScopeFilters(query, scope);
+        this.applyLiveAttemptFilter(query);
+
+        return query.getCount();
+    }
 
     /**
      * Cache invalidation helper for test attempts
@@ -132,7 +271,20 @@ export class TestAttemptsService {
         if (testId) {
             keysToDelete.push(
                 this.CACHE_KEYS.TEST_ATTEMPTS(testId, '', orgId, branchId),
-                this.CACHE_KEYS.ATTEMPT_STATS(testId, userId, orgId, branchId),
+                this.CACHE_KEYS.ATTEMPT_STATS(
+                    testId,
+                    userId,
+                    false,
+                    orgId,
+                    branchId,
+                ),
+                this.CACHE_KEYS.ATTEMPT_STATS(
+                    testId,
+                    userId,
+                    true,
+                    orgId,
+                    branchId,
+                ),
             );
         }
 
@@ -141,6 +293,14 @@ export class TestAttemptsService {
             this.CACHE_KEYS.ATTEMPT_STATS(
                 undefined,
                 undefined,
+                false,
+                orgId,
+                branchId,
+            ),
+            this.CACHE_KEYS.ATTEMPT_STATS(
+                undefined,
+                undefined,
+                true,
                 orgId,
                 branchId,
             ),
@@ -184,6 +344,15 @@ export class TestAttemptsService {
 
             if (!test.isActive) {
                 throw new BadRequestException('Test is not active');
+            }
+
+            // Exam window gate (replaces the old single exam-day rule): a new
+            // attempt may only begin between examStartDate and examEndDate.
+            if (isExamWindowPending(test)) {
+                throw new BadRequestException(EXAM_WINDOW_NOT_OPEN_MESSAGE);
+            }
+            if (isExamWindowClosed(test)) {
+                throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
             }
 
             // Smart attempt detection and cleanup
@@ -270,6 +439,10 @@ export class TestAttemptsService {
                 branchId: scope.branchId,
             });
         }
+
+        // A reset cancels and voids any in-flight attempt; resuming one would
+        // let the learner submit into the fresh window with old answers.
+        this.applyLiveAttemptFilter(query);
 
         const potentialAttempts = await query
             .orderBy('attempt.createdAt', 'DESC')
@@ -437,27 +610,11 @@ export class TestAttemptsService {
         scope: OrgBranchScope,
         maxAttempts: number,
     ): Promise<{ allowed: boolean; reason?: string; attemptNumber: number }> {
-        const query = this.testAttemptRepository
-            .createQueryBuilder('attempt')
-            .where('attempt.testId = :testId', { testId })
-            .andWhere('attempt.userId = :userId', { userId });
-
-        // Apply org/branch scoping
-        if (scope.orgId) {
-            query.andWhere('attempt.orgId = :orgId', { orgId: scope.orgId });
-        }
-        if (scope.branchId) {
-            query.andWhere('attempt.branchId = :branchId', {
-                branchId: scope.branchId,
-            });
-        }
-
-        // Count all non-cancelled attempts
-        const totalAttempts = await query
-            .andWhere('attempt.status != :cancelledStatus', {
-                cancelledStatus: AttemptStatus.CANCELLED,
-            })
-            .getCount();
+        const totalAttempts = await this.countChargeableAttempts(
+            testId,
+            userId,
+            scope,
+        );
 
         if (totalAttempts >= maxAttempts) {
             return {
@@ -562,6 +719,21 @@ export class TestAttemptsService {
                 throw new BadRequestException(
                     'Cannot submit attempt that is not in progress',
                 );
+            }
+
+            // Submissions are bound to the exam window too. An attempt that
+            // legitimately started while the window was open is still allowed
+            // through, so work in progress at the exact moment the window
+            // closes is never silently lost (the attempt timer still applies).
+            if (attempt.test && isExamWindowClosed(attempt.test)) {
+                const startedWhileWindowOpen = !isExamWindowClosed(
+                    attempt.test,
+                    attempt.startTime,
+                );
+
+                if (!startedWhileWindowOpen) {
+                    throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+                }
             }
 
             // Process bulk answers first
@@ -842,6 +1014,9 @@ export class TestAttemptsService {
                 query.andWhere('attempt.testId = :testId', { testId });
             }
 
+            // Learner-owned list: pre-reset attempts stay hidden.
+            this.applyLiveAttemptFilter(query);
+
             query
                 .orderBy('attempt.createdAt', 'DESC')
                 .skip((page - 1) * pageSize)
@@ -956,12 +1131,17 @@ export class TestAttemptsService {
     }
 
     /**
-     * Private helper to find attempt by ID and validate user access with scope
+     * Private helper to find attempt by ID and validate user access with scope.
+     *
+     * Voided attempts are treated as non-existent rather than forbidden: a 403
+     * would confirm the row exists and belongs to the learner, and 404 is the
+     * state the clients render as "no longer available".
      */
     private async findAttemptByIdAndUserWithScope(
         attemptId: number,
         userId: string,
         scope: OrgBranchScope,
+        includeVoided = false,
     ): Promise<TestAttempt> {
         const query = this.testAttemptRepository
             .createQueryBuilder('attempt')
@@ -981,6 +1161,8 @@ export class TestAttemptsService {
                 branchId: scope.branchId,
             });
         }
+
+        this.applyLiveAttemptFilter(query, includeVoided);
 
         const attempt = await query.getOne();
 
@@ -1027,14 +1209,28 @@ export class TestAttemptsService {
     }
 
     /**
-     * Get attempts for a specific test (instructor view) with caching and scoping
+     * Get attempts for a specific test (instructor view) with caching and
+     * scoping.
+     *
+     * The learner UI calls this endpoint with its own `userId`, so the route
+     * cannot be gated behind `RolesGuard`. Instead, a non-elevated caller is
+     * pinned to their own attempts here, which also stops the endpoint from
+     * returning every learner's attempts for the test.
      */
     async findAttemptsByTest(
         testId: number,
         scope: OrgBranchScope,
         filters?: TestAttemptFilterDto,
     ): Promise<TestAttemptListResponseDto> {
-        const filtersKey = JSON.stringify(filters || {});
+        const isElevated = this.isElevatedRole(scope.userRole);
+        const effectiveFilters: TestAttemptFilterDto = {
+            ...(filters ?? {}),
+            userId: isElevated ? filters?.userId : scope.userId,
+        };
+
+        // The effective user and visibility are part of the key so one
+        // caller's cached page can never be served to another.
+        const filtersKey = `${JSON.stringify(effectiveFilters)}:voided:${isElevated}`;
         const cacheKey = this.CACHE_KEYS.TEST_ATTEMPTS(
             testId,
             filtersKey,
@@ -1076,31 +1272,33 @@ export class TestAttemptsService {
             }
 
             // Apply filters
-            if (filters?.status) {
+            if (effectiveFilters.status) {
                 query.andWhere('attempt.status = :status', {
-                    status: filters.status,
+                    status: effectiveFilters.status,
                 });
             }
-            if (filters?.userId) {
+            if (effectiveFilters.userId) {
                 query.andWhere('attempt.userId = :userId', {
-                    userId: filters.userId,
+                    userId: effectiveFilters.userId,
                 });
             }
-            if (filters?.startDateFrom) {
+            if (effectiveFilters.startDateFrom) {
                 query.andWhere('attempt.startTime >= :startDateFrom', {
-                    startDateFrom: filters.startDateFrom,
+                    startDateFrom: effectiveFilters.startDateFrom,
                 });
             }
-            if (filters?.startDateTo) {
+            if (effectiveFilters.startDateTo) {
                 query.andWhere('attempt.startTime <= :startDateTo', {
-                    startDateTo: filters.startDateTo,
+                    startDateTo: effectiveFilters.startDateTo,
                 });
             }
+
+            this.applyLiveAttemptFilter(query, isElevated);
 
             query.orderBy('attempt.createdAt', 'DESC');
 
-            const page = filters?.page || 1;
-            const pageSize = filters?.pageSize || 10;
+            const page = effectiveFilters.page || 1;
+            const pageSize = effectiveFilters.pageSize || 10;
             const offset = (page - 1) * pageSize;
 
             const [attempts, total] = await query
@@ -1179,24 +1377,13 @@ export class TestAttemptsService {
                 };
             }
 
-            const attemptsQuery = this.testAttemptRepository
-                .createQueryBuilder('attempt')
-                .where('attempt.testId = :testId', { testId })
-                .andWhere('attempt.userId = :userId', { userId });
-
-            // Apply org/branch scoping
-            if (scope.orgId) {
-                attemptsQuery.andWhere('attempt.orgId = :orgId', {
-                    orgId: scope.orgId,
-                });
-            }
-            if (scope.branchId) {
-                attemptsQuery.andWhere('attempt.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
-
-            const attemptsUsed = await attemptsQuery.getCount();
+            // Same chargeable rule as `startAttempt`, so the gate and the
+            // number the UI renders can never disagree after a reset.
+            const attemptsUsed = await this.countChargeableAttempts(
+                testId,
+                userId,
+                scope,
+            );
 
             const activeAttemptQuery = this.testAttemptRepository
                 .createQueryBuilder('attempt')
@@ -1217,6 +1404,8 @@ export class TestAttemptsService {
                     branchId: scope.branchId,
                 });
             }
+
+            this.applyLiveAttemptFilter(activeAttemptQuery);
 
             const activeAttempt = await activeAttemptQuery.getOne();
 
@@ -1280,6 +1469,8 @@ export class TestAttemptsService {
                     branchId: scope.branchId,
                 });
             }
+
+            this.applyLiveAttemptFilter(query);
 
             const attempt = await query.getOne();
 
@@ -1361,16 +1552,22 @@ export class TestAttemptsService {
     }
 
     /**
-     * Get statistics for test attempts with caching and scoping
+     * Get statistics for test attempts with caching and scoping.
+     *
+     * Learners see figures computed from live attempts only, so the numbers on
+     * their dashboard match what a reset left them. Elevated callers keep the
+     * full history.
      */
     async getStats(
         scope: OrgBranchScope,
         testId?: number,
         userId?: string,
     ): Promise<TestAttemptStatsDto> {
+        const includeVoided = this.isElevatedRole(scope.userRole);
         const cacheKey = this.CACHE_KEYS.ATTEMPT_STATS(
             testId,
             userId,
+            includeVoided,
             scope.orgId,
             scope.branchId,
         );
@@ -1400,6 +1597,8 @@ export class TestAttemptsService {
             if (userId) {
                 query.andWhere('attempt.userId = :userId', { userId });
             }
+
+            this.applyLiveAttemptFilter(query, includeVoided);
 
             const attempts = await query.getMany();
 
@@ -1467,10 +1666,11 @@ export class TestAttemptsService {
 
             if (userId) {
                 const resultCounts =
-                    await this.resultsService.getUserResultCounts(
-                        userId,
+                    await this.resultsService.getUserResultCounts(userId, {
                         testId,
-                    );
+                        scope,
+                        includeVoided,
+                    });
                 passedAttempts = resultCounts.passedResults;
                 failedAttempts = resultCounts.failedResults;
                 averageScore = resultCounts.averageScore;
@@ -1531,6 +1731,8 @@ export class TestAttemptsService {
                     branchId: scope.branchId,
                 });
             }
+
+            this.applyLiveAttemptFilter(query);
 
             const activeAttempt = await query.getOne();
 
@@ -1631,5 +1833,434 @@ export class TestAttemptsService {
                 totalQuestions,
             };
         });
+    }
+
+    /**
+     * Reset one learner's attempts for one test so they may sit it again.
+     *
+     * Everything the learner did before the reset is voided rather than
+     * deleted: the audit row is the watermark, and every learner-facing read
+     * path filters on it. This is an anti-cheat requirement — a submitted
+     * result exposes the correct answer for every question, so a retake would
+     * be worthless if the previous attempt stayed readable.
+     *
+     * @param resetDto - Target test, target learner and optional justification.
+     * @param scope - Caller org/branch/role scope.
+     * @returns The audit record plus the learner's refreshed attempt allowance.
+     * @throws ForbiddenException when the caller is not elevated or the target
+     * lies outside the caller's organization or branch.
+     * @throws NotFoundException when the test or the learner does not exist.
+     * @throws ConflictException when the learner has no live attempts to void.
+     */
+    async resetUserTestAttempts(
+        resetDto: ResetTestAttemptsDto,
+        scope: OrgBranchScope,
+    ): Promise<TestAttemptResetResponseDto> {
+        this.assertAdminAccess(scope);
+
+        const { testId, userId } = resetDto;
+        const test = await this.loadResettableTest(testId, scope);
+        await this.loadResettableLearner(userId, scope);
+
+        const liveAttempts = await this.countLiveAttempts(
+            testId,
+            userId,
+            scope,
+        );
+
+        if (liveAttempts === 0) {
+            throw new ConflictException(
+                'This learner has no attempts to reset for this test',
+            );
+        }
+
+        const resetId = await this.dataSource.transaction(manager =>
+            this.performAttemptReset(manager, resetDto, scope, test),
+        );
+
+        // Post-commit side effects. They are deliberately outside the
+        // transaction so a cache or statistics failure cannot roll back an
+        // already-durable reset.
+        await this.invalidateCachesAfterReset(testId, userId);
+
+        this.logger.log(
+            `Reset attempts for user ${userId} on test ${testId} (reset ${resetId}) by ${scope.userId}`,
+        );
+
+        return this.buildResetResponse(resetId, scope);
+    }
+
+    /**
+     * Paginated audit history of attempt resets, newest first.
+     *
+     * @param scope - Caller org/branch/role scope.
+     * @param filters - Optional test/learner filters and pagination.
+     * @returns Reset records visible within the caller's scope.
+     * @throws ForbiddenException when the caller is not elevated.
+     */
+    async findAttemptResets(
+        scope: OrgBranchScope,
+        filters: TestAttemptResetFilterDto,
+    ): Promise<TestAttemptResetListResponseDto> {
+        this.assertAdminAccess(scope);
+
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 20;
+
+        const query = this.testAttemptResetRepository
+            .createQueryBuilder('reset')
+            .leftJoinAndSelect('reset.test', 'test')
+            .leftJoinAndSelect('reset.user', 'user')
+            .leftJoinAndSelect('reset.resetByUser', 'resetByUser');
+
+        if (scope.orgId) {
+            query.andWhere('reset.orgId = :orgId', { orgId: scope.orgId });
+        }
+        if (scope.branchId) {
+            query.andWhere('reset.branchId = :branchId', {
+                branchId: scope.branchId,
+            });
+        }
+        if (filters.testId) {
+            query.andWhere('reset.testId = :filterTestId', {
+                filterTestId: filters.testId,
+            });
+        }
+        if (filters.userId) {
+            query.andWhere('reset.userId = :filterUserId', {
+                filterUserId: filters.userId,
+            });
+        }
+
+        const [resets, total] = await query
+            .orderBy('reset.resetAt', 'DESC')
+            .skip((page - 1) * limit)
+            .take(limit)
+            .getManyAndCount();
+
+        const chargeableAttempts = await this.countChargeableAttemptsForPairs(
+            resets.map(reset => ({
+                testId: reset.testId,
+                userId: reset.userId,
+            })),
+            scope,
+        );
+
+        return {
+            resets: resets.map(reset =>
+                this.mapResetToResponseDto(
+                    reset,
+                    chargeableAttempts.get(
+                        this.buildAttemptPairKey(reset.testId, reset.userId),
+                    ) ?? 0,
+                ),
+            ),
+            total,
+            page,
+            limit,
+        };
+    }
+
+    /**
+     * Load the target test and confirm it sits inside the caller's boundaries.
+     *
+     * A missing test is a 404; a test that exists in another organization or
+     * branch is a 403, so an administrator cannot probe for tests they do not
+     * administer.
+     */
+    private async loadResettableTest(
+        testId: number,
+        scope: OrgBranchScope,
+    ): Promise<Test> {
+        const test = await this.testRepository
+            .createQueryBuilder('test')
+            .leftJoinAndSelect('test.orgId', 'org')
+            .leftJoinAndSelect('test.branchId', 'branch')
+            .where('test.testId = :testId', { testId })
+            .getOne();
+
+        if (!test) {
+            throw new NotFoundException('Test not found');
+        }
+
+        if (scope.orgId && test.orgId?.id !== scope.orgId) {
+            throw new ForbiddenException(
+                'You cannot reset attempts for a test outside your organization',
+            );
+        }
+        if (scope.branchId && test.branchId?.id !== scope.branchId) {
+            throw new ForbiddenException(
+                'You cannot reset attempts for a test outside your branch',
+            );
+        }
+
+        return test;
+    }
+
+    /** Load the target learner and confirm they sit inside the caller's boundaries. */
+    private async loadResettableLearner(
+        userId: string,
+        scope: OrgBranchScope,
+    ): Promise<User> {
+        const user = await this.userRepository
+            .createQueryBuilder('user')
+            .leftJoinAndSelect('user.orgId', 'org')
+            .leftJoinAndSelect('user.branchId', 'branch')
+            .where('user.id = :userId', { userId })
+            .getOne();
+
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        if (scope.orgId && user.orgId?.id !== scope.orgId) {
+            throw new ForbiddenException(
+                'You cannot reset attempts for a learner outside your organization',
+            );
+        }
+        if (scope.branchId && user.branchId?.id !== scope.branchId) {
+            throw new ForbiddenException(
+                'You cannot reset attempts for a learner outside your branch',
+            );
+        }
+
+        return user;
+    }
+
+    /** Count every not-yet-voided attempt, regardless of status. */
+    private async countLiveAttempts(
+        testId: number,
+        userId: string,
+        scope: OrgBranchScope,
+    ): Promise<number> {
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .where('attempt.testId = :testId', { testId })
+            .andWhere('attempt.userId = :userId', { userId });
+
+        this.applyAttemptScopeFilters(query, scope);
+        this.applyLiveAttemptFilter(query);
+
+        return query.getCount();
+    }
+
+    /**
+     * Write the audit row and void the learner's history in one transaction, so
+     * a partial reset — attempts hidden but results still readable — cannot
+     * occur.
+     *
+     * @returns The identifier of the newly written reset record.
+     */
+    private async performAttemptReset(
+        manager: EntityManager,
+        resetDto: ResetTestAttemptsDto,
+        scope: OrgBranchScope,
+        test: Test,
+    ): Promise<number> {
+        const { testId, userId } = resetDto;
+
+        const resetRecord = await manager.save(
+            manager.create(TestAttemptReset, {
+                testId,
+                userId,
+                resetByUserId: scope.userId,
+                reason: resetDto.reason ?? null,
+                attemptsVoided: 0,
+                resultsVoided: 0,
+                resetAt: new Date(),
+                orgId: test.orgId,
+                branchId: test.branchId ?? null,
+            }),
+        );
+
+        // Attempts and results inherit the test's org/branch, so filtering on
+        // (testId, userId) cannot reach another tenant's rows.
+        await manager
+            .createQueryBuilder()
+            .update(TestAttempt)
+            .set({ status: AttemptStatus.CANCELLED })
+            .where('testId = :testId', { testId })
+            .andWhere('userId = :userId', { userId })
+            .andWhere('status = :inProgress', {
+                inProgress: AttemptStatus.IN_PROGRESS,
+            })
+            .andWhere('voidedByResetId IS NULL')
+            .execute();
+
+        const voidedAttempts = await manager
+            .createQueryBuilder()
+            .update(TestAttempt)
+            .set({ voidedByResetId: resetRecord.resetId })
+            .where('testId = :testId', { testId })
+            .andWhere('userId = :userId', { userId })
+            .andWhere('voidedByResetId IS NULL')
+            .execute();
+
+        const attemptsVoided = voidedAttempts.affected ?? 0;
+
+        // Concurrent resets: the `IS NULL` predicate makes the update
+        // idempotent, so the loser voids nothing and its audit row is rolled
+        // back rather than left behind as a no-op.
+        if (attemptsVoided === 0) {
+            throw new ConflictException(
+                'This learner has no attempts to reset for this test',
+            );
+        }
+
+        const voidedResults = await manager
+            .createQueryBuilder()
+            .update(Result)
+            .set({ voidedByResetId: resetRecord.resetId })
+            .where('testId = :testId', { testId })
+            .andWhere('userId = :userId', { userId })
+            .andWhere('voidedByResetId IS NULL')
+            .execute();
+
+        await manager.update(
+            TestAttemptReset,
+            { resetId: resetRecord.resetId },
+            {
+                attemptsVoided,
+                resultsVoided: voidedResults.affected ?? 0,
+            },
+        );
+
+        return resetRecord.resetId;
+    }
+
+    /**
+     * Drop cached attempt and result payloads that would otherwise keep serving
+     * pre-reset data.
+     *
+     * The attempt and result list caches are keyed by an opaque filter blob, so
+     * there is no key pattern to target. Resets are rare, deliberate,
+     * administrator-driven events, which makes flushing these two module-local
+     * caches an acceptable price for closing the window in which a learner
+     * could still read the answer key.
+     */
+    private async invalidateCachesAfterReset(
+        testId: number,
+        userId: string,
+    ): Promise<void> {
+        try {
+            await this.cacheManager.clear();
+            await this.resultsService.invalidateCachesAfterAttemptReset();
+            await this.testService.refreshTestStatistics(testId);
+        } catch (error) {
+            this.logger.error(
+                `Failed post-reset cleanup for test ${testId} and user ${userId}:`,
+                error instanceof Error ? error.stack : String(error),
+            );
+            // The reset itself is committed; stale caches expire on their own.
+        }
+    }
+
+    /** Reload a committed reset record and render it as the API response. */
+    private async buildResetResponse(
+        resetId: number,
+        scope: OrgBranchScope,
+    ): Promise<TestAttemptResetResponseDto> {
+        const reset = await this.testAttemptResetRepository.findOne({
+            where: { resetId },
+            relations: ['test', 'user', 'resetByUser'],
+        });
+
+        if (!reset) {
+            throw new NotFoundException('Reset record not found');
+        }
+
+        const chargeableAttempts = await this.countChargeableAttempts(
+            reset.testId,
+            reset.userId,
+            scope,
+        );
+
+        return this.mapResetToResponseDto(reset, chargeableAttempts);
+    }
+
+    /** Stable map key for a (test, learner) pair. */
+    private buildAttemptPairKey(testId: number, userId: string): string {
+        return `${testId}:${userId}`;
+    }
+
+    /**
+     * Count chargeable attempts for many (test, learner) pairs in one query,
+     * keeping the reset history endpoint free of per-row lookups.
+     */
+    private async countChargeableAttemptsForPairs(
+        pairs: ReadonlyArray<{ testId: number; userId: string }>,
+        scope: OrgBranchScope,
+    ): Promise<Map<string, number>> {
+        const counts = new Map<string, number>();
+
+        if (pairs.length === 0) {
+            return counts;
+        }
+
+        const testIds = [...new Set(pairs.map(pair => pair.testId))];
+        const userIds = [...new Set(pairs.map(pair => pair.userId))];
+
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .select('attempt.testId', 'testId')
+            .addSelect('attempt.userId', 'userId')
+            .addSelect('COUNT(attempt.attemptId)', 'chargeableCount')
+            .where('attempt.testId IN (:...testIds)', { testIds })
+            .andWhere('attempt.userId IN (:...userIds)', { userIds })
+            .andWhere('attempt.status != :cancelledStatus', {
+                cancelledStatus: AttemptStatus.CANCELLED,
+            })
+            .groupBy('attempt.testId')
+            .addGroupBy('attempt.userId');
+
+        this.applyAttemptScopeFilters(query, scope);
+        this.applyLiveAttemptFilter(query);
+
+        const rows = await query.getRawMany<{
+            testId: number;
+            userId: string;
+            chargeableCount: string;
+        }>();
+
+        for (const row of rows) {
+            counts.set(
+                this.buildAttemptPairKey(Number(row.testId), row.userId),
+                Number(row.chargeableCount) || 0,
+            );
+        }
+
+        return counts;
+    }
+
+    /** Map a reset entity plus the learner's current allowance to the API shape. */
+    private mapResetToResponseDto(
+        reset: TestAttemptReset,
+        chargeableAttempts: number,
+    ): TestAttemptResetResponseDto {
+        const maxAttempts = reset.test?.maxAttempts ?? 0;
+
+        return {
+            resetId: reset.resetId,
+            testId: reset.testId,
+            testTitle: reset.test?.title ?? '',
+            userId: reset.userId,
+            userName: this.buildFullName(reset.user),
+            resetByUserId: reset.resetByUserId,
+            resetByName: this.buildFullName(reset.resetByUser),
+            reason: reset.reason ?? null,
+            attemptsVoided: reset.attemptsVoided,
+            resultsVoided: reset.resultsVoided,
+            resetAt: new Date(reset.resetAt).toISOString(),
+            maxAttempts,
+            attemptsRemaining: Math.max(0, maxAttempts - chargeableAttempts),
+        };
+    }
+
+    /** Render a user's display name, tolerating partially loaded relations. */
+    private buildFullName(user?: User | null): string {
+        if (!user) {
+            return '';
+        }
+        return `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim();
     }
 }

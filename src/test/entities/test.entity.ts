@@ -121,16 +121,39 @@ export class Test {
     @Min(1)
     maxAttempts: number;
 
+    /**
+     * Start of the availability window. Replaces the former single `examDate`:
+     * learners may take the test from this calendar day onwards instead of on
+     * one fixed day. Null means "no scheduled start" (always open).
+     */
     @Column({ type: 'datetime', precision: 6, nullable: true })
+    @Index()
     @ApiProperty({
         description:
-            'Calendar date/time when the exam should be taken (optional)',
-        example: '2026-05-18T10:30:00.000Z',
+            'First calendar day/time the test may be taken (null when unscheduled)',
+        example: '2026-05-18T00:00:00.000Z',
         required: false,
         nullable: true,
         type: Date,
     })
-    examDate?: Date | null;
+    examStartDate?: Date | null;
+
+    /**
+     * End of the availability window, inclusive of the whole calendar day.
+     * Once it has passed the test is hidden from learners and no new attempts
+     * may be started. Null means "open-ended".
+     */
+    @Column({ type: 'datetime', precision: 6, nullable: true })
+    @Index()
+    @ApiProperty({
+        description:
+            'Last calendar day/time the test may be taken, inclusive (null when open-ended)',
+        example: '2026-05-22T00:00:00.000Z',
+        required: false,
+        nullable: true,
+        type: Date,
+    })
+    examEndDate?: Date | null;
 
     @Column({ default: true })
     @Index()

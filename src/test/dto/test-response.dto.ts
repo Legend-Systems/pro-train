@@ -61,12 +61,21 @@ export class TestResponseDto {
 
     @ApiProperty({
         description:
-            'Scheduled exam date/time when applicable (null if not set)',
+            'First day of the exam availability window (null if not scheduled)',
         example: '2026-05-18T00:00:00.000Z',
         required: false,
         nullable: true,
     })
-    examDate?: Date | null;
+    examStartDate?: Date | null;
+
+    @ApiProperty({
+        description:
+            'Last day of the exam availability window, inclusive (null if open-ended)',
+        example: '2026-05-22T00:00:00.000Z',
+        required: false,
+        nullable: true,
+    })
+    examEndDate?: Date | null;
 
     @ApiProperty({
         description: 'Whether the test is currently active',
@@ -265,6 +274,10 @@ export class TestConfigDto {
         isActive: boolean;
         requiresApproval: boolean;
         allowLateSubmission: boolean;
+        /** Exam availability window (replaces the former single exam date). */
+        examStartDate?: Date | null;
+        examEndDate?: Date | null;
+        isWithinExamWindow: boolean;
     };
 
     @ApiProperty({

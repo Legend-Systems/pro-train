@@ -23,7 +23,7 @@ export enum TestExamNotificationStatus {
 }
 
 /**
- * Deduplicated log of examDate reminder emails.
+ * Deduplicated log of exam reminder emails.
  * Unique per (testId, userId, notificationType) so cron never double-sends.
  */
 @Entity('test_exam_notification')
@@ -67,8 +67,15 @@ export class TestExamNotification {
     @ApiProperty({ enum: TestExamNotificationStatus })
     status: TestExamNotificationStatus;
 
+    /**
+     * Historical snapshot of the date the reminder was about. Since tests moved
+     * from a single `examDate` to a start/end window this stores the window's
+     * start date; the column name is kept so existing audit rows stay readable.
+     */
     @Column({ type: 'datetime', precision: 6 })
-    @ApiProperty({ description: 'Snapshot of test.examDate when queued' })
+    @ApiProperty({
+        description: 'Snapshot of the exam window start date when queued',
+    })
     examDate: Date;
 
     @Column({ type: 'varchar', length: 320 })

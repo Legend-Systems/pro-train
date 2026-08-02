@@ -14,6 +14,7 @@ import { Test } from './test/entities/test.entity';
 import { Question } from './questions/entities/question.entity';
 import { QuestionOption } from './questions_options/entities/questions_option.entity';
 import { TestAttempt } from './test_attempts/entities/test_attempt.entity';
+import { TestAttemptReset } from './test_attempts/entities/test-attempt-reset.entity';
 import { CourseModule } from './course/course.module';
 import { TestModule } from './test/test.module';
 import { QuestionsModule } from './questions/questions.module';
@@ -103,6 +104,7 @@ import { HomeInsightsModule } from './home-insights/home-insights.module';
                     Result,
                     Test,
                     TestAttempt,
+                    TestAttemptReset,
                     TrainingProgress,
                     User,
                     UserRewards,

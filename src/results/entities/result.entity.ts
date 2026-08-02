@@ -10,8 +10,15 @@ import {
     Check,
 } from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsNumber, IsBoolean, IsDateString } from 'class-validator';
+import {
+    IsUUID,
+    IsNumber,
+    IsBoolean,
+    IsDateString,
+    IsOptional,
+} from 'class-validator';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
+import { TestAttemptReset } from '../../test_attempts/entities/test-attempt-reset.entity';
 import { Test } from '../../test/entities/test.entity';
 import { User } from '../../user/entities/user.entity';
 import { Course } from '../../course/entities/course.entity';
@@ -24,6 +31,7 @@ import { Branch } from '../../branch/entities/branch.entity';
 @Index('IDX_RESULT_TEST', ['testId'])
 @Index('IDX_RESULT_COURSE', ['courseId'])
 @Index('IDX_RESULT_PASSED', ['passed'])
+@Index('IDX_RESULT_VOIDED_BY_RESET', ['voidedByResetId'])
 @Check('CHK_RESULT_SCORE', 'score >= 0')
 @Check('CHK_RESULT_PERCENTAGE', 'percentage >= 0 AND percentage <= 100')
 export class Result {
@@ -115,6 +123,24 @@ export class Result {
     @IsDateString()
     calculatedAt: Date;
 
+    /**
+     * Anti-cheat watermark. `NULL` means the result is live and visible to the
+     * learner; a non-null value names the admin reset that voided it. Voided
+     * results must never be returned to the learner because the enhanced
+     * payload contains the correct answer for every question.
+     */
+    @Column({ type: 'int', nullable: true })
+    @ApiProperty({
+        description:
+            'Reset that voided this result — null while the result is live',
+        example: null,
+        required: false,
+        nullable: true,
+    })
+    @IsOptional()
+    @IsNumber()
+    voidedByResetId?: number | null;
+
     @CreateDateColumn()
     @ApiProperty({
         description: 'Result creation timestamp',
@@ -158,6 +184,10 @@ export class Result {
     @ManyToOne(() => Course, { onDelete: 'RESTRICT' })
     @JoinColumn({ name: 'courseId', referencedColumnName: 'courseId' })
     course: Course;
+
+    @ManyToOne(() => TestAttemptReset, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'voidedByResetId' })
+    voidedByReset?: TestAttemptReset | null;
 
     constructor(partial: Partial<Result>) {
         Object.assign(this, partial);

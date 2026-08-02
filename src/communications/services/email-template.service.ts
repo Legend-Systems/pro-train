@@ -520,7 +520,8 @@ export class EmailTemplateService {
                         name: 'Test Exam Reminder (3 days)',
                         type: EmailType.TEST_EXAM_REMINDER_3DAY,
                         version: '1.0.0',
-                        description: 'Reminder sent 3 days before examDate',
+                        description:
+                            'Reminder sent 3 days before the exam window opens',
                         requiredData: [
                             'testTitle',
                             'courseTitle',
@@ -545,7 +546,8 @@ export class EmailTemplateService {
                         name: 'Test Exam Reminder (exam day)',
                         type: EmailType.TEST_EXAM_REMINDER_DAYOF,
                         version: '1.0.0',
-                        description: 'Final reminder sent on examDate',
+                        description:
+                            'Final reminder sent on the day the exam window opens',
                         requiredData: [
                             'testTitle',
                             'courseTitle',
