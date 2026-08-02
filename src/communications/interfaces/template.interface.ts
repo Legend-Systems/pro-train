@@ -93,6 +93,8 @@ export interface ResultsSummaryTemplateData extends BaseTemplateData {
     feedback?: string;
     scoreDisplay?: string;
     isPassed?: boolean;
+    /** Global minimum percentage required to pass (currently 80). */
+    passingScore?: number;
 }
 
 // Course enrollment template data

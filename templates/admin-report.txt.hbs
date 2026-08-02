@@ -8,13 +8,27 @@ Hi {{recipientName}},
 Organization training performance summary{{#if organizationName}} for {{organizationName}}{{/if}}.
 
 KPIs
+{{#if showAverageKnowledgeScore}}
 - Avg knowledge score: {{averageKnowledgeScore}}%
+{{/if}}
+{{#if showOverallPassRate}}
 - Pass rate: {{overallPassRate}}%
+{{/if}}
+{{#if showActiveLearners}}
 - Active learners: {{activeLearners}}
+{{/if}}
+{{#if showTrainingHours}}
 - Training hours: {{totalTrainingHours}}h
+{{/if}}
+{{#if showTestCompletion}}
+- Tests completed: {{testsCompleted}}
+- Tests passed: {{testsPassed}}
+{{/if}}
+{{#if showAttentionSummary}}
 - At-risk users: {{atRiskUserCount}}
 - High-potential learners: {{highPotentialUserCount}}
 - Key areas: {{keyAreaCount}}
+{{/if}}
 
 {{#if topPerformersSummary.length}}
 Top performers:

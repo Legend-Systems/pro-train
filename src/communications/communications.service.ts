@@ -20,6 +20,8 @@ import {
 } from './interfaces/template.interface';
 import { EmailType } from './entities/communication.entity';
 import { EmailStatus } from './entities/communication.entity';
+import { PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
+import { formatExamWindowRange } from '../test/utils/exam-window.util';
 
 @Injectable()
 export class CommunicationsService {
@@ -918,6 +920,8 @@ export class CommunicationsService {
         organizationId?: string;
         scoreDisplay?: string;
         isPassed?: boolean;
+        /** Global minimum percentage required to pass (raised from 60% to 80%). */
+        passingScore?: number;
     }): Promise<void> {
         try {
             const baseData = this.getBaseTemplateData(
@@ -996,6 +1000,15 @@ export class CommunicationsService {
         atRiskUserCount: number;
         highPotentialUserCount?: number;
         keyAreaCount: number;
+        /** Per-block visibility so the email mirrors the selected report sections. */
+        showAverageKnowledgeScore?: boolean;
+        showOverallPassRate?: boolean;
+        showActiveLearners?: boolean;
+        showTrainingHours?: boolean;
+        showAttentionSummary?: boolean;
+        showTestCompletion?: boolean;
+        testsCompleted?: number;
+        testsPassed?: number;
         topPerformersSummary: string[];
         keyAreasSummary: string[];
         celebrationHeadline?: string;
@@ -1049,6 +1062,19 @@ export class CommunicationsService {
                 hasPdf: Boolean(templateData.pdfAttachment),
                 highPotentialUserCount:
                     templateData.highPotentialUserCount ?? 0,
+                // Blocks default to visible so callers that predate report
+                // section selection keep their original email layout.
+                showAverageKnowledgeScore:
+                    templateData.showAverageKnowledgeScore ?? true,
+                showOverallPassRate: templateData.showOverallPassRate ?? true,
+                showActiveLearners: templateData.showActiveLearners ?? true,
+                showTrainingHours: templateData.showTrainingHours ?? true,
+                showAttentionSummary:
+                    templateData.showAttentionSummary ?? true,
+                showTestCompletion:
+                    templateData.showTestCompletion ?? false,
+                testsCompleted: templateData.testsCompleted ?? 0,
+                testsPassed: templateData.testsPassed ?? 0,
             };
 
             const rendered = await this.emailTemplateService.renderByType(
@@ -1175,6 +1201,8 @@ export class CommunicationsService {
                 hasTimeLimit: !!durationMinutes,
                 hasExpiry: !!expiresAt,
                 hasCustomMessage: !!message,
+                // Pass mark raised from 60% to 80%; shown in test-invitation templates
+                passingScore: PASSING_SCORE_PERCENTAGE,
                 organizationName: orgData.organization?.name,
                 organizationLogo: orgData.organization?.logoUrl,
                 organizationWebsite: orgData.organization?.website,
@@ -1306,7 +1334,9 @@ export class CommunicationsService {
     }
 
     /**
-     * Queues a 3-day or exam-day reminder for an upcoming test (examDate).
+     * Queues a 3-day or window-opening reminder for an upcoming test.
+     * Tests carry an exam window (`examStartDate`/`examEndDate`) rather than a
+     * single exam date, so the email shows the full range learners can use.
      * Returns the saved communication id for audit linkage.
      */
     async sendTestExamReminderEmail(templateData: {
@@ -1317,7 +1347,8 @@ export class CommunicationsService {
         testTitle: string;
         courseId: number;
         courseTitle: string;
-        examDate: Date;
+        examStartDate: Date;
+        examEndDate?: Date | null;
         notificationType: 'three_day' | 'day_of';
         timeRemainingLabel?: string;
         userId: string;
@@ -1369,7 +1400,19 @@ export class CommunicationsService {
                 testTitle: templateData.testTitle,
                 courseId: templateData.courseId,
                 courseTitle: templateData.courseTitle,
-                formattedExamDate: this.formatDate(templateData.examDate),
+                formattedExamStartDate: this.formatDate(
+                    templateData.examStartDate,
+                ),
+                formattedExamEndDate: templateData.examEndDate
+                    ? this.formatDate(templateData.examEndDate)
+                    : null,
+                formattedExamWindow: formatExamWindowRange(
+                    {
+                        examStartDate: templateData.examStartDate,
+                        examEndDate: templateData.examEndDate,
+                    },
+                    date => this.formatDate(date),
+                ),
                 timeRemainingLabel:
                     templateData.timeRemainingLabel ?? 'About 3 days',
                 takeTestUrl,
@@ -1403,7 +1446,9 @@ export class CommunicationsService {
                     testId: templateData.testId,
                     userId: templateData.userId,
                     notificationType: templateData.notificationType,
-                    examDate: templateData.examDate.toISOString(),
+                    examStartDate: templateData.examStartDate.toISOString(),
+                    examEndDate:
+                        templateData.examEndDate?.toISOString() ?? null,
                     takeTestUrl,
                     deepLinkUrl,
                 },

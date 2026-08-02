@@ -12,6 +12,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Organization } from '../../org/entities/org.entity';
 import { User } from '../../user/entities/user.entity';
+import { ReportPreset } from '../constants/report-sections.constant';
 import { ReportRun } from './report-run.entity';
 
 /** How often a scheduled admin report is delivered. */
@@ -55,10 +56,31 @@ export class ReportSchedule {
 
     @Column({ type: 'json' })
     @ApiProperty({
-        description: 'Report slices to include',
+        description: 'Legacy report slices, retained for backwards compatibility',
         example: ['overview', 'performers', 'key-areas'],
     })
     reportTypes: string[];
+
+    @Column({
+        type: 'enum',
+        enum: ReportPreset,
+        default: ReportPreset.ADMIN,
+    })
+    @ApiProperty({
+        enum: ReportPreset,
+        description:
+            'Starting point for report content. The leaderboard preset always strips sections that highlight individual underperformance.',
+    })
+    reportPreset: ReportPreset;
+
+    @Column({ type: 'json', nullable: true })
+    @ApiPropertyOptional({
+        description:
+            'Explicit section keys to include. Null falls back to the preset defaults.',
+        type: [String],
+        example: ['admin-overview', 'leaderboard-rankings', 'top-scorers'],
+    })
+    sections?: string[] | null;
 
     @Column({ type: 'json', nullable: true })
     @ApiPropertyOptional({

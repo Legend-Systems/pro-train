@@ -342,7 +342,7 @@ Define in `src/rewards/constants/xp.constants.ts`.
 | `COMPLETE_PROFILE` | Avatar + name filled | **40** | One-time onboarding boost |
 | `START_TEST_ATTEMPT` | New attempt started | **5** | Encourages starting, low repeat farming |
 | `SUBMIT_TEST` | Attempt submitted & scored | **15** | Core learning action |
-| `PASS_TEST` | Result `passed === true` (≥60%) | **20** | Reward competence |
+| `PASS_TEST` | Result `passed === true` (≥80%) | **20** | Reward competence |
 | `PASS_TEST_FIRST_TRY` | Pass on `attemptNumber === 1` | **15** | Bonus on top of pass (not instead) |
 | `PERFECT_SCORE` | `percentage === 100` | **40** | Mastery moment |
 | `IMPROVE_SCORE` | Beat previous best on same test | **10** | Encourage retakes |
@@ -727,7 +727,7 @@ Keep both. Optionally add a combined “engagement score” in reports later —
 3. **XP ≠ test score points** — `leaderboards.totalPoints` is sum of exam scores; XP is independent.
 4. **Non-blocking awards** — wrap all `awardXP` calls in try/catch; log errors; never fail test submission or login.
 5. **Feature flag** — ship dark with `REWARDS_XP_ENABLED` until backfill and QA complete.
-6. **Pass threshold** — ProTrain uses **60%** pass rate in `ResultsService.createFromAttempt`; align `PASS_TEST` with that rule.
+6. **Pass threshold** — ProTrain uses **80%** pass rate in `ResultsService` (`PASSING_SCORE_PERCENTAGE`); align `PASS_TEST` with that rule.
 7. **Attempt limits** — `tests.maxAttempts` caps retakes; XP for `IMPROVE_SCORE` still applies within allowed attempts.
 8. **Admin awards** — restrict `POST /rewards/award-xp` to `ADMIN`, `OWNER`, `MASTER_ADMIN` via existing role guards (`docs/ROLE_GUARDS.md`).
 9. **Breakdown sync** — when adding categories, update both `xp-breakdown.util.ts` and `RewardsService.mapSourceTypeToCategory()`.

@@ -11,24 +11,29 @@ import { Answer } from '../../answers/entities/answer.entity';
 import { Leaderboard } from '../../leaderboard/entities/leaderboard.entity';
 import { Result } from '../../results/entities/result.entity';
 import { TrainingSession } from '../../training-hours/entities/training-session.entity';
-import { User, UserRole } from '../../user/entities/user.entity';
+import { User, UserRole, UserStatus } from '../../user/entities/user.entity';
 import {
     AdminAtRiskUserDto,
     AdminBranchComparisonDto,
+    AdminBranchTopPerformersDto,
     AdminChallengingQuestionDto,
     AdminEffectivenessTrendPointDto,
     AdminHighPotentialUserDto,
     AdminKeyAreaDto,
     AdminKnowledgeImprovementDto,
     AdminLeaderboardEntryDto,
+    AdminLeaderboardInsightsDto,
     AdminOverviewReportDto,
     AdminPassRateDto,
     AdminPerformerDto,
+    AdminRankingEntryDto,
     AdminReportFiltersDto,
     AdminReportSortOrder,
     AdminReportTimeframe,
     AdminSkillGapDto,
+    AdminTestCompletionSummaryDto,
     AdminTestPassFailDto,
+    AdminTopScorerDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
 
@@ -59,6 +64,15 @@ const HIGH_POTENTIAL_SCORE = 75;
 /** At-risk: low engagement ceiling for results in the current window. */
 const AT_RISK_MAX_RESULTS = 2;
 
+/** Hard ceiling on full-org ranking rows so a PDF stays deliverable by email. */
+const MAX_RANKING_ROWS = 1000;
+
+/** Learners celebrated per branch in the leaderboard report. */
+const BRANCH_TOP_PERFORMER_COUNT = 3;
+
+/** Default number of highest-scoring test results to celebrate. */
+const TOP_SCORER_LIMIT = 10;
+
 /** Date window derived from timeframe or explicit start/end. */
 interface DateWindow {
     start: Date;
@@ -85,6 +99,8 @@ export class AdminInsightsReportsService {
         private readonly leaderboardRepository: Repository<Leaderboard>,
         @InjectRepository(Answer)
         private readonly answerRepository: Repository<Answer>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
     ) {}
 
     /** Executive hub payload combining KPIs and actionable slices. */
@@ -525,6 +541,56 @@ export class AdminInsightsReportsService {
                 courseId: row.courseId ? Number(row.courseId) : null,
                 courseTitle: row.courseTitle ?? null,
             })),
+        };
+    }
+
+    /**
+     * Motivation-focused leaderboard datasets.
+     *
+     * Rankings reflect current cumulative standing (every active learner in
+     * the organization, not just the top few). Top scorers and completion
+     * totals are scoped to the reporting window so digests stay topical.
+     * Nothing here exposes a learner's average score or pass rate.
+     */
+    async getLeaderboardInsights(
+        scope: OrgBranchScope,
+        filters: AdminReportFiltersDto = {},
+    ): Promise<AdminLeaderboardInsightsDto> {
+        const orgId = this.requireOrg(scope);
+        const branchId = filters.branchId;
+        const window = this.resolveWindow(filters);
+
+        const [roster, pointsByUser, lifetimeTotals, windowTotals, topScorers] =
+            await Promise.all([
+                this.getLearnerRoster(orgId, branchId),
+                this.getLeaderboardPointsByUser(orgId, branchId),
+                this.getResultTotalsByUser(orgId, branchId),
+                this.getResultTotalsByUser(
+                    orgId,
+                    branchId,
+                    window.start,
+                    window.end,
+                ),
+                this.getTopScorers(
+                    orgId,
+                    branchId,
+                    window.start,
+                    window.end,
+                    this.resolveLimit(filters.limit ?? TOP_SCORER_LIMIT),
+                ),
+            ]);
+
+        const fullRankings = this.buildRankings(
+            roster,
+            pointsByUser,
+            lifetimeTotals,
+        );
+
+        return {
+            fullRankings,
+            branchTopPerformers: this.buildBranchTopPerformers(fullRankings),
+            topScorers,
+            testCompletion: this.summariseTestCompletion(windowTotals),
         };
     }
 
@@ -985,6 +1051,343 @@ export class AdminInsightsReportsService {
                 activeLearners: Number(row.activeLearners) || 0,
             };
         });
+    }
+
+    // ─── Leaderboard helpers ───────────────────────────────────────────
+
+    /** Every active learner in scope — the base for full org rankings. */
+    private async getLearnerRoster(
+        orgId: string,
+        branchId?: string,
+    ): Promise<
+        Array<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchId: string | null;
+            branchName: string | null;
+            branchAlias: string | null;
+        }>
+    > {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('user.role = :learnerRole', {
+                learnerRole: UserRole.USER,
+            })
+            .andWhere('user.status = :activeStatus', {
+                activeStatus: UserStatus.ACTIVE,
+            })
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('branch.id', 'branchId')
+            .addSelect('branch.name', 'branchName')
+            // Alias is the short branch code shown in narrow export columns.
+            .addSelect('branch.alias', 'branchAlias')
+            .orderBy('user.lastName', 'ASC')
+            .addOrderBy('user.firstName', 'ASC')
+            .limit(MAX_RANKING_ROWS);
+
+        if (branchId) {
+            query.andWhere('branch.id = :branchId', { branchId });
+        }
+
+        const rows = await query.getRawMany<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchId: string | null;
+            branchName: string | null;
+            branchAlias: string | null;
+        }>();
+
+        return rows.map(row => ({
+            userId: row.userId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            branchId: row.branchId ?? null,
+            branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
+        }));
+    }
+
+    /** Cumulative leaderboard points per learner (drives current rank). */
+    private async getLeaderboardPointsByUser(
+        orgId: string,
+        branchId?: string,
+    ): Promise<Map<string, number>> {
+        const query = this.leaderboardRepository
+            .createQueryBuilder('l')
+            .innerJoin('l.user', 'user')
+            .leftJoin('l.orgId', 'org')
+            .where('org.id = :orgId', { orgId })
+            .select('user.id', 'userId')
+            .addSelect('SUM(l.totalPoints)', 'totalPoints')
+            .groupBy('user.id');
+
+        if (branchId) {
+            query
+                .leftJoin('user.branchId', 'userBranch')
+                .andWhere('userBranch.id = :branchId', { branchId });
+        }
+
+        const rows = await query.getRawMany<{
+            userId: string;
+            totalPoints: string;
+        }>();
+
+        return new Map(
+            rows.map(row => [row.userId, Math.round(Number(row.totalPoints) || 0)]),
+        );
+    }
+
+    /** Completed / passed test counts per learner, optionally window-scoped. */
+    private async getResultTotalsByUser(
+        orgId: string,
+        branchId?: string,
+        start?: Date,
+        end?: Date,
+    ): Promise<Map<string, { testsCompleted: number; testsPassed: number }>> {
+        const query = this.buildScopedResultsQuery(orgId, branchId)
+            .innerJoin('result.user', 'user')
+            .andWhere('user.role = :learnerRole', {
+                learnerRole: UserRole.USER,
+            })
+            .select('user.id', 'userId')
+            .addSelect('COUNT(result.resultId)', 'testsCompleted')
+            .addSelect(
+                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
+                'testsPassed',
+            )
+            .groupBy('user.id');
+
+        if (start) {
+            query.andWhere('result.calculatedAt >= :start', { start });
+        }
+        if (end) {
+            query.andWhere('result.calculatedAt < :end', { end });
+        }
+
+        const rows = await query.getRawMany<{
+            userId: string;
+            testsCompleted: string;
+            testsPassed: string;
+        }>();
+
+        return new Map(
+            rows.map(row => [
+                row.userId,
+                {
+                    testsCompleted: Number(row.testsCompleted) || 0,
+                    testsPassed: Number(row.testsPassed) || 0,
+                },
+            ]),
+        );
+    }
+
+    /** Highest single test scores in the window, one entry per learner. */
+    private async getTopScorers(
+        orgId: string,
+        branchId: string | undefined,
+        start: Date,
+        end: Date,
+        limit: number,
+    ): Promise<AdminTopScorerDto[]> {
+        // Over-fetch so de-duplicating repeat high scorers still fills the list.
+        const rows = await this.buildScopedResultsQuery(orgId, branchId)
+            .innerJoin('result.user', 'user')
+            .innerJoin('result.test', 'test')
+            .leftJoin('result.course', 'course')
+            .leftJoin('user.branchId', 'userBranch')
+            .andWhere('result.calculatedAt >= :start', { start })
+            .andWhere('result.calculatedAt < :end', { end })
+            .andWhere('user.role = :learnerRole', {
+                learnerRole: UserRole.USER,
+            })
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('userBranch.name', 'branchName')
+            .addSelect('userBranch.alias', 'branchAlias')
+            .addSelect('test.testId', 'testId')
+            .addSelect('test.title', 'testTitle')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect('result.percentage', 'scorePercentage')
+            .addSelect('result.calculatedAt', 'achievedAt')
+            .orderBy('result.percentage', 'DESC')
+            .addOrderBy('result.calculatedAt', 'DESC')
+            .limit(limit * 5)
+            .getRawMany<{
+                userId: string;
+                firstName: string;
+                lastName: string;
+                branchName: string | null;
+                branchAlias: string | null;
+                testId: string;
+                testTitle: string;
+                courseTitle: string | null;
+                scorePercentage: string;
+                achievedAt: Date | string;
+            }>();
+
+        const bestPerUser = new Map<string, AdminTopScorerDto>();
+        rows.forEach(row => {
+            if (bestPerUser.has(row.userId)) {
+                return;
+            }
+            bestPerUser.set(row.userId, {
+                userId: row.userId,
+                firstName: row.firstName,
+                lastName: row.lastName,
+                branchName: row.branchName ?? null,
+                branchAlias: row.branchAlias ?? null,
+                testId: Number(row.testId),
+                testTitle: row.testTitle,
+                courseTitle: row.courseTitle ?? null,
+                scorePercentage: this.round(Number(row.scorePercentage) || 0),
+                achievedAt: new Date(row.achievedAt),
+            });
+        });
+
+        return Array.from(bestPerUser.values()).slice(0, limit);
+    }
+
+    /**
+     * Assigns competition ranks (ties share a rank) across the org and again
+     * within each branch. Learners with no activity still appear, ranked last.
+     */
+    private buildRankings(
+        roster: Array<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchId: string | null;
+            branchName: string | null;
+            branchAlias: string | null;
+        }>,
+        pointsByUser: Map<string, number>,
+        totalsByUser: Map<string, { testsCompleted: number; testsPassed: number }>,
+    ): AdminRankingEntryDto[] {
+        const entries: AdminRankingEntryDto[] = roster.map(learner => {
+            const totals = totalsByUser.get(learner.userId);
+            return {
+                userId: learner.userId,
+                firstName: learner.firstName,
+                lastName: learner.lastName,
+                branchId: learner.branchId,
+                branchName: learner.branchName,
+                branchAlias: learner.branchAlias,
+                rank: 0,
+                branchRank: 0,
+                totalPoints: pointsByUser.get(learner.userId) ?? 0,
+                testsCompleted: totals?.testsCompleted ?? 0,
+                testsPassed: totals?.testsPassed ?? 0,
+            };
+        });
+
+        const sorted = entries.sort((a, b) => this.compareRankable(a, b));
+        this.assignRanks(sorted, 'rank');
+
+        const byBranch = new Map<string, AdminRankingEntryDto[]>();
+        sorted.forEach(entry => {
+            const key = entry.branchId ?? 'unassigned';
+            const bucket = byBranch.get(key) ?? [];
+            bucket.push(entry);
+            byBranch.set(key, bucket);
+        });
+        byBranch.forEach(bucket => {
+            this.assignRanks(bucket, 'branchRank');
+        });
+
+        return sorted;
+    }
+
+    /** Groups ranked learners by branch and keeps each branch's top three. */
+    private buildBranchTopPerformers(
+        rankings: readonly AdminRankingEntryDto[],
+    ): AdminBranchTopPerformersDto[] {
+        const byBranch = new Map<string, AdminBranchTopPerformersDto>();
+
+        rankings.forEach(entry => {
+            if (!entry.branchId) {
+                return;
+            }
+            const existing = byBranch.get(entry.branchId) ?? {
+                branchId: entry.branchId,
+                branchName: entry.branchName ?? 'Unnamed branch',
+                branchAlias: entry.branchAlias,
+                topPerformers: [],
+            };
+            if (existing.topPerformers.length < BRANCH_TOP_PERFORMER_COUNT) {
+                existing.topPerformers.push(entry);
+            }
+            byBranch.set(entry.branchId, existing);
+        });
+
+        return Array.from(byBranch.values())
+            .filter(branch => branch.topPerformers.length > 0)
+            .sort((a, b) => a.branchName.localeCompare(b.branchName));
+    }
+
+    private summariseTestCompletion(
+        totalsByUser: Map<string, { testsCompleted: number; testsPassed: number }>,
+    ): AdminTestCompletionSummaryDto {
+        let totalTestsCompleted = 0;
+        let totalTestsPassed = 0;
+        totalsByUser.forEach(totals => {
+            totalTestsCompleted += totals.testsCompleted;
+            totalTestsPassed += totals.testsPassed;
+        });
+        const participatingLearners = totalsByUser.size;
+
+        return {
+            totalTestsCompleted,
+            totalTestsPassed,
+            participatingLearners,
+            averageTestsPerLearner:
+                participatingLearners > 0
+                    ? this.round(totalTestsCompleted / participatingLearners)
+                    : 0,
+        };
+    }
+
+    private compareRankable(
+        a: AdminRankingEntryDto,
+        b: AdminRankingEntryDto,
+    ): number {
+        return (
+            b.totalPoints - a.totalPoints ||
+            b.testsPassed - a.testsPassed ||
+            b.testsCompleted - a.testsCompleted ||
+            `${a.lastName} ${a.firstName}`.localeCompare(
+                `${b.lastName} ${b.firstName}`,
+            )
+        );
+    }
+
+    /** Competition ranking: equal standings share a rank, the next one skips. */
+    private assignRanks(
+        sorted: AdminRankingEntryDto[],
+        field: 'rank' | 'branchRank',
+    ): void {
+        let currentRank = 0;
+        let previousKey: string | null = null;
+
+        sorted.forEach((entry, index) => {
+            const key = this.rankKey(entry);
+            if (key !== previousKey) {
+                currentRank = index + 1;
+                previousKey = key;
+            }
+            entry[field] = currentRank;
+        });
+    }
+
+    private rankKey(entry: AdminRankingEntryDto): string {
+        return `${entry.totalPoints}|${entry.testsPassed}|${entry.testsCompleted}`;
     }
 
     // ─── Private helpers ───────────────────────────────────────────────

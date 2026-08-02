@@ -27,10 +27,40 @@ import { QuestionsService } from '../questions/questions.service';
 import { RetryService } from '../common/services/retry.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardResponse } from '../common/types';
+import { UserRole } from '../user/entities/user.entity';
 
 @Injectable()
 export class AnswersService {
     private readonly logger = new Logger(AnswersService.name);
+
+    /**
+     * Whether the caller may inspect attempts voided by an admin reset.
+     * Learners must receive 404 for voided attempts so the answer key of a
+     * soon-to-be-retaken test is never confirmed to exist.
+     */
+    private isElevatedRole(userRole?: string): boolean {
+        return (
+            userRole === UserRole.ADMIN ||
+            userRole === UserRole.OWNER ||
+            userRole === UserRole.MASTER_ADMIN
+        );
+    }
+
+    /**
+     * Reject access to a voided attempt for non-elevated callers.
+     * Uses NotFoundException (not Forbidden) to avoid leaking existence.
+     */
+    private assertAttemptWritableOrVisible(
+        attempt: TestAttempt,
+        scope: OrgBranchScope,
+    ): void {
+        if (
+            attempt.voidedByResetId != null &&
+            !this.isElevatedRole(scope.userRole)
+        ) {
+            throw new NotFoundException('Test attempt not found');
+        }
+    }
 
     // Cache keys with org/branch scoping for multi-tenant isolation
     private readonly CACHE_KEYS = {
@@ -96,6 +126,8 @@ export class AnswersService {
             if (!attempt) {
                 throw new NotFoundException('Test attempt not found');
             }
+
+            this.assertAttemptWritableOrVisible(attempt, scope);
 
             if (attempt.userId !== scope.userId) {
                 throw new ForbiddenException(
@@ -239,6 +271,8 @@ export class AnswersService {
             if (!answer) {
                 throw new NotFoundException('Answer not found');
             }
+
+            this.assertAttemptWritableOrVisible(answer.attempt, scope);
 
             if (answer.attempt.userId !== scope.userId) {
                 throw new ForbiddenException(
@@ -398,6 +432,9 @@ export class AnswersService {
             if (!attempt) {
                 throw new NotFoundException('Test attempt not found');
             }
+
+            // Voided attempts hide their answer key from the learner after a reset.
+            this.assertAttemptWritableOrVisible(attempt, scope);
 
             if (attempt.userId !== scope.userId) {
                 throw new ForbiddenException(
@@ -604,6 +641,14 @@ export class AnswersService {
                         );
 
                         if (!attempt) {
+                            await queryRunner.rollbackTransaction();
+                            throw new NotFoundException(
+                                `Test attempt ${context.attemptId} not found`,
+                            );
+                        }
+
+                        // Bulk submit must not write into an attempt voided by a reset.
+                        if (attempt.voidedByResetId != null) {
                             await queryRunner.rollbackTransaction();
                             throw new NotFoundException(
                                 `Test attempt ${context.attemptId} not found`,

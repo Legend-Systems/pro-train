@@ -181,7 +181,8 @@ class TestInfo {
 
     @ApiProperty({
         description: 'Minimum percentage required to pass',
-        example: 70,
+        // Pass mark raised from 60%/70% examples to the global 80% pass mark
+        example: 80,
         minimum: 0,
         maximum: 100,
     })
@@ -244,7 +245,8 @@ class TestInfo {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     @Transform(({ obj }: { obj: any }) => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        const passingScore = Number(obj?.passingScore) || 70;
+        // Fallback aligned with global pass mark (raised from 70% to 80%)
+        const passingScore = Number(obj?.passingScore) || 80;
         if (passingScore >= 90) return 'expert';
         if (passingScore >= 80) return 'advanced';
         if (passingScore >= 70) return 'intermediate';

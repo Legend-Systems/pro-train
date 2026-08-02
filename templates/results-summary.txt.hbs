@@ -10,6 +10,9 @@ TEST RESULTS:
 Score: {{score}}/{{totalQuestions}} ({{lookup this 'percentage'}}%)
 Correct Answers: {{correctAnswers}}
 Completion Time: {{completionTime}}
+{{!-- Pass mark raised from 60% to 80% --}}
+Status: {{#if isPassed}}Passed{{else}}Needs Improvement{{/if}}
+{{#if passingScore}}Pass Mark: {{passingScore}}%{{/if}}
 
 {{#if feedback}}
 FEEDBACK:
@@ -18,16 +21,11 @@ FEEDBACK:
 
 View Detailed Results: {{resultsUrl}}
 
-{{#if percentage}}
-{{#ifCond percentage ">=" 80}}
-🎉 Excellent work! You've demonstrated strong understanding of the material.
+{{!-- Pass mark raised from 60% to 80%: copy follows isPassed / 80% threshold --}}
+{{#if isPassed}}
+🎉 Excellent work! You scored {{lookup this 'percentage'}}% and met the {{#if passingScore}}{{passingScore}}%{{else}}80%{{/if}} pass mark.
 {{else}}
-{{#ifCond percentage ">=" 60}}
-✅ Good job! You've shown solid knowledge with room for improvement.
-{{else}}
-📚 Keep studying! Consider reviewing the material and retaking the test if allowed.
-{{/ifCond}}
-{{/ifCond}}
+📚 Keep studying! Your score of {{lookup this 'percentage'}}% is below the {{#if passingScore}}{{passingScore}}%{{else}}80%{{/if}} pass mark. Review the material and retake the test if attempts remain.
 {{/if}}
 
 We're here to support your learning journey. Keep up the great work!

@@ -14,6 +14,7 @@ import { Test } from './test/entities/test.entity';
 import { Question } from './questions/entities/question.entity';
 import { QuestionOption } from './questions_options/entities/questions_option.entity';
 import { TestAttempt } from './test_attempts/entities/test_attempt.entity';
+import { TestAttemptReset } from './test_attempts/entities/test-attempt-reset.entity';
 import { CourseModule } from './course/course.module';
 import { TestModule } from './test/test.module';
 import { QuestionsModule } from './questions/questions.module';
@@ -47,6 +48,7 @@ import { TrainingSession } from './training-hours/entities/training-session.enti
 import { UserTrainingHoursMonthly } from './training-hours/entities/user-training-hours-monthly.entity';
 import { TrainingHoursModule } from './training-hours/training-hours.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { HomeInsightsModule } from './home-insights/home-insights.module';
 
 @Module({
     imports: [
@@ -102,6 +104,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
                     Result,
                     Test,
                     TestAttempt,
+                    TestAttemptReset,
                     TrainingProgress,
                     User,
                     UserRewards,
@@ -166,6 +169,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
         RewardsModule,
         TrainingHoursModule,
         AnalyticsModule,
+        HomeInsightsModule,
     ],
     controllers: [AppController],
     providers: [

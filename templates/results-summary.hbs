@@ -539,6 +539,13 @@
                         <div class="detail-label">Status</div>
                         <div class="detail-value">{{#if isPassed}}✅ Passed{{else}}❌ Needs Improvement{{/if}}</div>
                     </div>
+                    {{!-- Pass mark raised from 60% to 80% — surface required score in the email --}}
+                    {{#if passingScore}}
+                    <div class="detail-item">
+                        <div class="detail-label">Pass Mark</div>
+                        <div class="detail-value">{{passingScore}}%</div>
+                    </div>
+                    {{/if}}
                 </div>
             </div>
             
@@ -558,23 +565,20 @@
                     </tr>
                 </table>
                 <div class="score-description">
-                    {{#ifCond (or percentage 0) ">=" 90}}
-                    Exceptional Performance
-                    {{else}}
-                        {{#ifCond (or percentage 0) ">=" 80}}
-                        Outstanding Achievement
+                    {{!-- Pass mark raised from 60% to 80%: only scores at/above 80% are a pass --}}
+                    {{#if isPassed}}
+                        {{#ifCond (or percentage 0) ">=" 90}}
+                        Exceptional Performance
                         {{else}}
-                            {{#ifCond (or percentage 0) ">=" 70}}
-                            Great Performance
-                            {{else}}
-                                {{#ifCond (or percentage 0) ">=" 60}}
-                                Good Progress
-                                {{else}}
-                                Keep Learning
-                                {{/ifCond}}
-                            {{/ifCond}}
+                        Outstanding Achievement
                         {{/ifCond}}
-                    {{/ifCond}}
+                    {{else}}
+                        {{#ifCond (or percentage 0) ">=" 70}}
+                        Close — Keep Practising
+                        {{else}}
+                        Keep Learning
+                        {{/ifCond}}
+                    {{/if}}
                 </div>
                 
                 {{#if scoreDisplay}}
@@ -599,15 +603,12 @@
             {{/if}}
             
             <div class="message">
-                {{#ifCond (or percentage 0) ">=" 80}}
-                🌟 Outstanding achievement! You've not just learned the material - you've mastered it. This score reflects your dedication, focus, and natural ability to absorb and apply knowledge. You're setting a fantastic example for other learners and proving that excellence is within reach when you commit to growth.
+                {{!-- Pass mark raised from 60% to 80%: encouragement copy follows isPassed / 80% threshold --}}
+                {{#if isPassed}}
+                🌟 Outstanding achievement! You've not just learned the material - you've mastered it. Scoring {{lookup this 'percentage'}}% meets or exceeds the {{#if passingScore}}{{passingScore}}%{{else}}80%{{/if}} pass mark. This score reflects your dedication, focus, and ability to apply knowledge. You're setting a fantastic example for other learners.
                 {{else}}
-                  {{#ifCond (or percentage 0) ">=" 60}}
-                  👏 Solid performance! You've grasped the core concepts and shown real understanding. The areas where you can improve aren't weaknesses - they're your next opportunities for growth. With your foundation this strong, focusing on those specific areas will take you to the next level quickly.
-                  {{else}}
-                  💪 Every expert was once a beginner, and every master was once a disaster! Your score shows you're in the learning process, which is exactly where growth happens. This isn't about where you are - it's about where you're going. Use this feedback as your roadmap, and remember that persistence always pays off.
-                  {{/ifCond}}
-                {{/ifCond}}
+                💪 Every expert was once a beginner! Your score of {{lookup this 'percentage'}}% is below the {{#if passingScore}}{{passingScore}}%{{else}}80%{{/if}} pass mark required to pass this test. Use this feedback as your roadmap, review the material, and try again if you have attempts remaining — persistence always pays off.
+                {{/if}}
             </div>
             
             {{#if resultsUrl}}

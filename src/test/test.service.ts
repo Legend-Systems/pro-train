@@ -7,7 +7,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { IsNull, Repository, DataSource } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -22,7 +22,12 @@ import {
     TestStatsDto,
     TestConfigDto,
 } from './dto/test-response.dto';
-import { Test } from './entities/test.entity';
+import { Test, TestType } from './entities/test.entity';
+import {
+    applyOpenExamWindowFilter,
+    isExamWindowOpen,
+    toNullableDate,
+} from './utils/exam-window.util';
 import { Question } from '../questions/entities/question.entity';
 import { QuestionOption } from '../questions_options/entities/questions_option.entity';
 import {
@@ -30,6 +35,7 @@ import {
     AttemptStatus,
 } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
+import { isPassingPercentage, PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 import { RetryService } from '../common/services/retry.service';
@@ -133,6 +139,48 @@ export class TestService {
         );
     }
 
+    /** True when the caller is a plain learner rather than an admin/owner. */
+    private isLearnerScope(scope: OrgBranchScope): boolean {
+        return scope.userRole?.toLowerCase() === 'user';
+    }
+
+    /**
+     * Normalizes and validates the exam availability window.
+     *
+     * Replaces the previous single `examDate`: exam-type tests must declare
+     * both boundaries so learners get an explicit multi-day window, while
+     * quizzes and training tests may stay unscheduled.
+     */
+    private resolveExamWindow(input: {
+        testType?: TestType;
+        examStartDate?: Date | string | null;
+        examEndDate?: Date | string | null;
+    }): { examStartDate: Date | null; examEndDate: Date | null } {
+        const examStartDate = toNullableDate(input.examStartDate);
+        const examEndDate = toNullableDate(input.examEndDate);
+
+        if (
+            examStartDate &&
+            examEndDate &&
+            examStartDate.getTime() > examEndDate.getTime()
+        ) {
+            throw new BadRequestException(
+                'Exam window is invalid: the end date must be on or after the start date',
+            );
+        }
+
+        if (
+            input.testType === TestType.EXAM &&
+            (!examStartDate || !examEndDate)
+        ) {
+            throw new BadRequestException(
+                'Exam tests require both an exam start date and an exam end date',
+            );
+        }
+
+        return { examStartDate, examEndDate };
+    }
+
     /**
      * Create a new test with questions and options in a single transaction
      */
@@ -166,18 +214,24 @@ export class TestService {
 
             try {
                 // Create test entity (excluding questions from the test data)
-                const { questions, examDate, testThumbnail, ...testData } = createTestDto;
-                const normalizedExamDate =
-                    examDate === undefined
-                        ? undefined
-                        : examDate === null
-                          ? null
-                          : new Date(examDate);
+                const {
+                    questions,
+                    examStartDate,
+                    examEndDate,
+                    testThumbnail,
+                    ...testData
+                } = createTestDto;
+
+                const examWindow = this.resolveExamWindow({
+                    testType: createTestDto.testType,
+                    examStartDate,
+                    examEndDate,
+                });
 
                 const test = queryRunner.manager.create(Test, {
                     ...testData,
                     ...(testThumbnail ? { testThumbnail } : {}),
-                    examDate: normalizedExamDate,
+                    ...examWindow,
                     maxAttempts: createTestDto.maxAttempts || 1,
                     orgId: course.orgId,
                     branchId: course.branchId,
@@ -388,6 +442,13 @@ export class TestService {
                 });
             }
 
+            // Learners only see tests whose exam window is currently open, so a
+            // test disappears from their lists once examEndDate has passed.
+            // Admins keep full visibility in order to manage schedules.
+            if (this.isLearnerScope(scope)) {
+                applyOpenExamWindowFilter(query, 'test');
+            }
+
             // Add sorting
             query.orderBy(`test.${sortBy}`, sortOrder);
 
@@ -575,10 +636,9 @@ export class TestService {
             highestScore = Math.max(...percentages);
             lowestScore = Math.min(...percentages);
 
-            // Calculate pass rate (assuming 70% is passing)
-            const passingGrade = 70;
-            const passedCount = percentages.filter(
-                p => p >= passingGrade,
+            // Pass mark raised from 70% (local assumption) to global 80%
+            const passedCount = percentages.filter(p =>
+                isPassingPercentage(p),
             ).length;
             passRate = (passedCount / results.length) * 100;
 
@@ -668,6 +728,16 @@ export class TestService {
                     scope,
                     false,
                 );
+            }
+
+            // Learners cannot open a test outside its exam window, so the
+            // detail view 404s the same way the listing hides it.
+            if (
+                scope &&
+                this.isLearnerScope(scope) &&
+                !isExamWindowOpen(test)
+            ) {
+                return null;
             }
 
             // Calculate comprehensive statistics
@@ -807,12 +877,28 @@ export class TestService {
 
             // Exclude questions from update (questions are handled separately)
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { questions, examDate, ...restUpdateData } = updateTestDto;
+            const { questions, examStartDate, examEndDate, ...restUpdateData } =
+                updateTestDto;
+
+            // Partial updates must be validated against the merged window so a
+            // caller sending only one boundary cannot invert the range.
+            const examWindow = this.resolveExamWindow({
+                testType: updateTestDto.testType ?? test.testType,
+                examStartDate:
+                    examStartDate === undefined
+                        ? test.examStartDate
+                        : examStartDate,
+                examEndDate:
+                    examEndDate === undefined ? test.examEndDate : examEndDate,
+            });
+
             const testUpdateData = {
                 ...restUpdateData,
-                ...(examDate !== undefined && {
-                    examDate:
-                        examDate === null ? null : new Date(examDate),
+                ...(examStartDate !== undefined && {
+                    examStartDate: examWindow.examStartDate,
+                }),
+                ...(examEndDate !== undefined && {
+                    examEndDate: examWindow.examEndDate,
                 }),
             };
 
@@ -1049,11 +1135,15 @@ export class TestService {
                     isActive: test.isActive,
                     requiresApproval: false, // Default value
                     allowLateSubmission: false, // Default value
+                    examStartDate: test.examStartDate ?? null,
+                    examEndDate: test.examEndDate ?? null,
+                    isWithinExamWindow: isExamWindowOpen(test),
                 },
                 content: {
                     totalQuestions,
                     totalPoints,
-                    passingPercentage: 70, // Default passing percentage
+                    // Pass mark raised from 70% default to global 80%
+                    passingPercentage: PASSING_SCORE_PERCENTAGE,
                     showCorrectAnswers: false, // Default value
                     shuffleQuestions: true, // Default value
                 },
@@ -1219,14 +1309,20 @@ export class TestService {
     }
 
     /**
-     * Check if test is available for attempts
+     * Check if test is available for attempts.
+     * A test must be active *and* inside its exam window.
      */
     async isTestAvailableForAttempts(testId: number): Promise<boolean> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId, isActive: true },
             });
-            return !!test;
+
+            if (!test) {
+                return false;
+            }
+
+            return isExamWindowOpen(test);
         });
     }
 
@@ -1239,6 +1335,9 @@ export class TestService {
         isActive: boolean;
         title: string;
         testType: string;
+        examStartDate?: Date | null;
+        examEndDate?: Date | null;
+        isWithinExamWindow: boolean;
     } | null> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
@@ -1250,6 +1349,8 @@ export class TestService {
                     'isActive',
                     'title',
                     'testType',
+                    'examStartDate',
+                    'examEndDate',
                 ],
             });
 
@@ -1263,6 +1364,9 @@ export class TestService {
                 isActive: test.isActive,
                 title: test.title,
                 testType: test.testType,
+                examStartDate: test.examStartDate ?? null,
+                examEndDate: test.examEndDate ?? null,
+                isWithinExamWindow: isExamWindowOpen(test),
             };
         });
     }
@@ -1357,13 +1461,20 @@ export class TestService {
      */
     private async getUserAttemptData(testId: number, userId: string) {
         try {
-            // Get all user attempts for this test
-            const allAttempts = await this.testAttemptRepository.find({
-                where: { testId, userId },
+            // Only live attempts are visible to the learner. Attempts voided by
+            // an admin reset must not inflate the counter or surface answer keys
+            // via bestAttempt / allAttempts after a reset.
+            const liveAttempts = await this.testAttemptRepository.find({
+                where: { testId, userId, voidedByResetId: IsNull() },
                 order: { createdAt: 'DESC' },
             });
 
-            if (allAttempts.length === 0) {
+            // Same chargeable rule as TestAttemptsService: live + not cancelled.
+            const chargeableAttempts = liveAttempts.filter(
+                a => a.status !== AttemptStatus.CANCELLED,
+            );
+
+            if (liveAttempts.length === 0) {
                 return {
                     attemptsCount: 0,
                     attemptsRemaining: await this.getMaxAttemptsForTest(testId),
@@ -1375,10 +1486,10 @@ export class TestService {
             }
 
             const maxAttempts = await this.getMaxAttemptsForTest(testId);
-            const inProgressAttempt = allAttempts.find(
+            const inProgressAttempt = liveAttempts.find(
                 a => a.status === AttemptStatus.IN_PROGRESS,
             );
-            const completedAttempts = allAttempts.filter(
+            const completedAttempts = liveAttempts.filter(
                 a => a.status === AttemptStatus.SUBMITTED,
             );
 
@@ -1386,7 +1497,11 @@ export class TestService {
             let bestAttempt: any = undefined;
             if (completedAttempts.length > 0) {
                 const results = await this.resultRepository.find({
-                    where: { testId: testId, userId: userId },
+                    where: {
+                        testId: testId,
+                        userId: userId,
+                        voidedByResetId: IsNull(),
+                    },
                     order: { percentage: 'DESC' },
                 });
 
@@ -1403,9 +1518,9 @@ export class TestService {
                 }
             }
 
-            // Get last attempt (most recent)
-            const lastAttempt = allAttempts[0];
-            const attemptsCount = allAttempts.length;
+            // Get last attempt (most recent live attempt)
+            const lastAttempt = liveAttempts[0];
+            const attemptsCount = chargeableAttempts.length;
             const attemptsRemaining = Math.max(0, maxAttempts - attemptsCount);
             const canStartNewAttempt =
                 !inProgressAttempt && attemptsRemaining > 0;
@@ -1454,7 +1569,7 @@ export class TestService {
                       }
                     : undefined,
                 bestAttempt,
-                allAttempts: allAttempts.map(attempt => ({
+                allAttempts: liveAttempts.map(attempt => ({
                     attemptId: attempt.attemptId,
                     attemptNumber: attempt.attemptNumber,
                     status: attempt.status,

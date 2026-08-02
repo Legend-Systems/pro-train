@@ -21,8 +21,8 @@ async function bootstrap() {
             'https://pro-train.vercel.app',
             'https://protrain-client.onrender.com',
             'http://localhost:8081', 
-            'http://192.168.0.6:8081',
-            'exp://192.168.0.6:8081' // Expo development server
+            'http://10.72.215.129:8081',
+            'exp://10.72.215.129:8081' // Expo development server
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [
@@ -56,7 +56,7 @@ async function bootstrap() {
 
     // Setup Swagger documentation
     const config = new DocumentBuilder()
-        .setTitle('trainpro api playground')
+        .setTitle('protrain api playground')
         .setDescription(
             `🚀 **trainpro api playground** - Interactive Learning Management & Assessment Platform
 

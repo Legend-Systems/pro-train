@@ -28,6 +28,10 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
 import { UserRole } from '../user/entities/user.entity';
 import { RewardsService } from '../rewards/rewards.service';
+import {
+    PASSING_SCORE_PERCENTAGE,
+    isPassingPercentage,
+} from './constants/passing-score.constants';
 import { TrainingHoursService } from '../training-hours/training-hours.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
@@ -231,8 +235,8 @@ export class ResultsService {
                 percentage,
             });
 
-            // Determine if passed (assuming 60% pass rate)
-            const passed = percentage >= 60;
+            // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
+            const passed = isPassingPercentage(percentage);
 
             // Ensure we have org/branch data - inherit from attempt or use defaults
             let orgId = attempt.orgId;
@@ -605,10 +609,18 @@ export class ResultsService {
 
     /**
      * Count pass/fail results for a user (used by test-attempt dashboard stats).
+     *
+     * @param userId - Learner being counted.
+     * @param options - Optional test filter, caller scope and voided opt-in.
+     * @returns Aggregate pass/fail counts for the learner.
      */
     async getUserResultCounts(
         userId: string,
-        testId?: number,
+        options: {
+            testId?: number;
+            scope?: OrgBranchScope;
+            includeVoided?: boolean;
+        } = {},
     ): Promise<{
         totalResults: number;
         passedResults: number;
@@ -616,31 +628,43 @@ export class ResultsService {
         averageScore: number;
         passRate: number;
     }> {
-        const baseWhere: { userId: string; testId?: number } = { userId };
-        if (testId) {
-            baseWhere.testId = testId;
-        }
+        const { testId, scope, includeVoided = false } = options;
 
-        const totalResults = await this.resultRepository.count({
-            where: baseWhere,
-        });
+        const buildQuery = (): SelectQueryBuilder<Result> => {
+            const queryBuilder = this.resultRepository
+                .createQueryBuilder('result')
+                .leftJoin('result.orgId', 'orgId')
+                .leftJoin('result.branchId', 'branchId')
+                .where('result.userId = :userId', { userId });
 
-        const passedResults = await this.resultRepository.count({
-            where: { ...baseWhere, passed: true },
-        });
+            if (testId) {
+                queryBuilder.andWhere('result.testId = :testId', { testId });
+            }
+            if (scope?.orgId) {
+                queryBuilder.andWhere('orgId.id = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            if (scope?.branchId) {
+                queryBuilder.andWhere('branchId.id = :branchId', {
+                    branchId: scope.branchId,
+                });
+            }
+
+            return this.applyLiveResultFilter(queryBuilder, includeVoided);
+        };
+
+        const totalResults = await buildQuery().getCount();
+
+        const passedResults = await buildQuery()
+            .andWhere('result.passed = :passedTrue', { passedTrue: true })
+            .getCount();
 
         const failedResults = totalResults - passedResults;
 
-        const averageScoreQuery = this.resultRepository
-            .createQueryBuilder('result')
+        const averageScoreRow = await buildQuery()
             .select('AVG(result.percentage)', 'averageScore')
-            .where('result.userId = :userId', { userId });
-
-        if (testId) {
-            averageScoreQuery.andWhere('result.testId = :testId', { testId });
-        }
-
-        const averageScoreRow = await averageScoreQuery.getRawOne();
+            .getRawOne<{ averageScore: string | null }>();
 
         const averageScore = Number(averageScoreRow?.averageScore || 0);
         const passRate =
@@ -653,6 +677,39 @@ export class ResultsService {
             averageScore: Math.round(averageScore * 100) / 100,
             passRate: Math.round(passRate * 100) / 100,
         };
+    }
+
+    /**
+     * Hide results voided by an admin attempt reset.
+     *
+     * A result carries the full marked breakdown, including the correct answer
+     * for every question, so pre-reset rows must never reach a learner who is
+     * about to retake the test.
+     *
+     * @param queryBuilder - Query builder aliased on `result`.
+     * @param includeVoided - Set only by elevated callers reading history.
+     * @returns The same query builder for chaining.
+     */
+    private applyLiveResultFilter(
+        queryBuilder: SelectQueryBuilder<Result>,
+        includeVoided = false,
+    ): SelectQueryBuilder<Result> {
+        if (includeVoided) {
+            return queryBuilder;
+        }
+        return queryBuilder.andWhere('result.voidedByResetId IS NULL');
+    }
+
+    /**
+     * Drop cached result payloads after an administrator reset an attempt.
+     *
+     * Test and course result caches are keyed by an opaque filter blob, so
+     * there is no key pattern to target. Resets are rare and deliberate, which
+     * makes a full flush of this module's cache the safe trade — a cached page
+     * still holds the answer key of a test the learner is about to retake.
+     */
+    async invalidateCachesAfterAttemptReset(): Promise<void> {
+        await this.cacheManager.clear();
     }
 
     /** Restrict dashboard access to leadership roles only. */
@@ -673,10 +730,16 @@ export class ResultsService {
         }
     }
 
-    /** Apply org/branch filters shared by admin dashboard queries. */
+    /**
+     * Apply org/branch and voided filters shared by admin dashboard queries.
+     *
+     * Voided results are excluded by default so organisation metrics describe
+     * the currently valid state; `includeVoided` brings the history back.
+     */
     private applyAdminScopeFilters(
         queryBuilder: SelectQueryBuilder<Result>,
         scope: OrgBranchScope,
+        includeVoided = false,
     ): SelectQueryBuilder<Result> {
         if (scope.orgId) {
             queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
@@ -686,11 +749,15 @@ export class ResultsService {
                 branchId: scope.branchId,
             });
         }
-        return queryBuilder;
+        return this.applyLiveResultFilter(queryBuilder, includeVoided);
     }
 
     /**
      * Org-wide results dashboard for CEO / owner / admin review.
+     *
+     * Voided results are excluded unless the caller explicitly asks for the
+     * history, so the headline numbers describe the organisation's currently
+     * valid state.
      */
     async getAdminDashboard(
         scope: OrgBranchScope,
@@ -700,6 +767,9 @@ export class ResultsService {
 
         const { page = 1, limit = 20, ...filters } = filterDto;
         const skip = (page - 1) * limit;
+        // Read only after the role assertion above: learner-facing endpoints
+        // share this DTO and must never be able to opt into voided rows.
+        const includeVoided = filterDto.includeVoided === true;
 
         const summaryQuery = this.applyAdminScopeFilters(
             this.resultRepository
@@ -707,6 +777,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         );
 
         if (filters.testId) {
@@ -751,7 +822,7 @@ export class ResultsService {
         const passRate =
             totalResults > 0 ? (passedCount / totalResults) * 100 : 0;
 
-        const listQuery = this.buildFilterQuery(filters, scope);
+        const listQuery = this.buildFilterQuery(filters, scope, includeVoided);
         listQuery.orderBy('result.calculatedAt', 'DESC');
 
         const [resultEntities, total] = await listQuery
@@ -770,6 +841,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         )
             .select('test.testId', 'testId')
             .addSelect('test.title', 'testTitle')
@@ -799,6 +871,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         )
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -839,6 +912,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         )
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -848,7 +922,12 @@ export class ResultsService {
                 'failedAttempts',
             )
             .addSelect('MAX(test.title)', 'lastFailedTest')
+            // `where` resets the expression built above, so the voided filter
+            // is re-applied here rather than relying on the shared helper.
             .where('result.passed = :failed', { failed: false })
+            .andWhere(
+                includeVoided ? '1 = 1' : 'result.voidedByResetId IS NULL',
+            )
             .groupBy('user.id')
             .addGroupBy('user.firstName')
             .addGroupBy('user.lastName')
@@ -1034,6 +1113,7 @@ export class ResultsService {
 
         const year = filterDto.year ?? new Date().getFullYear();
         const { month } = filterDto;
+        const includeVoided = filterDto.includeVoided === true;
 
         const employeeRows = await this.applyAdminScopeFilters(
             this.resultRepository
@@ -1042,6 +1122,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         )
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -1114,6 +1195,7 @@ export class ResultsService {
                     .leftJoin('result.orgId', 'orgId')
                     .leftJoin('result.branchId', 'branchId'),
                 scope,
+                includeVoided,
             )
                 .andWhere('result.userId = :selectedUserId', {
                     selectedUserId,
@@ -1314,6 +1396,7 @@ export class ResultsService {
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
             scope,
+            includeVoided,
         )
             .andWhere('YEAR(result.calculatedAt) = :year', { year });
 
@@ -1505,10 +1588,11 @@ export class ResultsService {
                 results.map(result => this.getEnhancedResult(result))
             );
 
-            const counts = await this.getUserResultCounts(
-                userId,
-                filters.testId,
-            );
+            const counts = await this.getUserResultCounts(userId, {
+                testId: filters.testId,
+                scope,
+                includeVoided: false,
+            });
 
             return {
                 results: responseResults,
@@ -1716,6 +1800,16 @@ export class ResultsService {
                 });
             }
 
+            // Non-elevated callers (learners) must not resolve voided results —
+            // report 404 rather than 403 so existence of the old answer key is
+            // not confirmed.
+            const isElevated =
+                !!scope.userRole &&
+                [UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN].includes(
+                    scope.userRole as UserRole,
+                );
+            this.applyLiveResultFilter(queryBuilder, isElevated);
+
             const result = await queryBuilder.getOne();
 
             if (!result) {
@@ -1879,7 +1973,8 @@ export class ResultsService {
                 score,
                 maxScore,
                 percentage,
-                passed: percentage >= 60, // Assuming 60% pass rate
+                // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
+                passed: isPassingPercentage(percentage),
                 calculatedAt: new Date(),
             });
 
@@ -2132,6 +2227,7 @@ export class ResultsService {
     private buildFilterQuery(
         filters: Partial<ResultFilterDto>,
         scope: OrgBranchScope,
+        includeVoided = false,
     ): SelectQueryBuilder<Result> {
         const queryBuilder = this.resultRepository
             .createQueryBuilder('result')
@@ -2161,6 +2257,10 @@ export class ResultsService {
                 branchId: scope.branchId,
             });
         }
+
+        // Learners must never receive results voided by an admin attempt reset
+        // (they contain the full answer key for the upcoming retake).
+        this.applyLiveResultFilter(queryBuilder, includeVoided);
 
         // Apply user-provided filters
         if (filters.userId) {
@@ -2669,7 +2769,9 @@ export class ResultsService {
                 organizationId: attempt.orgId?.id || result.orgId?.id,
                 // Additional data for better display
                 scoreDisplay: `${Number(result.score) || 0}/${Number(result.maxScore) || questionCount}`,
-                isPassed: percentage >= 60,
+                // Pass mark raised from 60% to 80%; drives Passed/Failed copy in results-summary emails
+                isPassed: isPassingPercentage(percentage),
+                passingScore: PASSING_SCORE_PERCENTAGE,
             };
 
             this.logger.debug(
@@ -2733,7 +2835,8 @@ export class ResultsService {
                 testType: result.test.testType,
                 durationMinutes: result.test.durationMinutes,
                 maxAttempts: result.test.maxAttempts || 1,
-                passingScore: 60, // Default value (not in Test entity)
+                // Pass mark raised from 60% to 80%; Test entity has no per-test override
+                passingScore: PASSING_SCORE_PERCENTAGE,
                 totalQuestions: additionalStats.totalQuestions,
                 totalPoints: result.maxScore,
                 status: result.test.isActive ? 'active' : 'inactive',

@@ -34,13 +34,27 @@
             <p>Here is your latest organization training performance summary{{#if organizationName}} for <strong>{{organizationName}}</strong>{{/if}}.</p>
 
             <div class="kpi-grid">
+                {{#if showAverageKnowledgeScore}}
                 <div class="kpi"><div class="kpi-label">Avg knowledge score</div><div class="kpi-value">{{averageKnowledgeScore}}%</div></div>
+                {{/if}}
+                {{#if showOverallPassRate}}
                 <div class="kpi"><div class="kpi-label">Pass rate</div><div class="kpi-value">{{overallPassRate}}%</div></div>
+                {{/if}}
+                {{#if showActiveLearners}}
                 <div class="kpi"><div class="kpi-label">Active learners</div><div class="kpi-value">{{activeLearners}}</div></div>
+                {{/if}}
+                {{#if showTrainingHours}}
                 <div class="kpi"><div class="kpi-label">Training hours</div><div class="kpi-value">{{totalTrainingHours}}h</div></div>
+                {{/if}}
+                {{#if showTestCompletion}}
+                <div class="kpi"><div class="kpi-label">Tests completed</div><div class="kpi-value">{{testsCompleted}}</div></div>
+                <div class="kpi"><div class="kpi-label">Tests passed</div><div class="kpi-value">{{testsPassed}}</div></div>
+                {{/if}}
             </div>
 
+            {{#if showAttentionSummary}}
             <p><strong>Attention:</strong> {{atRiskUserCount}} at-risk users · {{keyAreaCount}} key training areas · {{highPotentialUserCount}} high-potential learners</p>
+            {{/if}}
 
             {{#if topPerformersSummary.length}}
             <h3>Top performers</h3>

@@ -11,6 +11,7 @@ import {
 } from '../../user/entities/user.entity';
 import { TestInvitation, InvitationStatus } from '../entities/test-invitation.entity';
 import { Test } from '../entities/test.entity';
+import { getUtcDayBounds } from '../utils/exam-window.util';
 import {
     TestExamNotification,
     TestExamNotificationStatus,
@@ -31,8 +32,21 @@ interface ProcessReminderResult {
     failed: number;
 }
 
+/** Upcoming-exam payload for in-app banners. */
+interface UpcomingExamSummary {
+    testId: number;
+    title: string;
+    courseId: number;
+    courseTitle: string;
+    examStartDate: Date;
+    examEndDate: Date | null;
+    daysUntil: number;
+}
+
 /**
- * Finds tests with approaching examDate and sends branded reminder emails.
+ * Finds tests whose exam window is about to open and sends branded reminder
+ * emails. Reminders are keyed off `examStartDate` (the former single
+ * `examDate`), and tests whose window has already closed are ignored.
  * Deduplicates via test_exam_notification unique (testId, userId, type).
  */
 @Injectable()
@@ -101,52 +115,44 @@ export class TestNotificationService {
         });
     }
 
-    /** Upcoming exams for in-app banners (next N days). */
+    /**
+     * Upcoming exams for in-app banners (windows opening in the next N days,
+     * plus windows that are already open and have not closed yet).
+     */
     async listUpcomingExamsForUser(params: {
         userId: string;
         orgId?: string;
         withinDays?: number;
-    }): Promise<
-        Array<{
-            testId: number;
-            title: string;
-            courseId: number;
-            courseTitle: string;
-            examDate: Date;
-            daysUntil: number;
-        }>
-    > {
+    }): Promise<UpcomingExamSummary[]> {
         const withinDays = params.withinDays ?? 7;
         const now = new Date();
-        const end = new Date(now);
-        end.setUTCDate(end.getUTCDate() + withinDays);
+        const { startOfDay } = getUtcDayBounds(now);
+        const horizon = new Date(startOfDay);
+        horizon.setUTCDate(horizon.getUTCDate() + withinDays + 1);
 
         const qb = this.testRepository
             .createQueryBuilder('test')
             .leftJoinAndSelect('test.course', 'course')
             .leftJoinAndSelect('test.orgId', 'org')
             .where('test.isActive = :active', { active: true })
-            .andWhere('test.examDate IS NOT NULL')
-            .andWhere('test.examDate >= :now', { now })
-            .andWhere('test.examDate <= :end', { end })
-            .orderBy('test.examDate', 'ASC');
+            .andWhere('test.examStartDate IS NOT NULL')
+            .andWhere('test.examStartDate < :horizon', { horizon })
+            // Windows that already closed are no longer "upcoming".
+            .andWhere(
+                '(test.examEndDate IS NULL OR test.examEndDate >= :startOfDay)',
+                { startOfDay },
+            )
+            .orderBy('test.examStartDate', 'ASC');
 
         if (params.orgId) {
             qb.andWhere('org.id = :orgId', { orgId: params.orgId });
         }
 
         const tests = await qb.getMany();
-        const eligible: Array<{
-            testId: number;
-            title: string;
-            courseId: number;
-            courseTitle: string;
-            examDate: Date;
-            daysUntil: number;
-        }> = [];
+        const eligible: UpcomingExamSummary[] = [];
 
         for (const test of tests) {
-            if (!test.examDate) {
+            if (!test.examStartDate) {
                 continue;
             }
             const recipients = await this.resolveRecipients(test);
@@ -156,13 +162,19 @@ export class TestNotificationService {
             if (await this.hasCompletedTest(params.userId, test.testId)) {
                 continue;
             }
-            const daysUntil = this.utcCalendarDayDiff(now, test.examDate);
+            // Negative values mean the window is already open; clamp to 0 so
+            // clients can render "Due today"/"Open now" consistently.
+            const daysUntil = Math.max(
+                this.utcCalendarDayDiff(now, test.examStartDate),
+                0,
+            );
             eligible.push({
                 testId: test.testId,
                 title: test.title,
                 courseId: test.courseId,
                 courseTitle: test.course?.title ?? 'Course',
-                examDate: test.examDate,
+                examStartDate: test.examStartDate,
+                examEndDate: test.examEndDate ?? null,
                 daysUntil,
             });
         }
@@ -188,20 +200,21 @@ export class TestNotificationService {
             daysUntilExam,
         );
 
+        // Reminders fire relative to the day the exam window opens.
         const tests = await this.testRepository
             .createQueryBuilder('test')
             .leftJoinAndSelect('test.course', 'course')
             .leftJoinAndSelect('test.orgId', 'org')
             .leftJoinAndSelect('test.branchId', 'branch')
             .where('test.isActive = :active', { active: true })
-            .andWhere('test.examDate IS NOT NULL')
-            .andWhere('test.examDate >= :start', { start })
-            .andWhere('test.examDate < :end', { end })
+            .andWhere('test.examStartDate IS NOT NULL')
+            .andWhere('test.examStartDate >= :start', { start })
+            .andWhere('test.examStartDate < :end', { end })
             .getMany();
 
         for (const test of tests) {
             summary.processedTests += 1;
-            if (!test.examDate || !test.orgId?.id) {
+            if (!test.examStartDate || !test.orgId?.id) {
                 summary.skipped += 1;
                 continue;
             }
@@ -232,7 +245,7 @@ export class TestNotificationService {
                             orgId: test.orgId.id,
                             notificationType,
                             status: TestExamNotificationStatus.SKIPPED,
-                            examDate: test.examDate,
+                            examDate: test.examStartDate,
                             recipientEmail: recipient.email,
                             errorMessage: 'User already passed this test',
                         }),
@@ -247,7 +260,7 @@ export class TestNotificationService {
                     orgId: test.orgId.id,
                     notificationType,
                     status: TestExamNotificationStatus.PENDING,
-                    examDate: test.examDate,
+                    examDate: test.examStartDate,
                     recipientEmail: recipient.email,
                 });
 
@@ -270,7 +283,8 @@ export class TestNotificationService {
                                 testTitle: test.title,
                                 courseId: test.courseId,
                                 courseTitle: test.course?.title ?? 'Course',
-                                examDate: test.examDate,
+                                examStartDate: test.examStartDate,
+                                examEndDate: test.examEndDate ?? null,
                                 notificationType:
                                     notificationType ===
                                     TestExamNotificationType.THREE_DAY
