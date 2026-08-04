@@ -13,6 +13,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CourseMaterialViewedEvent } from '../common/events/course-material-viewed.event';
+import { canAccessBranchScopedContent } from '../auth/utils/branch-visibility.util';
 import { CreateCourseMaterialDto } from './dto/create-course-material.dto';
 import { UpdateCourseMaterialDto } from './dto/update-course-material.dto';
 import {
@@ -255,9 +256,10 @@ export class CourseMaterialsService {
             );
         }
 
+        // Method 1: org-wide courses (NULL branchId) grant material access to every branch.
         if (
             scope.branchId &&
-            !this.scopeIdsMatch(course.branchId?.id, scope.branchId)
+            !canAccessBranchScopedContent(course.branchId?.id, scope.branchId)
         ) {
             throw new ForbiddenException(
                 'Access denied: Course belongs to different branch',

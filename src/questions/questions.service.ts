@@ -13,6 +13,7 @@ import { Repository, QueryRunner, DataSource } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
 import { CreateQuestionDto } from './dto/create-question.dto';
 import { UpdateQuestionDto } from './dto/update-question.dto';
 import { QuestionFilterDto } from './dto/question-filter.dto';
@@ -453,13 +454,8 @@ export class QuestionsService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
-
-            // Apply filters
+            // Method 1: org-wide questions (NULL branchId) visible to all branches.
+            applyBranchVisibilityToQuery(query, 'question', scope.branchId, 'questionList');
             if (filters?.questionType) {
                 query.andWhere('question.questionType = :questionType', {
                     questionType: filters.questionType,
@@ -572,10 +568,8 @@ export class QuestionsService {
                 if (scope.orgId) {
                     query.andWhere('question.orgId = :orgId', { orgId: scope.orgId });
                 }
-                if (scope.branchId) {
-                    query.andWhere('question.branchId = :branchId', { branchId: scope.branchId });
-                }
-
+                // Method 1: include org-wide questions when validating bulk updates.
+                applyBranchVisibilityToQuery(query, 'question', scope.branchId, 'questionBulk');
                 const existingQuestions = await query.getMany();
                 const foundQuestionIds = existingQuestions.map(q => q.questionId);
 
@@ -664,11 +658,8 @@ export class QuestionsService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: org-wide questions (NULL branchId) visible to all branches.
+            applyBranchVisibilityToQuery(query, 'question', scope.branchId, 'questionFindOne');
 
             const question = await query.getOne();
 
@@ -722,11 +713,8 @@ export class QuestionsService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: org-wide questions (NULL branchId) visible to all branches.
+            applyBranchVisibilityToQuery(query, 'question', scope.branchId, 'questionUpdate');
 
             const question = await query.getOne();
 
@@ -914,11 +902,8 @@ export class QuestionsService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: org-wide questions (NULL branchId) visible to all branches.
+            applyBranchVisibilityToQuery(query, 'question', scope.branchId, 'questionDelete');
 
             const question = await query.getOne();
 
@@ -1086,11 +1071,13 @@ export class QuestionsService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope?.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: org-wide questions (NULL branchId) visible to all branches.
+            applyBranchVisibilityToQuery(
+                query,
+                'question',
+                scope?.branchId,
+                'questionCount',
+            );
 
             const count = await query.getCount();
 

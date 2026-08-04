@@ -30,6 +30,9 @@ import { Result } from '../results/entities/result.entity';
 import { isPassingPercentage } from '../results/constants/passing-score.constants';
 import { UserService } from '../user/user.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import {
+    applyBranchVisibilityToQuery,
+} from '../auth/utils/branch-visibility.util';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
 import { CourseMaterialsService } from '../course-materials/course-materials.service';
@@ -663,11 +666,8 @@ export class CourseService {
             if (scope?.orgId) {
                 query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
             }
-            if (scope?.branchId) {
-                query.andWhere('course.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: branch users see their branch courses plus org-wide (NULL branchId).
+            applyBranchVisibilityToQuery(query, 'course', scope?.branchId, 'courseList');
 
             // Apply filters
             if (title) {
@@ -844,11 +844,8 @@ export class CourseService {
             if (scope?.orgId) {
                 query.andWhere('course.orgId = :orgId', { orgId: scope.orgId });
             }
-            if (scope?.branchId) {
-                query.andWhere('course.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: allow detail view for org-wide courses (branchId IS NULL).
+            applyBranchVisibilityToQuery(query, 'course', scope?.branchId, 'courseDetail');
 
             this.logger.debug(`Executing query for course ${id} with scope:`, {
                 orgId: scope?.orgId,
@@ -1127,17 +1124,26 @@ export class CourseService {
                 );
             }
 
-            // Check if course exists without calling findOne to avoid circular dependency
-            const courseExists = await this.courseRepository.findOne({
-                where: {
-                    courseId: id,
+            // Check if course exists without calling findOne to avoid circular dependency.
+            // Method 1: stats must include org-wide (NULL branchId) courses for branch users.
+            const courseExistsQuery = this.courseRepository
+                .createQueryBuilder('course')
+                .where('course.courseId = :id', { id })
+                .andWhere('course.status = :status', {
                     status: CourseStatus.ACTIVE,
-                    ...(scope?.orgId && { orgId: { id: scope.orgId } }),
-                    ...(scope?.branchId && {
-                        branchId: { id: scope.branchId },
-                    }),
-                },
-            });
+                });
+            if (scope?.orgId) {
+                courseExistsQuery.andWhere('course.orgId = :orgId', {
+                    orgId: scope.orgId,
+                });
+            }
+            applyBranchVisibilityToQuery(
+                courseExistsQuery,
+                'course',
+                scope?.branchId,
+                'courseStats',
+            );
+            const courseExists = await courseExistsQuery.getOne();
 
             if (!courseExists) {
                 throw new NotFoundException(`Course with ID ${id} not found`);
@@ -1237,6 +1243,7 @@ export class CourseService {
 
     /**
      * Scope filters on course alias — matches {@link CourseService.findAll} org/branch behavior.
+     * Method 1: includes org-wide courses (NULL branchId) for branch-scoped callers.
      */
     private applyOrgBranchToCourseQuery(
         qb: SelectQueryBuilder<object>,
@@ -1248,11 +1255,12 @@ export class CourseService {
                 scopeOrgId: scope.orgId,
             });
         }
-        if (scope?.branchId) {
-            qb.andWhere(`${alias}.branchId = :scopeBranchId`, {
-                scopeBranchId: scope.branchId,
-            });
-        }
+        applyBranchVisibilityToQuery(
+            qb,
+            alias,
+            scope?.branchId,
+            'courseDashboard',
+        );
     }
 
     /**
@@ -1473,19 +1481,31 @@ export class CourseService {
         // Previously this only matched ACTIVE, so reactivating an inactive course
         // via PATCH update failed with "Course not found" even though the row existed.
         // Soft-deleted courses must use restoreCourse / validateOwnershipWithDeleted.
-        const course = await this.courseRepository.findOne({
-            where: {
-                courseId,
-                status: In([
+        // Method 1: branch admins must resolve org-wide courses (NULL branchId) for edits.
+        const ownershipQuery = this.courseRepository
+            .createQueryBuilder('course')
+            .leftJoinAndSelect('course.orgId', 'orgId')
+            .leftJoinAndSelect('course.branchId', 'branchId')
+            .where('course.courseId = :courseId', { courseId })
+            .andWhere('course.status IN (:...statuses)', {
+                statuses: [
                     CourseStatus.ACTIVE,
                     CourseStatus.INACTIVE,
                     CourseStatus.DRAFT,
-                ]),
-                ...(scope?.orgId && { orgId: { id: scope.orgId } }),
-                ...(scope?.branchId && { branchId: { id: scope.branchId } }),
-            },
-            relations: ['orgId', 'branchId'],
-        });
+                ],
+            });
+        if (scope?.orgId) {
+            ownershipQuery.andWhere('course.orgId = :orgId', {
+                orgId: scope.orgId,
+            });
+        }
+        applyBranchVisibilityToQuery(
+            ownershipQuery,
+            'course',
+            scope?.branchId,
+            'courseOwnership',
+        );
+        const course = await ownershipQuery.getOne();
 
         if (!course) {
             throw new NotFoundException(`Course with ID ${courseId} not found`);

@@ -26,6 +26,7 @@ import { QuestionOption } from '../questions_options/entities/questions_option.e
 import { QuestionsService } from '../questions/questions.service';
 import { RetryService } from '../common/services/retry.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
 import { StandardResponse } from '../common/types';
 import { UserRole } from '../user/entities/user.entity';
 
@@ -153,11 +154,13 @@ export class AnswersService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope.branchId) {
-                questionQuery.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: learners may answer org-wide questions (NULL branchId).
+            applyBranchVisibilityToQuery(
+                questionQuery,
+                'question',
+                scope.branchId,
+                'answerQuestion',
+            );
 
             const question = await questionQuery.getOne();
 
