@@ -12,6 +12,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import {
+    applyBranchVisibilityToQuery,
+    canAccessBranchScopedContent,
+} from '../auth/utils/branch-visibility.util';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { TestFilterDto } from './dto/test-filter.dto';
@@ -381,11 +385,8 @@ export class TestService {
             if (scope.orgId) {
                 query.andWhere('test.orgId = :orgId', { orgId: scope.orgId });
             }
-            if (scope.branchId) {
-                query.andWhere('test.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: branch users see tests for their branch plus org-wide (NULL branchId).
+            applyBranchVisibilityToQuery(query, 'test', scope.branchId, 'testList');
 
             // Apply filters
             if (courseId) {
@@ -1250,8 +1251,14 @@ export class TestService {
                     );
                 }
 
-                // Validate branch access if branchId provided
-                if (scope.branchId && course.branchId?.id !== scope.branchId) {
+                // Method 1: org-wide courses (NULL branchId) are readable by every branch.
+                if (
+                    scope.branchId &&
+                    !canAccessBranchScopedContent(
+                        course.branchId?.id,
+                        scope.branchId,
+                    )
+                ) {
                     this.logger.warn(
                         `Read access denied - User ${userId} in branch ${scope.branchId} ` +
                             `attempted to access course ${courseId} in branch ${course.branchId?.id}`,
@@ -1300,7 +1307,11 @@ export class TestService {
             if (scope.orgId && test.orgId?.id !== scope.orgId) {
                 return null;
             }
-            if (scope.branchId && test.branchId?.id !== scope.branchId) {
+            // Method 1: org-wide tests (NULL branchId) are startable from any branch.
+            if (
+                scope.branchId &&
+                !canAccessBranchScopedContent(test.branchId?.id, scope.branchId)
+            ) {
                 return null;
             }
 
@@ -1419,11 +1430,13 @@ export class TestService {
             if (scope.orgId) {
                 query.andWhere('test.orgId = :orgId', { orgId: scope.orgId });
             }
-            if (scope.branchId) {
-                query.andWhere('test.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: include org-wide tests in scoped admin/learner listings.
+            applyBranchVisibilityToQuery(
+                query,
+                'test',
+                scope.branchId,
+                'testWithStats',
+            );
 
             if (courseId) {
                 query.andWhere('test.courseId = :courseId', { courseId });
@@ -1630,11 +1643,13 @@ export class TestService {
                     orgId: scope.orgId,
                 });
             }
-            if (scope?.branchId) {
-                query.andWhere('question.branchId = :branchId', {
-                    branchId: scope.branchId,
-                });
-            }
+            // Method 1: count questions on org-wide tests for non-owning branches.
+            applyBranchVisibilityToQuery(
+                query,
+                'question',
+                scope?.branchId,
+                'questionCount',
+            );
 
             return await query.getCount();
         });

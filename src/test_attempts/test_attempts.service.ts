@@ -44,6 +44,7 @@ import { ResultsService } from '../results/results.service';
 import { AnswersService } from '../answers/answers.service';
 import { TestService } from '../test/test.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { canAccessBranchScopedContent } from '../auth/utils/branch-visibility.util';
 import { RetryService } from '../common/services/retry.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -657,9 +658,12 @@ export class TestAttemptsService {
             startTime,
             expiresAt,
             progressPercentage: 0,
-            // Inherit org/branch from test
+            // Org-wide tests have NULL branchId — stamp the learner's branch on
+            // the attempt so reporting/leaderboards stay branch-accurate.
             orgId: test.orgId,
-            branchId: test.branchId,
+            branchId:
+                test.branchId ??
+                (scope.branchId ? ({ id: scope.branchId } as Branch) : undefined),
         });
 
         try {
@@ -1988,7 +1992,11 @@ export class TestAttemptsService {
                 'You cannot reset attempts for a test outside your organization',
             );
         }
-        if (scope.branchId && test.branchId?.id !== scope.branchId) {
+        // Method 1: admins may reset attempts on org-wide tests (NULL branchId).
+        if (
+            scope.branchId &&
+            !canAccessBranchScopedContent(test.branchId?.id, scope.branchId)
+        ) {
             throw new ForbiddenException(
                 'You cannot reset attempts for a test outside your branch',
             );

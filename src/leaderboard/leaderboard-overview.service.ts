@@ -24,6 +24,20 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
+/** Roles allowed to see underperforming "needs support" leaderboard data. */
+const LEADERBOARD_ADMIN_ROLES: UserRole[] = [
+    UserRole.MASTER_ADMIN,
+    UserRole.OWNER,
+    UserRole.ADMIN,
+];
+
+function canViewNeedsSupport(userRole?: string): boolean {
+    return (
+        userRole != null &&
+        LEADERBOARD_ADMIN_ROLES.includes(userRole as UserRole)
+    );
+}
+
 interface AggregatedUserStats {
     userId: string;
     firstName: string;
@@ -104,6 +118,11 @@ export class LeaderboardOverviewService {
                     ? this.buildImprovers(ranked)
                     : { topImprovers: [], needsSupport: [] };
 
+            // Hide underperforming users from generic learners — admin-only coaching insight
+            const sanitizedNeedsSupport = canViewNeedsSupport(scope.userRole)
+                ? needsSupport
+                : [];
+
             const skip = (page - 1) * limit;
             const pageEntries = ranked.slice(skip, skip + limit);
 
@@ -118,7 +137,7 @@ export class LeaderboardOverviewService {
                 courseId: query.courseId,
                 summary,
                 topImprovers,
-                needsSupport,
+                needsSupport: sanitizedNeedsSupport,
             };
         } catch (error) {
             if (error instanceof BadRequestException) {

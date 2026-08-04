@@ -22,6 +22,9 @@ export default new DataSource({
     // Migrations are SQL-only — no entity loading required (avoids tsconfig path alias issues in CLI).
     entities: [],
     migrations: ['src/migrations/*.ts'],
+    // Data migrations (e.g. org-wide branchId) commit per statement — avoids long
+    // lock holds and lock-wait timeouts when Workbench or the dev server is connected.
+    migrationsTransactionMode: 'none',
     synchronize: false,
     logging: false,
 });
