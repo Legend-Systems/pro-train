@@ -40,6 +40,7 @@ import {
 } from './dto/admin-results-dashboard.dto';
 import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filter.dto';
 import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
+import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
 
 @Injectable()
 export class ResultsService {
@@ -2131,17 +2132,18 @@ export class ResultsService {
             .createQueryBuilder('question')
             .where('question.testId = :testId', { testId: attempt.testId });
 
-        // Apply org/branch scoping to questions
+        // Org-wide questions (NULL branchId) must remain visible to branch learners.
         if (attempt.orgId) {
             questionsQuery.andWhere('question.orgId = :orgId', {
                 orgId: attempt.orgId.id,
             });
         }
-        if (attempt.branchId) {
-            questionsQuery.andWhere('question.branchId = :branchId', {
-                branchId: attempt.branchId.id,
-            });
-        }
+        applyBranchVisibilityToQuery(
+            questionsQuery,
+            'question',
+            attempt.branchId?.id,
+            'scoreCalc',
+        );
 
         const questions = await questionsQuery.getMany();
         this.logger.debug(
@@ -2671,17 +2673,18 @@ export class ResultsService {
                 .createQueryBuilder('question')
                 .where('question.testId = :testId', { testId: attempt.testId });
 
-            // Apply org/branch scoping to questions
+            // Org-wide questions (NULL branchId) must remain visible to branch learners.
             if (attempt.orgId) {
                 questionQuery.andWhere('question.orgId = :orgId', {
                     orgId: attempt.orgId.id,
                 });
             }
-            if (attempt.branchId) {
-                questionQuery.andWhere('question.branchId = :branchId', {
-                    branchId: attempt.branchId.id,
-                });
-            }
+            applyBranchVisibilityToQuery(
+                questionQuery,
+                'question',
+                attempt.branchId?.id,
+                'emailQ',
+            );
 
             const questionCount = await questionQuery.getCount();
 
@@ -2913,7 +2916,7 @@ export class ResultsService {
 
         const answers = await answersQuery.getMany();
         
-        // Get all questions for the test
+        // Get all questions for the test (include org-wide NULL branchId)
         const questionsQuery = this.questionRepository
             .createQueryBuilder('question')
             .where('question.testId = :testId', { testId: result.testId });
@@ -2921,9 +2924,12 @@ export class ResultsService {
         if (result.orgId) {
             questionsQuery.andWhere('question.orgId = :orgId', { orgId: result.orgId.id });
         }
-        if (result.branchId) {
-            questionsQuery.andWhere('question.branchId = :branchId', { branchId: result.branchId.id });
-        }
+        applyBranchVisibilityToQuery(
+            questionsQuery,
+            'question',
+            result.branchId?.id,
+            'perfMetrics',
+        );
 
         const questions = await questionsQuery.getMany();
 
@@ -2942,9 +2948,14 @@ export class ResultsService {
             }
         }
 
-        const incorrectAnswers = answeredQuestions - correctAnswers;
-        const unansweredQuestions = totalQuestions - answeredQuestions;
-        const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+        const incorrectAnswers = Math.max(0, answeredQuestions - correctAnswers);
+        const unansweredQuestions = Math.max(0, totalQuestions - answeredQuestions);
+        const accuracy =
+            totalQuestions > 0
+                ? (correctAnswers / totalQuestions) * 100
+                : answeredQuestions > 0
+                  ? (correctAnswers / answeredQuestions) * 100
+                  : 0;
         const avgTimePerQuestion = 0; // Time tracking not available in current Answer entity
         
         // Calculate difficulty rating based on class performance (1-5 scale)
@@ -3051,7 +3062,7 @@ export class ResultsService {
         questionsAnswered: number;
         enrolledStudents: number;
     }> {
-        // Count questions for this test
+        // Count questions for this test (include org-wide NULL branchId)
         const questionsQuery = this.questionRepository
             .createQueryBuilder('question')
             .where('question.testId = :testId', { testId: result.testId });
@@ -3059,9 +3070,12 @@ export class ResultsService {
         if (result.orgId) {
             questionsQuery.andWhere('question.orgId = :orgId', { orgId: result.orgId.id });
         }
-        if (result.branchId) {
-            questionsQuery.andWhere('question.branchId = :branchId', { branchId: result.branchId.id });
-        }
+        applyBranchVisibilityToQuery(
+            questionsQuery,
+            'question',
+            result.branchId?.id,
+            'addlStats',
+        );
 
         const totalQuestions = await questionsQuery.getCount();
 

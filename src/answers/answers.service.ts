@@ -216,9 +216,9 @@ export class AnswersService {
                 attempt: attempt,
                 question: question,
                 selectedOption: selectedOption,
-                // Set org/branch from scope
-                orgId: scope.orgId ? Number(scope.orgId) : undefined,
-                branchId: scope.branchId ? Number(scope.branchId) : undefined,
+                // Set org/branch from scope (UUIDs — do not coerce with Number())
+                orgId: scope.orgId ?? undefined,
+                branchId: scope.branchId ?? undefined,
                 userId: scope.userId,
             });
 
@@ -718,12 +718,9 @@ export class AnswersService {
                                     Answer,
                                     {
                                         ...sanitizedAnswerDto,
-                                        orgId: scope.orgId
-                                            ? Number(scope.orgId)
-                                            : undefined,
-                                        branchId: scope.branchId
-                                            ? Number(scope.branchId)
-                                            : undefined,
+                                        // UUIDs — do not coerce with Number()
+                                        orgId: scope.orgId ?? undefined,
+                                        branchId: scope.branchId ?? undefined,
                                         userId: scope.userId || context?.userId,
                                     },
                                 );
