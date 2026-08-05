@@ -169,20 +169,20 @@ export class Answer {
     @Column()
     @ApiProperty({
         description: 'Organization ID this answer belongs to',
-        example: 1,
+        example: '123e4567-e89b-12d3-a456-426614174000',
     })
-    @IsNumber()
-    orgId: number;
+    @IsString()
+    orgId: string;
 
     @Column({ nullable: true })
     @ApiProperty({
         description: 'Branch ID this answer belongs to',
-        example: 1,
+        example: 'b1c2d3e4-f5g6-7890-bcde-fg1234567890',
         required: false,
     })
     @IsOptional()
-    @IsNumber()
-    branchId?: number;
+    @IsString()
+    branchId?: string;
 
     @ManyToOne(() => Organization, { nullable: false })
     @JoinColumn({ name: 'orgId' })

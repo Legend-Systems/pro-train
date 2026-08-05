@@ -182,6 +182,9 @@ export class TestAttemptsService {
     /**
      * Apply the caller's organization and branch boundaries to a query.
      *
+     * Elevated roles (Admin / Owner / Master Admin) are org-scoped only so they
+     * can manage learners and attempts across every branch in their organization.
+     *
      * @param query - Query builder aliased on the test attempt.
      * @param scope - Caller org/branch scope.
      * @param alias - Query alias for the attempt entity.
@@ -197,7 +200,8 @@ export class TestAttemptsService {
                 scopedOrgId: scope.orgId,
             });
         }
-        if (scope.branchId) {
+        // Admins operate org-wide; branch filter only applies to non-elevated callers.
+        if (scope.branchId && !this.isElevatedRole(scope.userRole)) {
             query.andWhere(`${alias}.branchId = :scopedBranchId`, {
                 scopedBranchId: scope.branchId,
             });
@@ -1852,7 +1856,8 @@ export class TestAttemptsService {
      * @param scope - Caller org/branch/role scope.
      * @returns The audit record plus the learner's refreshed attempt allowance.
      * @throws ForbiddenException when the caller is not elevated or the target
-     * lies outside the caller's organization or branch.
+     * lies outside the caller's organization (branch is not restricted for
+     * Admin / Owner / Master Admin).
      * @throws NotFoundException when the test or the learner does not exist.
      * @throws ConflictException when the learner has no live attempts to void.
      */
@@ -1920,7 +1925,8 @@ export class TestAttemptsService {
         if (scope.orgId) {
             query.andWhere('reset.orgId = :orgId', { orgId: scope.orgId });
         }
-        if (scope.branchId) {
+        // Elevated roles see reset history across all branches in the org.
+        if (scope.branchId && !this.isElevatedRole(scope.userRole)) {
             query.andWhere('reset.branchId = :branchId', {
                 branchId: scope.branchId,
             });
@@ -1992,9 +1998,11 @@ export class TestAttemptsService {
                 'You cannot reset attempts for a test outside your organization',
             );
         }
-        // Method 1: admins may reset attempts on org-wide tests (NULL branchId).
+        // Elevated roles may reset attempts on any branch (or org-wide) test in their org.
+        // Non-elevated callers still respect Method 1 org-wide visibility (NULL branchId).
         if (
             scope.branchId &&
+            !this.isElevatedRole(scope.userRole) &&
             !canAccessBranchScopedContent(test.branchId?.id, scope.branchId)
         ) {
             throw new ForbiddenException(
@@ -2026,7 +2034,12 @@ export class TestAttemptsService {
                 'You cannot reset attempts for a learner outside your organization',
             );
         }
-        if (scope.branchId && user.branchId?.id !== scope.branchId) {
+        // Admins / Owners / Master Admins may reset learners in any branch within the org.
+        if (
+            scope.branchId &&
+            !this.isElevatedRole(scope.userRole) &&
+            user.branchId?.id !== scope.branchId
+        ) {
             throw new ForbiddenException(
                 'You cannot reset attempts for a learner outside your branch',
             );
