@@ -1,5 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import {
+    ArrayMaxSize,
+    ArrayUnique,
+    IsArray,
+    IsNumber,
+    IsOptional,
+    IsString,
+    IsNotEmpty,
+} from 'class-validator';
+
+/** Maximum options a learner may select for one multiple-choice question. */
+export const MAX_SELECTED_OPTION_IDS = 3;
 
 export class CreateAnswerDto {
     @ApiProperty({
@@ -26,6 +37,21 @@ export class CreateAnswerDto {
     @IsOptional()
     @IsNumber()
     selectedOptionId?: number;
+
+    @ApiProperty({
+        description:
+            'Selected option IDs for multi-select multiple-choice questions (max 3)',
+        example: [1, 2],
+        required: false,
+        type: [Number],
+        maxItems: MAX_SELECTED_OPTION_IDS,
+    })
+    @IsOptional()
+    @IsArray()
+    @ArrayUnique()
+    @ArrayMaxSize(MAX_SELECTED_OPTION_IDS)
+    @IsNumber({}, { each: true })
+    selectedOptionIds?: number[];
 
     @ApiProperty({
         description: 'Text answer for open-ended questions',

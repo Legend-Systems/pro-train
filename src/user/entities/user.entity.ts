@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsString, MinLength, IsOptional } from 'class-validator';
 import { Exclude } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -126,6 +126,16 @@ export class User {
     })
     @IsEnum(UserStatus)
     status: UserStatus;
+
+    @Column({ type: 'varchar', length: 10, nullable: true })
+    @ApiProperty({
+        description: 'Preferred UI locale (`en`, `pt-PT`). Falls back to org default when null.',
+        example: 'pt-PT',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    preferredLanguage?: string | null;
 
     @IsString()
     @CreateDateColumn()

@@ -35,6 +35,8 @@ import {
 } from '../auth/utils/branch-visibility.util';
 import { CourseCreatedEvent } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
+import { ContentLocalizationService } from '../locale/content-localization.service';
+import { DEFAULT_LOCALE } from '../locale/locale.constants';
 import { CourseMaterialsService } from '../course-materials/course-materials.service';
 import {
     CourseMaterial,
@@ -144,6 +146,7 @@ export class CourseService {
         private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
         private readonly courseMaterialsService: CourseMaterialsService,
+        private readonly contentLocalizationService: ContentLocalizationService,
     ) {}
 
     /**
@@ -770,6 +773,7 @@ export class CourseService {
     async findOne(
         id: number,
         scope?: OrgBranchScope,
+        locale: string = DEFAULT_LOCALE,
     ): Promise<CourseDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
@@ -795,7 +799,7 @@ export class CourseService {
                     cachedCourse.courseMaterials = this.mapActiveCourseMaterials(
                         cachedCourse.courseMaterials,
                     );
-                    return cachedCourse;
+                    return this.localizeCourseDetail(cachedCourse, id, locale);
                 }
             } catch (error) {
                 this.logger.warn(
@@ -960,8 +964,50 @@ export class CourseService {
                 studentCount: result.studentCount,
             });
 
-            return result;
+            return this.localizeCourseDetail(result, id, locale);
         });
+    }
+
+    /** Merges course and nested test translations for the resolved locale. */
+    private async localizeCourseDetail<T extends CourseDetailDto>(
+        detail: T,
+        courseId: number,
+        locale: string,
+    ): Promise<T> {
+        if (!this.contentLocalizationService.shouldLocalize(locale)) {
+            return detail;
+        }
+
+        const courseTranslation =
+            await this.contentLocalizationService.loadCourseTranslation(
+                courseId,
+                locale,
+            );
+
+        const localized = this.contentLocalizationService.applyCourseFields(
+            detail,
+            courseTranslation,
+        );
+
+        if (!detail.tests?.length) {
+            return localized;
+        }
+
+        localized.tests = await Promise.all(
+            detail.tests.map(async (test) => {
+                const testTranslation =
+                    await this.contentLocalizationService.loadTestTranslation(
+                        test.testId,
+                        locale,
+                    );
+                return this.contentLocalizationService.applyTestFields(
+                    test,
+                    testTranslation,
+                );
+            }),
+        );
+
+        return localized;
     }
 
     async findByCreator(

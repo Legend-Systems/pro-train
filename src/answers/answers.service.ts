@@ -1002,14 +1002,15 @@ export class AnswersService {
                         );
                     });
 
-                    // Resolve selection: multiple_choice uses selectedOptionId;
-                    // true_false clients may send only textAnswer ("true"/"false").
-                    const selectedOption = this.resolveSelectedOptionForMarking(
-                        answer,
-                        questionOptions,
-                    );
+                    // Resolve selection(s): multiple_choice may include up to 3 option ids
+                    // (JSON array in textAnswer); true_false may send only textAnswer.
+                    const selectedOptionIds =
+                        this.resolveSelectedOptionIdsForMarking(
+                            answer,
+                            questionOptions,
+                        );
 
-                    if (!selectedOption) {
+                    if (selectedOptionIds.length === 0) {
                         this.logger.log(
                             `   ⏭️  SKIPPED: No option selected for objective question`,
                         );
@@ -1017,31 +1018,47 @@ export class AnswersService {
                         continue;
                     }
 
-                    // Persist resolved option id for true_false text-only submissions
+                    // Persist primary option id for true_false text-only submissions
                     if (
                         !answer.selectedOptionId &&
                         questionType === QuestionType.TRUE_FALSE
                     ) {
-                        answer.selectedOptionId = selectedOption.optionId;
+                        answer.selectedOptionId = selectedOptionIds[0];
                     }
 
                     // Find all correct options
                     const correctOptions = questionOptions.filter(
                         opt => opt.isCorrect,
                     );
+                    const correctOptionIds = correctOptions.map(
+                        opt => opt.optionId,
+                    );
 
                     this.logger.log(
                         `   ✅ Correct Answer(s): ${correctOptions.map(opt => `"${opt.optionText}" (ID: ${opt.optionId})`).join(', ')}`,
                     );
 
-                    // Determine if the user's answer is correct
-                    const isCorrect = selectedOption.isCorrect;
+                    // Multi-select: exact set match against all correct options.
+                    // Single-correct questions still work (one correct id vs one selected id).
+                    const isCorrect = this.areOptionIdSetsEqual(
+                        selectedOptionIds,
+                        correctOptionIds,
+                    );
                     const pointsAwarded = isCorrect ? maxPoints : 0;
 
+                    const selectedLabels = selectedOptionIds
+                        .map(optionId => {
+                            const option = questionOptions.find(
+                                item => item.optionId === optionId,
+                            );
+                            return option
+                                ? `"${option.optionText}" (ID: ${option.optionId})`
+                                : `ID: ${optionId}`;
+                        })
+                        .join(', ');
+
                     // Log the marking decision
-                    this.logger.log(
-                        `   👤 User Selected: "${selectedOption.optionText}" (ID: ${selectedOption.optionId})`,
-                    );
+                    this.logger.log(`   👤 User Selected: ${selectedLabels}`);
                     this.logger.log(
                         `   🎯 MARKING RESULT: ${isCorrect ? '✅ CORRECT' : '❌ INCORRECT'}`,
                     );
@@ -1114,18 +1131,40 @@ export class AnswersService {
     }
 
     /**
-     * Resolve the user's selected option for auto-marking.
-     * multiple_choice answers use selectedOptionId; true_false submissions
-     * from the test page may only provide textAnswer ("true"/"false").
+     * Resolve selected option ids for auto-marking.
+     * Multi-select multiple_choice answers store a JSON number array in textAnswer;
+     * legacy single-select uses selectedOptionId; true_false may use textAnswer labels.
      */
-    private resolveSelectedOptionForMarking(
+    private resolveSelectedOptionIdsForMarking(
         answer: Answer,
         questionOptions: QuestionOption[],
-    ): QuestionOption | undefined {
+    ): number[] {
+        if (answer.textAnswer) {
+            try {
+                const parsed: unknown = JSON.parse(answer.textAnswer);
+                if (
+                    Array.isArray(parsed) &&
+                    parsed.every(
+                        (value): value is number =>
+                            typeof value === 'number' && Number.isFinite(value),
+                    )
+                ) {
+                    return [...new Set(parsed)].filter(optionId =>
+                        questionOptions.some(
+                            option => option.optionId === optionId,
+                        ),
+                    );
+                }
+            } catch {
+                // Not JSON — fall through to single-select / true_false text handling.
+            }
+        }
+
         if (answer.selectedOptionId) {
-            return questionOptions.find(
+            const exists = questionOptions.some(
                 option => option.optionId === answer.selectedOptionId,
             );
+            return exists ? [answer.selectedOptionId] : [];
         }
 
         if (
@@ -1133,13 +1172,27 @@ export class AnswersService {
             answer.textAnswer
         ) {
             const normalizedAnswer = answer.textAnswer.trim().toLowerCase();
-            return questionOptions.find(
+            const matched = questionOptions.find(
                 option =>
                     option.optionText.trim().toLowerCase() === normalizedAnswer,
             );
+            return matched ? [matched.optionId] : [];
         }
 
-        return undefined;
+        return [];
+    }
+
+    /** True when both option-id lists contain the same unique values. */
+    private areOptionIdSetsEqual(
+        selectedOptionIds: number[],
+        correctOptionIds: number[],
+    ): boolean {
+        if (selectedOptionIds.length !== correctOptionIds.length) {
+            return false;
+        }
+
+        const selectedSet = new Set(selectedOptionIds);
+        return correctOptionIds.every(optionId => selectedSet.has(optionId));
     }
 
     /**

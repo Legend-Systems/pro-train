@@ -49,6 +49,8 @@ import {
     TestAttemptStartedEvent,
     TestResultsReadyEvent,
 } from '../common/events';
+import { ContentLocalizationService } from '../locale/content-localization.service';
+import { DEFAULT_LOCALE } from '../locale/locale.constants';
 
 @Injectable()
 export class TestService {
@@ -102,6 +104,7 @@ export class TestService {
         private readonly courseService: CourseService,
         private readonly dataSource: DataSource,
         private readonly eventEmitter: EventEmitter2,
+        private readonly contentLocalizationService: ContentLocalizationService,
     ) {}
 
     /**
@@ -696,6 +699,7 @@ export class TestService {
     async findOne(
         id: number,
         scope?: OrgBranchScope,
+        locale: string = DEFAULT_LOCALE,
     ): Promise<TestDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
@@ -755,7 +759,7 @@ export class TestService {
                       order: { orderIndex: 'ASC', createdAt: 'ASC' },
                   });
 
-            return {
+            const detail = {
                 ...test,
                 course: test.course
                     ? {
@@ -843,7 +847,67 @@ export class TestService {
                             : undefined,
                     })) || [],
             };
+
+            return this.localizeTestDetail(detail, id, locale);
         });
+    }
+
+    /**
+     * Merges translation sidecar rows over English base fields for a test detail DTO.
+     */
+    private async localizeTestDetail<T extends TestDetailDto>(
+        detail: T,
+        testId: number,
+        locale: string,
+    ): Promise<T> {
+        if (!this.contentLocalizationService.shouldLocalize(locale)) {
+            return detail;
+        }
+
+        const [testTranslation, questionTranslations] = await Promise.all([
+            this.contentLocalizationService.loadTestTranslation(testId, locale),
+            this.contentLocalizationService.loadQuestionTranslations(
+                detail.questions?.map((q) => q.questionId) ?? [],
+                locale,
+            ),
+        ]);
+
+        const optionIds =
+            detail.questions?.flatMap(
+                (q) => q.options?.map((o) => o.optionId) ?? [],
+            ) ?? [];
+        const optionTranslations =
+            await this.contentLocalizationService.loadOptionTranslations(
+                optionIds,
+                locale,
+            );
+
+        const localized = this.contentLocalizationService.applyTestFields(
+            detail,
+            testTranslation,
+        );
+
+        if (detail.course) {
+            const courseTranslation =
+                await this.contentLocalizationService.loadCourseTranslation(
+                    detail.course.courseId,
+                    locale,
+                );
+            localized.course = this.contentLocalizationService.applyCourseFields(
+                detail.course,
+                courseTranslation,
+            );
+        }
+
+        localized.questions = (detail.questions ?? []).map((question) =>
+            this.contentLocalizationService.applyQuestionFields(
+                question,
+                questionTranslations.get(question.questionId),
+                optionTranslations,
+            ),
+        );
+
+        return localized;
     }
 
     async findByCourse(

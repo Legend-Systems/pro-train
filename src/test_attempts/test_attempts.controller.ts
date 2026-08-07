@@ -41,6 +41,10 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../user/entities/user.entity';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import {
+    LOCALE_REQUEST_KEY,
+    type RequestWithLocale,
+} from '../locale/locale.interceptor';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardApiResponse } from '../user/dto/common-response.dto';
 
@@ -199,6 +203,7 @@ export class TestAttemptsController {
                 createTestAttemptDto,
                 scope,
                 req.user.id,
+                (req as RequestWithLocale)[LOCALE_REQUEST_KEY] ?? 'en',
             );
 
             this.logger.log(

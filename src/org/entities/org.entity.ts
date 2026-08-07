@@ -125,7 +125,7 @@ export class Organization {
             },
             localization: {
                 defaultLanguage: 'en',
-                supportedLanguages: ['en', 'es', 'fr'],
+                supportedLanguages: ['en', 'pt-PT'],
                 allowUserLanguageChange: true,
                 region: 'US',
                 timezone: 'America/New_York',

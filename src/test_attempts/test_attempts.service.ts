@@ -47,6 +47,31 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { canAccessBranchScopedContent } from '../auth/utils/branch-visibility.util';
 import { RetryService } from '../common/services/retry.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DEFAULT_LOCALE } from '../locale/locale.constants';
+import { MAX_SELECTED_OPTION_IDS } from './dto/submit-test-attempt.dto';
+
+/**
+ * Normalizes single- and multi-select option payloads into a unique id list (max 3).
+ */
+function normalizeSelectedOptionIds(
+    selectedOptionIds?: number[],
+    selectedOptionId?: number,
+): number[] {
+    const fromArray = (selectedOptionIds ?? []).filter(
+        (optionId): optionId is number =>
+            typeof optionId === 'number' && optionId > 0,
+    );
+
+    if (fromArray.length > 0) {
+        return [...new Set(fromArray)].slice(0, MAX_SELECTED_OPTION_IDS);
+    }
+
+    if (typeof selectedOptionId === 'number' && selectedOptionId > 0) {
+        return [selectedOptionId];
+    }
+
+    return [];
+}
 import {
     RewardsTestAttemptStartedEvent,
     TestAttemptSubmittedEvent,
@@ -333,6 +358,7 @@ export class TestAttemptsService {
         createAttemptDto: CreateTestAttemptDto,
         scope: OrgBranchScope,
         userId: string,
+        locale: string = DEFAULT_LOCALE,
     ): Promise<TestAttemptResponseDto> {
         return this.retryService.executeDatabase(async () => {
             // Get test details with org/branch validation using TestService
@@ -393,6 +419,7 @@ export class TestAttemptsService {
                 scope,
                 test,
                 attemptValidation.attemptNumber,
+                locale,
             );
 
             this.logger.log(
@@ -648,6 +675,7 @@ export class TestAttemptsService {
             branchId?: Branch;
         },
         attemptNumber: number,
+        locale: string = DEFAULT_LOCALE,
     ): Promise<TestAttempt> {
         const startTime = new Date();
         const expiresAt = test.durationMinutes
@@ -662,6 +690,7 @@ export class TestAttemptsService {
             startTime,
             expiresAt,
             progressPercentage: 0,
+            locale,
             // Org-wide tests have NULL branchId — stamp the learner's branch on
             // the attempt so reporting/leaderboards stay branch-accurate.
             orgId: test.orgId,
@@ -751,15 +780,30 @@ export class TestAttemptsService {
                     `Processing ${submitData.answers.length} answers for attempt ${attemptId}`,
                 );
 
-                // Create answers using the answers service
+                // Create answers using the answers service.
+                // Multi-select MC answers send selectedOptionIds (max 3); persist as JSON in textAnswer
+                // while keeping selectedOptionId as the first selection for FK / legacy clients.
                 const bulkAnswersDto = {
-                    answers: submitData.answers.map(answer => ({
-                        attemptId,
-                        questionId: answer.questionId,
-                        selectedOptionId: answer.selectedOptionId,
-                        textAnswer: answer.answerText,
-                        timeSpent: answer.timeSpent,
-                    })),
+                    answers: submitData.answers.map(answer => {
+                        const selectedOptionIds = normalizeSelectedOptionIds(
+                            answer.selectedOptionIds,
+                            answer.selectedOptionId,
+                        );
+
+                        return {
+                            attemptId,
+                            questionId: answer.questionId,
+                            selectedOptionId:
+                                selectedOptionIds.length > 0
+                                    ? selectedOptionIds[0]
+                                    : undefined,
+                            textAnswer:
+                                selectedOptionIds.length > 0
+                                    ? JSON.stringify(selectedOptionIds)
+                                    : answer.answerText,
+                            timeSpent: answer.timeSpent,
+                        };
+                    }),
                 };
                 try {
                     const bulkResult =

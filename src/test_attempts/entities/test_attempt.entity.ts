@@ -17,6 +17,7 @@ import {
     IsEnum,
     IsDateString,
     IsOptional,
+    IsString,
 } from 'class-validator';
 import { Test } from '../../test/entities/test.entity';
 import { User } from '../../user/entities/user.entity';
@@ -141,6 +142,16 @@ export class TestAttempt {
     @IsOptional()
     @IsNumber()
     voidedByResetId?: number | null;
+
+    @Column({ type: 'varchar', length: 10, nullable: true, default: 'en' })
+    @ApiProperty({
+        description: 'Locale active when the attempt was started (`en`, `pt-PT`)',
+        example: 'pt-PT',
+        required: false,
+    })
+    @IsOptional()
+    @IsString()
+    locale?: string | null;
 
     @CreateDateColumn()
     @ApiProperty({

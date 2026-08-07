@@ -613,6 +613,7 @@ export class AuthService {
             lastName: updatedUser.lastName,
             avatar: this.transformAvatarForResponse(updatedUser.avatar),
             role: updatedUser.role,
+            preferredLanguage: updatedUser.preferredLanguage ?? null,
             createdAt: updatedUser.createdAt,
             updatedAt: updatedUser.updatedAt,
         };
@@ -731,6 +732,7 @@ export class AuthService {
             lastName: user.lastName,
             avatar: this.transformAvatarForResponse(user.avatar),
             role: user.role,
+            preferredLanguage: user.preferredLanguage ?? null,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
         };

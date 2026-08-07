@@ -30,6 +30,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { ResolvedLocale } from '../locale/resolved-locale.decorator';
 import { CourseLearnerProgressPayloadDto } from './dto/course-learner-progress.dto';
 import { UserRole } from '../user/entities/user.entity';
 import { CourseService } from './course.service';
@@ -582,11 +583,12 @@ export class CourseController {
     async findOne(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
+        @ResolvedLocale() locale: string,
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(`Getting course ${id} for user: ${scope.userId}`);
 
-            const course = await this.courseService.findOne(id, scope);
+            const course = await this.courseService.findOne(id, scope, locale);
 
             if (!course) {
                 return {
@@ -655,13 +657,14 @@ export class CourseController {
     async getCourseForEdit(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
+        @ResolvedLocale() locale: string,
     ): Promise<StandardApiResponse> {
         try {
             this.logger.log(
                 `Getting course ${id} for editing by user: ${scope.userId}`,
             );
 
-            const course = await this.courseService.findOne(id, scope);
+            const course = await this.courseService.findOne(id, scope, locale);
 
             if (!course) {
                 this.logger.warn(
