@@ -7,9 +7,11 @@ import {
     IsArray,
     ValidateNested,
     ValidateIf,
+    IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CreateCourseMaterialItemDto } from './create-course-material-item.dto';
+import { CourseStatus } from '../entities/course.entity';
 
 export class CreateCourseDto {
     @ApiProperty({
@@ -51,6 +53,22 @@ export class CreateCourseDto {
     @ValidateIf((_, value) => value !== null)
     @IsString({ message: 'Course thumbnail must be a URL string' })
     courseThumbnail?: string | null;
+
+    /**
+     * Optional status set from the create-course Active toggle.
+     * Defaults to `active` when omitted (entity column default).
+     */
+    @ApiProperty({
+        description:
+            'Course operational status. Use active/inactive from the admin create form toggle.',
+        enum: CourseStatus,
+        required: false,
+        example: CourseStatus.ACTIVE,
+        default: CourseStatus.ACTIVE,
+    })
+    @IsOptional()
+    @IsEnum(CourseStatus, { message: 'Course status must be a valid status value' })
+    status?: CourseStatus;
 
     @ApiProperty({
         description:

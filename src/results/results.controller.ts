@@ -38,6 +38,8 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { AdminResultsDashboardDto } from './dto/admin-results-dashboard.dto';
 import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filter.dto';
 import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
+import { AdminEmployeePerformanceFilterDto } from './dto/admin-employee-performance-filter.dto';
+import { AdminEmployeePerformanceDto } from './dto/admin-employee-performance.dto';
 
 @ApiTags('📊 Results & Performance Analytics')
 @Controller('results')
@@ -648,6 +650,40 @@ export class ResultsController {
             `Getting admin employee metrics for org: ${scope.orgId}, user: ${filterDto.userId ?? 'default'}`,
         );
         return this.resultsService.getAdminEmployeeMetrics(scope, filterDto);
+    }
+
+    /**
+     * Employee Performance tab — roster of learners with pass/fail/in-progress
+     * lists and scheduled tests not attempted after examStartDate.
+     */
+    @Get('admin/employee-performance')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @ApiOperation({
+        summary: 'Employee performance roster (Admin)',
+        description:
+            'Per-employee pass/fail/in-progress lists plus tests not attempted after examStartDate. Restricted to admin, owner, and master_admin.',
+        operationId: 'getAdminEmployeePerformance',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Employee performance roster retrieved successfully',
+        type: AdminEmployeePerformanceDto,
+    })
+    @ApiForbiddenResponse({
+        description: 'Forbidden - admin, owner, or master_admin role required',
+    })
+    async getAdminEmployeePerformance(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Query() filterDto: AdminEmployeePerformanceFilterDto,
+    ): Promise<AdminEmployeePerformanceDto> {
+        this.logger.log(
+            `Getting admin employee performance for org: ${scope.orgId}, branch: ${filterDto.branchId ?? scope.branchId}`,
+        );
+        return this.resultsService.getAdminEmployeePerformance(
+            scope,
+            filterDto,
+        );
     }
 
     @Get(':id')

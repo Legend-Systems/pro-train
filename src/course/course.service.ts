@@ -450,9 +450,16 @@ export class CourseService {
         );
     }
 
+    /**
+     * Leadership roles that may list/manage every course status.
+     * Regular `user` callers only receive active courses.
+     */
     private isAdminScope(scope?: OrgBranchScope): boolean {
+        const role = scope?.userRole;
         return (
-            scope?.userRole === 'master_admin' || scope?.userRole === 'admin'
+            role === 'master_admin' ||
+            role === 'owner' ||
+            role === 'admin'
         );
     }
 
@@ -838,10 +845,12 @@ export class CourseService {
             query.leftJoinAndSelect('trainingProgress.user', 'progressUser');
             query.where('course.courseId = :id', { id });
 
-            // Filter by status - only show active courses by default
-            query.andWhere('course.status = :status', {
-                status: CourseStatus.ACTIVE,
-            });
+            // Learners may only open active courses; admins can open any status to edit.
+            if (!this.isAdminScope(scope)) {
+                query.andWhere('course.status = :status', {
+                    status: CourseStatus.ACTIVE,
+                });
+            }
 
             // Apply org/branch scoping - only if user has these assignments
             // For users without org/branch assignments, they can see all active courses
@@ -862,7 +871,9 @@ export class CourseService {
             if (!course) {
                 this.logger.warn(`Course ${id} not found in database`, {
                     scope: scope,
-                    queryConditions: 'status=ACTIVE with org/branch filters',
+                    queryConditions: this.isAdminScope(scope)
+                        ? 'org/branch filters (all statuses)'
+                        : 'status=ACTIVE with org/branch filters',
                 });
                 return null;
             }
