@@ -124,4 +124,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
         },
     )
     password?: string;
+
+    @ApiProperty({
+        description: 'Preferred UI locale (`en` or `pt-PT`)',
+        example: 'pt-PT',
+        required: false,
+        nullable: true,
+    })
+    @IsOptional()
+    @IsString()
+    @Matches(/^[a-z]{2}(-[A-Z]{2})?$/, {
+        message: 'Preferred language must be a valid locale tag (e.g. en, pt-PT)',
+    })
+    preferredLanguage?: string | null;
 }

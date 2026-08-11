@@ -49,6 +49,11 @@ import { UserTrainingHoursMonthly } from './training-hours/entities/user-trainin
 import { TrainingHoursModule } from './training-hours/training-hours.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { HomeInsightsModule } from './home-insights/home-insights.module';
+import { LocaleModule } from './locale/locale.module';
+import { CourseTranslation } from './locale/entities/course-translation.entity';
+import { TestTranslation } from './locale/entities/test-translation.entity';
+import { QuestionTranslation } from './locale/entities/question-translation.entity';
+import { QuestionOptionTranslation } from './locale/entities/question-option-translation.entity';
 
 @Module({
     imports: [
@@ -112,6 +117,10 @@ import { HomeInsightsModule } from './home-insights/home-insights.module';
                     CourseMaterialView,
                     TrainingSession,
                     UserTrainingHoursMonthly,
+                    CourseTranslation,
+                    TestTranslation,
+                    QuestionTranslation,
+                    QuestionOptionTranslation,
                 ],
                 synchronize: false,
                 logging: false,
@@ -149,6 +158,7 @@ import { HomeInsightsModule } from './home-insights/home-insights.module';
         }),
 
         CommonModule,
+        LocaleModule,
         UserModule,
         AuthModule,
         CourseModule,

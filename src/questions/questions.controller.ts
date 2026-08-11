@@ -27,6 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { ResolvedLocale } from '../locale/resolved-locale.decorator';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { QuestionsService } from './questions.service';
 import { CreateQuestionDto } from './dto/create-question.dto';
@@ -366,6 +367,7 @@ export class QuestionsController {
         @Param('testId', ParseIntPipe) testId: number,
         @Query() filters: QuestionFilterDto,
         @OrgBranchScope() scope: OrgBranchScope,
+        @ResolvedLocale() locale: string,
         @Request() req: AuthenticatedRequest,
     ): Promise<StandardApiResponse> {
         try {
@@ -377,6 +379,7 @@ export class QuestionsController {
                 testId,
                 scope,
                 filters,
+                locale,
             );
 
             return {

@@ -27,6 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { ResolvedLocale } from '../locale/resolved-locale.decorator';
 import { TestService } from './test.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
@@ -527,11 +528,12 @@ export class TestController {
     async findOne(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
+        @ResolvedLocale() locale: string,
     ): Promise<StandardApiResponse<TestDetailDto>> {
         try {
             this.logger.log(`Getting test ${id} for user: ${scope.userId}`);
 
-            const test = await this.testService.findOne(id, scope);
+            const test = await this.testService.findOne(id, scope, locale);
 
             if (!test) {
                 throw new NotFoundException(`Test with ID ${id} not found`);

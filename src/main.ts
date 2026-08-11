@@ -30,6 +30,7 @@ async function bootstrap() {
             'Authorization',
             'X-Requested-With',
             'Accept',
+            'Accept-Language',
             'Origin',
             'Access-Control-Allow-Credentials',
         ],

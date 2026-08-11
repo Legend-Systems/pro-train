@@ -135,6 +135,14 @@ export class UserResponseDto {
     role?: UserRole;
 
     @ApiProperty({
+        description: 'Preferred UI locale (`en`, `pt-PT`)',
+        example: 'pt-PT',
+        required: false,
+        nullable: true,
+    })
+    preferredLanguage?: string | null;
+
+    @ApiProperty({
         description: 'Account creation date',
         example: '2025-05-30T16:40:02.055Z',
     })

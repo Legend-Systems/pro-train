@@ -29,6 +29,8 @@ import { QuestionsOptionsService } from '../questions_options/questions_options.
 import { MediaManagerService } from '../media-manager/media-manager.service';
 import { MediaFileResponseDto } from '../media-manager/dto/media-response.dto';
 import { RetryService } from '../common/services/retry.service';
+import { ContentLocalizationService } from '../locale/content-localization.service';
+import { DEFAULT_LOCALE } from '../locale/locale.constants';
 
 // Type definitions for query results
 interface MaxOrderResult {
@@ -107,6 +109,7 @@ export class QuestionsService {
         private readonly questionsOptionsService: QuestionsOptionsService,
         private readonly mediaManagerService: MediaManagerService,
         private readonly retryService: RetryService,
+        private readonly contentLocalizationService: ContentLocalizationService,
     ) {}
 
     /**
@@ -409,6 +412,7 @@ export class QuestionsService {
         testId: number,
         scope: OrgBranchScope,
         filters?: QuestionFilterDto,
+        locale: string = DEFAULT_LOCALE,
     ): Promise<QuestionListResponseDto> {
         return this.retryService.executeDatabase(async () => {
             // Check cache first
@@ -429,7 +433,7 @@ export class QuestionsService {
                     this.logger.debug(
                         `Cache hit for test questions: ${cacheKey}`,
                     );
-                    return cachedResult;
+                    return this.localizeQuestionList(cachedResult, locale);
                 }
             } catch (error) {
                 this.logger.warn(
@@ -523,8 +527,40 @@ export class QuestionsService {
                 );
             }
 
-            return result;
+            return this.localizeQuestionList(result, locale);
         });
+    }
+
+    private async localizeQuestionList(
+        result: QuestionListResponseDto,
+        locale: string,
+    ): Promise<QuestionListResponseDto> {
+        if (!this.contentLocalizationService.shouldLocalize(locale)) {
+            return result;
+        }
+
+        const questionIds = result.questions.map((q) => q.questionId);
+        const questionTranslations =
+            await this.contentLocalizationService.loadQuestionTranslations(
+                questionIds,
+                locale,
+            );
+
+        return {
+            ...result,
+            questions: result.questions.map((question) => {
+                const translation = questionTranslations.get(question.questionId);
+                if (!translation) {
+                    return question;
+                }
+
+                return this.contentLocalizationService.applyQuestionFields(
+                    { ...question, options: [] },
+                    translation,
+                    new Map(),
+                );
+            }),
+        };
     }
 
     /**

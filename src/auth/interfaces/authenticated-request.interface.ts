@@ -9,6 +9,7 @@ export interface AuthenticatedUser {
     role?: UserRole;
     orgId?: string;
     branchId?: string;
+    preferredLanguage?: string | null;
     avatar?: {
         id: number;
         originalName?: string;

@@ -2,6 +2,7 @@ import {
     Injectable,
     NotFoundException,
     ForbiddenException,
+    BadRequestException,
     Logger,
     Inject,
     forwardRef,
@@ -17,6 +18,7 @@ import { QuestionOptionListResponseDto } from './dto/question-option-list-respon
 import { BulkCreateOptionsDto } from './dto/bulk-create-options.dto';
 import { QuestionOption } from './entities/questions_option.entity';
 import { Question } from '../questions/entities/question.entity';
+import { Answer } from '../answers/entities/answer.entity';
 import { QuestionsService } from '../questions/questions.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardOperationResponse } from '../user/dto/common-response.dto';
@@ -611,11 +613,17 @@ export class QuestionsOptionsService {
                 scope,
             );
 
-            // TODO: Check if option has answers (will be implemented in Answers module)
-            // const answersCount = await this.answersService.countByOption(id);
-            // if (answersCount > 0) {
-            //     throw new BadRequestException('Cannot delete option that has answers');
-            // }
+            // answers.selectedOptionId references question_options with ON DELETE RESTRICT.
+            // Block deletes that would violate that constraint and surface a clear 400 instead of a DB error.
+            const answersCount = await this.dataSource
+                .getRepository(Answer)
+                .count({ where: { selectedOptionId: id } });
+
+            if (answersCount > 0) {
+                throw new BadRequestException(
+                    'Cannot delete this option because learners have already selected it in past attempts. Edit the option text instead, or create a new question.',
+                );
+            }
 
             const questionId = option.questionId;
             await this.questionOptionRepository.remove(option);

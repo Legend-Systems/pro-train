@@ -28,6 +28,7 @@ import {
     UserProfileCompletedEvent,
 } from '../common/events';
 import { RetryService } from '../common/services/retry.service';
+import { LocaleService } from '../locale/locale.service';
 import * as bcrypt from 'bcrypt';
 import { transformAvatarForResponse } from './utils/avatar-response.util';
 
@@ -77,6 +78,7 @@ export class UserService {
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
+        private readonly localeService: LocaleService,
     ) {}
 
     /**
@@ -1586,6 +1588,34 @@ export class UserService {
                 }
 
                 const previousAvatarId = user.avatar?.id;
+
+                if (profileData.preferredLanguage !== undefined) {
+                    const orgConfig =
+                        await this.localeService.loadOrgLocaleConfig(
+                            user.orgId?.id,
+                        );
+
+                    if (
+                        profileData.preferredLanguage === null ||
+                        profileData.preferredLanguage === ''
+                    ) {
+                        dataToUpdate.preferredLanguage = null;
+                    } else {
+                        try {
+                            dataToUpdate.preferredLanguage =
+                                this.localeService.validatePreferredLanguage(
+                                    profileData.preferredLanguage,
+                                    orgConfig,
+                                );
+                        } catch (error) {
+                            throw new BadRequestException(
+                                error instanceof Error
+                                    ? error.message
+                                    : 'Invalid preferred language',
+                            );
+                        }
+                    }
+                }
 
                 // Avatar FK must be saved via relation API — repository.update() ignores relations.
                 if (avatar !== undefined) {
