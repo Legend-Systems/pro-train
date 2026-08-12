@@ -19,6 +19,7 @@ import { CommunicationsModule } from '../communications/communications.module';
 import { TestNotificationService } from './services/test-notification.service';
 import { TestNotificationCronService } from './services/test-notification-cron.service';
 import { TestNotificationController } from './controllers/test-notification.controller';
+import { QuizDocumentParserService } from './services/quiz-document-parser.service';
 
 @Module({
     imports: [
@@ -47,7 +48,8 @@ import { TestNotificationController } from './controllers/test-notification.cont
         TestService,
         TestNotificationService,
         TestNotificationCronService,
+        QuizDocumentParserService,
     ],
-    exports: [TestService, TestNotificationService],
+    exports: [TestService, TestNotificationService, QuizDocumentParserService],
 })
 export class TestModule {}

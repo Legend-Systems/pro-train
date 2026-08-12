@@ -9,10 +9,13 @@ import {
     Delete,
     Query,
     UseGuards,
+    UseInterceptors,
+    UploadedFile,
     HttpStatus,
     Logger,
     NotFoundException,
     ParseIntPipe,
+    BadRequestException,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -24,11 +27,15 @@ import {
     ApiSecurity,
     ApiParam,
     ApiQuery,
+    ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { ResolvedLocale } from '../locale/resolved-locale.decorator';
 import { TestService } from './test.service';
+import { QuizDocumentParserService } from './services/quiz-document-parser.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { TestFilterDto } from './dto/test-filter.dto';
@@ -55,7 +62,10 @@ import { StandardApiResponse } from '../user/dto/common-response.dto';
 export class TestController {
     private readonly logger = new Logger(TestController.name);
 
-    constructor(private readonly testService: TestService) {}
+    constructor(
+        private readonly testService: TestService,
+        private readonly quizDocumentParserService: QuizDocumentParserService,
+    ) {}
 
     @Post()
     @ApiOperation({
@@ -270,6 +280,64 @@ export class TestController {
             );
             throw error;
         }
+    }
+
+    /**
+     * Parses a structured quiz document (.docx / .csv / .txt) into title, description, and questions.
+     * Used by the admin Document Upload → Create Test flow on web and mobile.
+     */
+    @Post('parse-document')
+    @UseInterceptors(
+        // memoryStorage keeps the buffer available for mammoth / CSV parsing
+        FileInterceptor('file', {
+            storage: memoryStorage(),
+            limits: { fileSize: 50 * 1024 * 1024 },
+        }),
+    )
+    @ApiConsumes('multipart/form-data')
+    @ApiOperation({
+        summary: 'Parse quiz document into structured questions',
+        description:
+            'Accepts .docx, .csv, or .txt quiz templates and returns title, description, options, and answers.',
+        operationId: 'parseQuizDocument',
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            required: ['file'],
+            properties: {
+                file: {
+                    type: 'string',
+                    format: 'binary',
+                    description: 'Quiz document (.docx, .csv, or .txt)',
+                },
+            },
+        },
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Document parsed successfully',
+    })
+    async parseDocument(
+        @UploadedFile() file: Express.Multer.File,
+        @OrgBranchScope() scope: OrgBranchScope,
+    ): Promise<StandardApiResponse> {
+        if (!file) {
+            throw new BadRequestException('file is required');
+        }
+
+        this.logger.log(
+            `Parsing quiz document for user ${scope.userId}: ${file.originalname}`,
+        );
+
+        const parsed =
+            await this.quizDocumentParserService.parseUploadedFile(file);
+
+        return {
+            success: true,
+            message: `Extracted ${parsed.questions.length} questions from document`,
+            data: parsed,
+        };
     }
 
     @Get()
