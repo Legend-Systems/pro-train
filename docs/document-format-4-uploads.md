@@ -280,3 +280,90 @@ D. Reduce customer communication
 E. Predict revenue and identify stuck quotes early
 
 Answer: E
+
+---
+
+## CSV Format for Creating Tests through Uploads
+
+Upload a `.csv` file through **Admin → Documents → Upload**. Each **row** represents **one question**. The first row must be a **header row** with the column names below.
+
+### Required structure
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| **Test Title** | Recommended | Test name. Taken from the first data row that includes a value. |
+| **Test Description** | Optional | Short description or pipe-separated topics (e.g. `Email \| Phone \| Facebook`). |
+| **Question Number** | Optional | Numeric order (`1`, `2`, `3`, …). If omitted, rows are ordered top-to-bottom. |
+| **Question** | **Required** | The question text. Rows with an empty Question column are skipped. |
+| **Option A** | Recommended | Text for choice A (do not include the `A.` prefix). |
+| **Option B** | Recommended | Text for choice B |
+| **Option C** | Recommended | Text for choice C |
+| **Option D** | Optional | Text for choice D |
+| **Option E** | Optional | Text for choice E |
+| **Correct Answer** | Recommended | Letter of the correct option: `A`, `B`, `C`, `D`, or `E`. |
+
+You need at least a **Question** column plus either **Option A** (and ideally B–E) or **Correct Answer** so the parser recognises the file as a quiz template.
+
+### Delimiters
+
+Both formats are supported:
+
+- **Comma-separated** (standard CSV) — typical when exported from Excel or Google Sheets
+- **Pipe-separated** (`|`) — also accepted when the header row uses pipes
+
+If a cell contains commas, wrap it in double quotes (standard CSV quoting).
+
+### Header names
+
+Headers are matched case-insensitively. These names work:
+
+| Standard header | Also accepted |
+|-----------------|---------------|
+| Test Title | Title |
+| Test Description | Description |
+| Question Number | Number, Q Number |
+| Question | Question Text |
+| Option A–E | A, B, C, D, E |
+| Correct Answer | Answer, Correct |
+
+### Correct answer format
+
+Use a single letter for one correct option:
+
+```text
+C
+```
+
+Multiple correct answers (if needed) can be comma-separated letters, e.g. `A, C`.
+
+### Example (comma-separated)
+
+```csv
+Test Title,Test Description,Question Number,Question,Option A,Option B,Option C,Option D,Option E,Correct Answer
+Selling Mechanisms,Email Sales Strategy | Phone Communication,1,What is one key element to include in the subject line of a sales email?,Company registration number,Weather information,The customer's project or enquiry,Staff names only,Bank details,C
+Selling Mechanisms,Email Sales Strategy | Phone Communication,2,Why is personalization important in a sales email?,It reduces typing time,It avoids customer questions,It makes the communication relevant to the customer,It removes the need for follow-up,It lowers prices,C
+```
+
+### Example (pipe-separated)
+
+```text
+Test Title | Test Description | Question Number | Question | Option A | Option B | Option C | Option D | Option E | Correct Answer
+Selling Mechanisms | Email Sales Strategy | Phone Communication | 1 | What is one key element to include in the subject line of a sales email? | Company registration number | Weather information | The customer's project or enquiry | Staff names only | Bank details | C
+```
+
+### Tips for successful uploads
+
+1. **One question per row** — do not put multiple questions on the same row.
+2. **Keep the header row** — the parser uses it to locate columns; do not start with data only.
+3. **Put option text in Option A–E columns** — not as `A. …` inside a single cell (unlike Word, CSV expects plain option text per column).
+4. **Repeat Test Title / Test Description** on each row, or at least on the first row — title and description are read from the first rows that contain them.
+5. **Use UTF-8 encoding** when saving the file.
+6. If headers do not match this template, the file may be parsed as plain text instead of structured CSV, which usually produces poor results.
+
+### Supported file types
+
+- `.csv` (comma- or pipe-delimited)
+- `.docx` (Word template — see section above)
+- `.txt` (same text structure as the Word template)
+
+Maximum upload size: **50 MB**.
