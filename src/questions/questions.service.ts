@@ -31,6 +31,10 @@ import { MediaFileResponseDto } from '../media-manager/dto/media-response.dto';
 import { RetryService } from '../common/services/retry.service';
 import { ContentLocalizationService } from '../locale/content-localization.service';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { QuestionContentSavedEvent } from '../common/events';
+import { CONTENT_SAVED_EVENTS, CONTENT_TRANSLATED_EVENTS } from '../locale/translation/translation.constants';
+import { hasTextChanged } from '../locale/translation/translation-text.util';
 
 // Type definitions for query results
 interface MaxOrderResult {
@@ -110,7 +114,29 @@ export class QuestionsService {
         private readonly mediaManagerService: MediaManagerService,
         private readonly retryService: RetryService,
         private readonly contentLocalizationService: ContentLocalizationService,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
+
+    /** Bust question caches after pt-PT rows are written. */
+    @OnEvent(CONTENT_TRANSLATED_EVENTS.QUESTION, { async: true })
+    async handleQuestionTranslated(payload: {
+        readonly questionId: number;
+    }): Promise<void> {
+        const question = await this.questionRepository.findOne({
+            where: { questionId: payload.questionId },
+            relations: ['orgId', 'branchId'],
+        });
+        if (!question) {
+            return;
+        }
+
+        await this.invalidateQuestionCache(
+            question.questionId,
+            question.testId,
+            question.orgId ? Number(question.orgId.id) : undefined,
+            question.branchId ? Number(question.branchId.id) : undefined,
+        );
+    }
 
     /**
      * Comprehensive cache invalidation methods with org/branch scope
@@ -328,6 +354,16 @@ export class QuestionsService {
                 `Question ${savedQuestion.questionId} created successfully`,
             );
 
+            this.eventEmitter.emit(
+                CONTENT_SAVED_EVENTS.QUESTION,
+                new QuestionContentSavedEvent(
+                    savedQuestion.questionId,
+                    savedQuestion.testId,
+                    test.orgId?.id ?? scope.orgId,
+                    test.branchId?.id ?? scope.branchId,
+                ),
+            );
+
             return {
                 message: 'Question created successfully',
                 status: 'success',
@@ -390,6 +426,18 @@ export class QuestionsService {
                 this.logger.log(
                     `${createdQuestions.length} questions created successfully in bulk`,
                 );
+
+                for (const question of createdQuestions) {
+                    this.eventEmitter.emit(
+                        CONTENT_SAVED_EVENTS.QUESTION,
+                        new QuestionContentSavedEvent(
+                            question.questionId,
+                            question.testId,
+                            scope.orgId,
+                            scope.branchId,
+                        ),
+                    );
+                }
 
                 return {
                     message: `${createdQuestions.length} questions created successfully`,
@@ -781,6 +829,11 @@ export class QuestionsService {
                 }
             }
 
+            const previousQuestionText = question.questionText;
+            const previousExplanation = question.explanation;
+            const previousHint = question.hint;
+            const previousMediaInstructions = question.mediaInstructions;
+
             Object.assign(question, updateQuestionDto);
             await this.questionRepository.save(question);
 
@@ -808,6 +861,43 @@ export class QuestionsService {
             ]);
 
             this.logger.log(`Question ${id} updated successfully`);
+
+            const questionTextChanged = hasTextChanged(
+                previousQuestionText,
+                question.questionText,
+            );
+            const explanationChanged = hasTextChanged(
+                previousExplanation,
+                question.explanation,
+            );
+            const hintChanged = hasTextChanged(previousHint, question.hint);
+            const mediaInstructionsChanged = hasTextChanged(
+                previousMediaInstructions,
+                question.mediaInstructions,
+            );
+
+            if (
+                questionTextChanged ||
+                explanationChanged ||
+                hintChanged ||
+                mediaInstructionsChanged
+            ) {
+                this.eventEmitter.emit(
+                    CONTENT_SAVED_EVENTS.QUESTION,
+                    new QuestionContentSavedEvent(
+                        id,
+                        question.testId,
+                        question.orgId?.id ?? scope.orgId,
+                        question.branchId?.id ?? scope.branchId,
+                        {
+                            questionText: questionTextChanged,
+                            explanation: explanationChanged,
+                            hint: hintChanged,
+                            mediaInstructions: mediaInstructionsChanged,
+                        },
+                    ),
+                );
+            }
 
             return {
                 message: 'Question updated successfully',

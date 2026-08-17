@@ -10,7 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository, DataSource } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import {
     applyBranchVisibilityToQuery,
@@ -44,11 +44,14 @@ import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 import { RetryService } from '../common/services/retry.service';
 import {
+    TestContentSavedEvent,
     TestCreatedEvent,
     TestActivatedEvent,
     TestAttemptStartedEvent,
     TestResultsReadyEvent,
 } from '../common/events';
+import { CONTENT_SAVED_EVENTS, CONTENT_TRANSLATED_EVENTS } from '../locale/translation/translation.constants';
+import { hasTextChanged } from '../locale/translation/translation-text.util';
 import { ContentLocalizationService } from '../locale/content-localization.service';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
 
@@ -106,6 +109,27 @@ export class TestService {
         private readonly eventEmitter: EventEmitter2,
         private readonly contentLocalizationService: ContentLocalizationService,
     ) {}
+
+    /** Bust test caches after pt-PT rows are written. */
+    @OnEvent(CONTENT_TRANSLATED_EVENTS.TEST, { async: true })
+    async handleTestTranslated(payload: {
+        readonly testId: number;
+    }): Promise<void> {
+        const test = await this.testRepository.findOne({
+            where: { testId: payload.testId },
+            relations: ['orgId', 'branchId'],
+        });
+        if (!test) {
+            return;
+        }
+
+        await this.invalidateTestCache(
+            test.testId,
+            test.courseId,
+            test.orgId?.id,
+            test.branchId?.id,
+        );
+    }
 
     /**
      * Cache invalidation helper for tests
@@ -325,6 +349,18 @@ export class TestService {
                         scope.branchId,
                         savedTest.isActive,
                         scope.userId,
+                    ),
+                );
+
+                // Nested questions/options are translated in one job after commit.
+                this.eventEmitter.emit(
+                    CONTENT_SAVED_EVENTS.TEST,
+                    new TestContentSavedEvent(
+                        savedTest.testId,
+                        true,
+                        course.orgId?.id ?? scope.orgId,
+                        course.branchId?.id ?? scope.branchId,
+                        savedTest.courseId,
                     ),
                 );
 
@@ -925,7 +961,7 @@ export class TestService {
         return this.retryService.executeDatabase(async () => {
             const test = await this.testRepository.findOne({
                 where: { testId: id },
-                relations: ['course'],
+                relations: ['course', 'orgId', 'branchId'],
             });
 
             if (!test) {
@@ -967,6 +1003,9 @@ export class TestService {
                 }),
             };
 
+            const previousTitle = test.title;
+            const previousDescription = test.description;
+
             Object.assign(test, testUpdateData);
             if (updateTestDto.testThumbnail === null) {
                 test.testThumbnail = undefined;
@@ -983,6 +1022,37 @@ export class TestService {
 
             if (!updatedTest) {
                 throw new NotFoundException(`Test with ID ${id} not found`);
+            }
+
+            await this.invalidateTestCache(
+                updatedTest.testId,
+                updatedTest.courseId,
+                updatedTest.orgId?.id,
+                updatedTest.branchId?.id,
+            );
+
+            const titleChanged =
+                updateTestDto.title !== undefined &&
+                hasTextChanged(previousTitle, updatedTest.title);
+            const descriptionChanged =
+                updateTestDto.description !== undefined &&
+                hasTextChanged(previousDescription, updatedTest.description);
+
+            if (titleChanged || descriptionChanged) {
+                this.eventEmitter.emit(
+                    CONTENT_SAVED_EVENTS.TEST,
+                    new TestContentSavedEvent(
+                        updatedTest.testId,
+                        false,
+                        updatedTest.orgId?.id,
+                        updatedTest.branchId?.id,
+                        updatedTest.courseId,
+                        {
+                            title: titleChanged,
+                            description: descriptionChanged,
+                        },
+                    ),
+                );
             }
 
             return {

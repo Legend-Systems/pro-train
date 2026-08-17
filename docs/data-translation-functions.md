@@ -6,6 +6,8 @@ Phased implementation plan for translating **courses, tests, questions, and ques
 
 **Last updated:** 2026-08-14
 
+**Implementation status:** Phases 0–5 complete (backend write pipeline live). Phases 6–8 remain.
+
 ---
 
 ## Table of Contents
@@ -190,28 +192,50 @@ Translation hooks must exist on **each** of these endpoints, not only on composi
 | Task | Status |
 |------|--------|
 | Confirm target locale: **`pt-PT`** (already decided) | [x] |
-| Select machine translation provider | [ ] |
-| Add env vars to `.env-example` (never commit secrets) | [ ] |
-| Define cost/rate limits (chars per month, max batch size) | [ ] |
-| Confirm feature flag default per environment | [ ] |
+| Select machine translation provider | [x] Google Cloud Translation API v3 |
+| Add env vars to `.env-example` (never commit secrets) | [x] |
+| Define cost/rate limits (chars per month, max batch size) | [x] |
+| Confirm feature flag default per environment | [x] |
 
-**Recommended provider:** **Google Cloud Translation API v3** — project already uses Google Cloud Storage; single billing account, IAM service account reuse pattern.
+**Provider:** **Google Cloud Translation API v3** (`@google-cloud/translate`). Prefer dedicated translate credentials (`GOOGLE_TRANSLATE_CLIENT_EMAIL`, `GOOGLE_TRANSLATE_PRIVATE_KEY`); falls back to GCS vars when unset. The storage account (`GOOGLE_CLOUD_CLIENT_EMAIL`, e.g. `protrain-storage@...`) must have **Cloud Translation API User** (`roles/cloudtranslate.user`) if used for translation—otherwise set a separate translate service account. Enable the Cloud Translation API on GCP project `GOOGLE_TRANSLATE_PROJECT_ID` / `GOOGLE_CLOUD_PROJECT_ID`.
 
-**Alternative providers:** DeepL API, Azure Translator (acceptable if org standard differs).
+**Starter numbers (current catalog: 5 courses, 15 tests, ~207 questions, ~655 options):**
 
-**Environment variables (add to `.env-example`):**
+| Limit | Value | Rationale |
+|-------|-------|-----------|
+| Full-catalog character estimate | ~110,000 | One-time translate of existing English content |
+| Typical new test (10 Q + 40 options) | ~20,000–40,000 | Per-save provider usage |
+| `CONTENT_TRANSLATION_MAX_BATCH_CHARS` | **30,000** | Cloud Translation v3 per-request cap |
+| `CONTENT_TRANSLATION_MONTHLY_CHAR_BUDGET` | **500,000** | ~4 full recrawls plus 15–25 new tests/edits |
+| `CONTENT_TRANSLATION_MIN_REQUEST_INTERVAL_MS` | **200** | Soft rate spacing between batches |
+| `CONTENT_TRANSLATION_RETRY_ATTEMPTS` | **3** | Transient provider errors |
+
+**Feature-flag defaults (`CONTENT_AUTO_TRANSLATION_ENABLED`):**
+
+| Environment | Default | Notes |
+|-------------|---------|-------|
+| Local / dev | `true` | Jobs fail-open and are logged if GCP credentials are missing |
+| Staging | `true` | Validate the full pipeline before production |
+| Production | `true` after QA | Set `false` to pause spend during an outage |
+| CI / unit tests | `CONTENT_TRANSLATION_PROVIDER=noop` | No live Google calls |
+
+**Environment variables (in `.env-example`):**
 
 ```bash
 CONTENT_AUTO_TRANSLATION_ENABLED=true
+CONTENT_TRANSLATION_PROVIDER=google
 CONTENT_TRANSLATION_TARGET_LOCALE=pt-PT
 CONTENT_TRANSLATION_SOURCE_LOCALE=en
-GOOGLE_TRANSLATE_PROJECT_ID=          # may reuse GOOGLE_CLOUD_PROJECT_ID
-# Provider-specific API key or service account — follow Security rules
+GOOGLE_TRANSLATE_PROJECT_ID=
+GOOGLE_TRANSLATE_CLIENT_EMAIL=
+GOOGLE_TRANSLATE_PRIVATE_KEY=
 CONTENT_TRANSLATION_MAX_BATCH_CHARS=30000
 CONTENT_TRANSLATION_RETRY_ATTEMPTS=3
+CONTENT_TRANSLATION_MIN_REQUEST_INTERVAL_MS=200
+CONTENT_TRANSLATION_MONTHLY_CHAR_BUDGET=500000
 ```
 
-**Deliverable:** Provider account ready; env documented; feature flag agreed.
+**Deliverable:** Provider chosen; env documented; starter budgets and per-environment flag defaults agreed. **Complete.**
 
 ---
 
@@ -234,7 +258,7 @@ CONTENT_TRANSLATION_RETRY_ATTEMPTS=3
 Add **write** methods mirroring read helpers:
 
 ```typescript
-// Sketch — not implemented yet
+// Implemented on ContentTranslationWriterService
 upsertCourseTranslation(courseId: number, fields: CourseTranslationFields): Promise<void>;
 upsertTestTranslation(testId: number, fields: TestTranslationFields): Promise<void>;
 upsertQuestionTranslation(questionId: number, fields: QuestionTranslationFields): Promise<void>;
@@ -266,9 +290,9 @@ content_translation_jobs (
 )
 ```
 
-Enables admin retry UI and observability. **Can defer** if logs + manual re-trigger endpoint are enough initially.
+Enables admin retry UI and observability. **Implemented** in migration `1741400000000-CreateContentTranslationJobs.ts` (`content_translation_jobs`).
 
-**Deliverable:** `MachineTranslationService` + `ContentTranslationWriterService` with unit tests; no HTTP wiring yet.
+**Deliverable:** `MachineTranslationService` + `ContentTranslationWriterService` with unit tests; no HTTP wiring yet. **Complete** — see `src/locale/translation/`.
 
 ---
 
@@ -318,7 +342,7 @@ Listener responsibilities:
 
 Register listener in `TranslationModule` or `LocaleModule`.
 
-**Deliverable:** End-to-end translation on event emit in dev/staging with feature flag on.
+**Deliverable:** End-to-end translation on event emit in dev/staging with feature flag on. **Complete** — `ContentTranslationListener` + `ContentTranslationOrchestratorService`.
 
 ---
 
@@ -373,7 +397,7 @@ After translation upsert, invalidate the same keys as primary save:
 
 This ensures the next `GET ?locale=pt-PT` returns fresh Portuguese text.
 
-**Deliverable:** All admin write paths produce pt-PT rows automatically.
+**Deliverable:** All admin write paths produce pt-PT rows automatically. **Complete** — events emitted from Course / Test / Questions / Options create+update (status-only updates skipped).
 
 ---
 
@@ -389,7 +413,7 @@ This ensures the next `GET ?locale=pt-PT` returns fresh Portuguese text.
 
 Apply in listener or at emit site. **Status-only updates** (e.g. `{ status: 'active' }` from mobile) must **not** trigger translation.
 
-**Deliverable:** Translation API calls only when English text actually changes.
+**Deliverable:** Translation API calls only when English text actually changes. **Complete** — field-level diff at emit sites, SHA-256 skip in the orchestrator, partial upsert that preserves unchanged pt-PT columns.
 
 ---
 
@@ -406,7 +430,14 @@ Apply in listener or at emit site. **Status-only updates** (e.g. `{ status: 'act
 
 Guard with admin role (`RolesGuard` / org admin).
 
-**Deliverable:** Operators can retry failed translations without DB scripts.
+**Deliverable:** Operators can retry failed translations without DB scripts. **Complete.**
+
+| Endpoint | Auth |
+|----------|------|
+| `POST /admin/translations/retry` | Admin / Owner / Master Admin |
+| `GET /admin/translations/status/:entityType/:entityId` | Admin / Owner / Master Admin |
+
+Logs: `translation.started`, `translation.completed`, `translation.failed`, `translation.skipped` (entity type + id + field/char counts — never source text).
 
 ---
 
@@ -680,11 +711,16 @@ TypeORM alternative: `repository.upsert(row, ['courseId', 'locale'])` if support
 | Purpose | Path |
 |---------|------|
 | Translation module | `src/locale/translation/translation.module.ts` |
-| Provider adapter | `src/locale/translation/machine-translation.service.ts` |
+| Provider adapter | `src/locale/translation/google-cloud-translation.provider.ts` |
+| Noop adapter (tests/CI) | `src/locale/translation/noop-translation.provider.ts` |
+| Batching / budget / retries | `src/locale/translation/machine-translation.service.ts` |
 | DB writer | `src/locale/translation/content-translation-writer.service.ts` |
+| Job status | `src/locale/translation/content-translation-job.service.ts` |
+| Orchestrator | `src/locale/translation/content-translation.orchestrator.ts` |
 | Event listener | `src/locale/translation/content-translation.listener.ts` |
-| Domain events | `src/common/events/content-*.event.ts` |
-| Admin retry controller (optional) | `src/locale/translation/translation-admin.controller.ts` |
+| Domain events | `src/common/events/course-content-saved.event.ts` (and test/question/option) |
+| Admin retry controller | `src/locale/translation/translation-admin.controller.ts` |
+| Job entity / migration | `src/locale/entities/content-translation-job.entity.ts`, `src/migrations/1741400000000-CreateContentTranslationJobs.ts` |
 | Unit tests | `src/locale/translation/*.spec.ts` |
 
 ### Web client
@@ -712,12 +748,12 @@ Track implementation progress:
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 0 | Provider & env decisions | [ ] |
-| 1 | Translation write infrastructure | [ ] |
-| 2 | Domain events & async listener | [ ] |
-| 3 | Course/Test/Question/Option service integration | [ ] |
-| 4 | Change detection & cost optimization | [ ] |
-| 5 | Admin retry & observability | [ ] |
+| 0 | Provider & env decisions | [x] |
+| 1 | Translation write infrastructure | [x] |
+| 2 | Domain events & async listener | [x] |
+| 3 | Course/Test/Question/Option service integration | [x] |
+| 4 | Change detection & cost optimization | [x] |
+| 5 | Admin retry & observability | [x] |
 | 6 | Web client optional UX | [ ] |
 | 7 | Mobile optional UX | [ ] |
 | 8 | QA & production rollout | [ ] |
@@ -730,4 +766,18 @@ Automatic Portuguese translation is a **backend-only write-side enhancement** la
 
 **Web and mobile clients require no mandatory changes** — they continue authoring in English and consuming localized content via `Accept-Language: pt-PT`. Optional UI improvements (translation pending toasts, status badges) can follow in later phases.
 
-Implement **Phases 0–3** for minimum viable auto-translation; **Phases 4–5** for production hardening; **Phases 6–7** for admin UX polish.
+Implement **Phases 0–5** are done. **Phases 6–7** are optional admin UX polish; **Phase 8** is QA and production rollout.
+
+### Next steps
+
+1. **Enable Cloud Translation API** on GCP project `protrain-496010` and confirm the existing storage service account has `roles/cloudtranslate.user` (or equivalent).
+2. **Run the job-table migration:** `yarn typeorm:migration:run` (creates `content_translation_jobs`).
+3. **Smoke-test in staging** with `CONTENT_AUTO_TRANSLATION_ENABLED=true`:
+   - Create a course → row in `course_translations` (`locale = pt-PT`)
+   - Create a test with questions → rows in all four translation tables
+   - `PUT /courses/:id` with `{ status: 'active' }` only → **no** provider call
+   - `GET /admin/translations/status/test/:id` → `completed`
+   - `POST /admin/translations/retry` after a forced failure
+4. **Phase 6 (web, optional):** success toast “Portuguese translation is being generated” and/or a status badge on course/test detail.
+5. **Phase 7 (mobile, optional):** same toast after admin save; learner `Accept-Language` if not already sent.
+6. **Phase 8:** staging → production flag-on, watch `translation.failed` logs and Google Translation billing.

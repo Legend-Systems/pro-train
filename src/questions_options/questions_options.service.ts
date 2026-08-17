@@ -23,6 +23,10 @@ import { QuestionsService } from '../questions/questions.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { StandardOperationResponse } from '../user/dto/common-response.dto';
 import { RetryService } from '../common/services/retry.service';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
+import { QuestionOptionContentSavedEvent } from '../common/events';
+import { CONTENT_SAVED_EVENTS, CONTENT_TRANSLATED_EVENTS } from '../locale/translation/translation.constants';
+import { hasTextChanged } from '../locale/translation/translation-text.util';
 
 @Injectable()
 export class QuestionsOptionsService {
@@ -97,7 +101,29 @@ export class QuestionsOptionsService {
         private readonly dataSource: DataSource,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
         private readonly retryService: RetryService,
+        private readonly eventEmitter: EventEmitter2,
     ) {}
+
+    /** Bust option caches after pt-PT rows are written. */
+    @OnEvent(CONTENT_TRANSLATED_EVENTS.OPTION, { async: true })
+    async handleOptionTranslated(payload: {
+        readonly optionId: number;
+    }): Promise<void> {
+        const option = await this.questionOptionRepository.findOne({
+            where: { optionId: payload.optionId },
+            relations: ['orgId', 'branchId'],
+        });
+        if (!option) {
+            return;
+        }
+
+        await this.invalidateOptionCache(
+            option.optionId,
+            option.questionId,
+            option.orgId ? Number(option.orgId.id) : undefined,
+            option.branchId ? Number(option.branchId.id) : undefined,
+        );
+    }
 
     /**
      * Comprehensive cache invalidation methods with org/branch scope
@@ -257,6 +283,16 @@ export class QuestionsOptionsService {
                 `Question option ${savedOption.optionId} created successfully`,
             );
 
+            this.eventEmitter.emit(
+                CONTENT_SAVED_EVENTS.OPTION,
+                new QuestionOptionContentSavedEvent(
+                    savedOption.optionId,
+                    savedOption.questionId,
+                    question.orgId?.id ?? scope.orgId,
+                    question.branchId?.id ?? scope.branchId,
+                ),
+            );
+
             return {
                 message: 'Question option created successfully',
                 status: 'success',
@@ -356,6 +392,18 @@ export class QuestionsOptionsService {
                 this.logger.log(
                     `${createdOptions.length} question options created successfully in bulk`,
                 );
+
+                for (const option of createdOptions) {
+                    this.eventEmitter.emit(
+                        CONTENT_SAVED_EVENTS.OPTION,
+                        new QuestionOptionContentSavedEvent(
+                            option.optionId,
+                            option.questionId,
+                            question.orgId?.id ?? scope.orgId,
+                            question.branchId?.id ?? scope.branchId,
+                        ),
+                    );
+                }
 
                 return {
                     message: 'Question options created successfully in bulk',
@@ -552,6 +600,7 @@ export class QuestionsOptionsService {
                 scope,
             );
 
+            const previousOptionText = option.optionText;
             Object.assign(option, updateQuestionOptionDto);
             await this.questionOptionRepository.save(option);
 
@@ -579,6 +628,22 @@ export class QuestionsOptionsService {
             ]);
 
             this.logger.log(`Question option ${id} updated successfully`);
+
+            if (
+                updateQuestionOptionDto.optionText !== undefined &&
+                hasTextChanged(previousOptionText, option.optionText)
+            ) {
+                this.eventEmitter.emit(
+                    CONTENT_SAVED_EVENTS.OPTION,
+                    new QuestionOptionContentSavedEvent(
+                        id,
+                        option.questionId,
+                        option.question?.orgId?.id ?? scope.orgId,
+                        option.question?.branchId?.id ?? scope.branchId,
+                        { optionText: true },
+                    ),
+                );
+            }
 
             return {
                 message: 'Question option updated successfully',

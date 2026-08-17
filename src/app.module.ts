@@ -54,6 +54,7 @@ import { CourseTranslation } from './locale/entities/course-translation.entity';
 import { TestTranslation } from './locale/entities/test-translation.entity';
 import { QuestionTranslation } from './locale/entities/question-translation.entity';
 import { QuestionOptionTranslation } from './locale/entities/question-option-translation.entity';
+import { ContentTranslationJob } from './locale/entities/content-translation-job.entity';
 
 @Module({
     imports: [
@@ -121,6 +122,7 @@ import { QuestionOptionTranslation } from './locale/entities/question-option-tra
                     TestTranslation,
                     QuestionTranslation,
                     QuestionOptionTranslation,
+                    ContentTranslationJob,
                 ],
                 synchronize: false,
                 logging: false,

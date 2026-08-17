@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, SelectQueryBuilder } from 'typeorm';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { CreateCourseDto } from './dto/create-course.dto';
@@ -33,7 +33,9 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import {
     applyBranchVisibilityToQuery,
 } from '../auth/utils/branch-visibility.util';
-import { CourseCreatedEvent } from '../common/events';
+import { CourseContentSavedEvent, CourseCreatedEvent } from '../common/events';
+import { CONTENT_SAVED_EVENTS, CONTENT_TRANSLATED_EVENTS } from '../locale/translation/translation.constants';
+import { hasTextChanged } from '../locale/translation/translation-text.util';
 import { RetryService } from '../common/services/retry.service';
 import { ContentLocalizationService } from '../locale/content-localization.service';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
@@ -148,6 +150,35 @@ export class CourseService {
         private readonly courseMaterialsService: CourseMaterialsService,
         private readonly contentLocalizationService: ContentLocalizationService,
     ) {}
+
+    /** Bust course caches after pt-PT rows are written (separate CacheModule instance). */
+    @OnEvent(CONTENT_TRANSLATED_EVENTS.COURSE, { async: true })
+    async handleCourseTranslated(payload: {
+        readonly courseId: number;
+    }): Promise<void> {
+        const course = await this.courseRepository.findOne({
+            where: { courseId: payload.courseId },
+            relations: ['orgId', 'branchId'],
+        });
+        if (!course) {
+            return;
+        }
+
+        const { orgId, branchId } = this.resolveOrgBranchIds(
+            course.orgId,
+            course.branchId,
+        );
+        await this.invalidateCourseCache(
+            course.courseId,
+            course.createdBy,
+            orgId,
+            branchId,
+        );
+        await this.invalidateCourseListCachesForCourse(
+            course.orgId,
+            course.branchId,
+        );
+    }
 
     /**
      * Comprehensive cache invalidation methods with org/branch scope
@@ -601,6 +632,16 @@ export class CourseService {
                 `Course ${savedCourse.courseId} created successfully by user ${scope.userId}`,
             );
 
+            // Post-commit: translate English fields to pt-PT without blocking the response.
+            this.eventEmitter.emit(
+                CONTENT_SAVED_EVENTS.COURSE,
+                new CourseContentSavedEvent(
+                    savedCourse.courseId,
+                    scope.orgId,
+                    scope.branchId,
+                ),
+            );
+
             return {
                 message: 'Course created successfully',
                 status: 'success',
@@ -1050,6 +1091,8 @@ export class CourseService {
             }
 
             const previousStatus = existingCourse.status;
+            const previousTitle = existingCourse.title;
+            const previousDescription = existingCourse.description;
             Object.assign(existingCourse, updateCourseDto);
             if (updateCourseDto.courseThumbnail === null) {
                 existingCourse.courseThumbnail = undefined;
@@ -1090,6 +1133,29 @@ export class CourseService {
             } else {
                 this.logger.log(
                     `Course ${id} updated successfully by user ${scope.userId}`,
+                );
+            }
+
+            // Status-only updates skip translation to avoid unnecessary provider cost.
+            const titleChanged =
+                updateCourseDto.title !== undefined &&
+                hasTextChanged(previousTitle, existingCourse.title);
+            const descriptionChanged =
+                updateCourseDto.description !== undefined &&
+                hasTextChanged(previousDescription, existingCourse.description);
+
+            if (titleChanged || descriptionChanged) {
+                this.eventEmitter.emit(
+                    CONTENT_SAVED_EVENTS.COURSE,
+                    new CourseContentSavedEvent(
+                        id,
+                        scope.orgId,
+                        scope.branchId,
+                        {
+                            title: titleChanged,
+                            description: descriptionChanged,
+                        },
+                    ),
                 );
             }
 

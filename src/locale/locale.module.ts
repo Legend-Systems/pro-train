@@ -9,6 +9,7 @@ import { CourseTranslation } from './entities/course-translation.entity';
 import { TestTranslation } from './entities/test-translation.entity';
 import { QuestionTranslation } from './entities/question-translation.entity';
 import { QuestionOptionTranslation } from './entities/question-option-translation.entity';
+import { TranslationModule } from './translation/translation.module';
 
 @Global()
 @Module({
@@ -20,6 +21,7 @@ import { QuestionOptionTranslation } from './entities/question-option-translatio
             QuestionTranslation,
             QuestionOptionTranslation,
         ]),
+        TranslationModule,
     ],
     providers: [
         LocaleService,
@@ -30,6 +32,6 @@ import { QuestionOptionTranslation } from './entities/question-option-translatio
             useClass: LocaleInterceptor,
         },
     ],
-    exports: [LocaleService, ContentLocalizationService],
+    exports: [LocaleService, ContentLocalizationService, TranslationModule],
 })
 export class LocaleModule {}
