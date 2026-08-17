@@ -20,3 +20,7 @@ export * from './auth-daily-login.event';
 export * from './rewards-test-attempt-started.event';
 export * from './test-invitation-sent.event';
 export * from './test-invitation-responded.event';
+export * from './course-content-saved.event';
+export * from './test-content-saved.event';
+export * from './question-content-saved.event';
+export * from './question-option-content-saved.event';

@@ -26,7 +26,7 @@ import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { CommunicationsService } from '../communications/communications.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
-import { UserRole } from '../user/entities/user.entity';
+import { User, UserRole, UserStatus } from '../user/entities/user.entity';
 import { RewardsService } from '../rewards/rewards.service';
 import {
     PASSING_SCORE_PERCENTAGE,
@@ -40,7 +40,23 @@ import {
 } from './dto/admin-results-dashboard.dto';
 import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filter.dto';
 import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
+import {
+    AdminEmployeePerformanceFilterDto,
+    AdminEmployeePerformanceSortBy,
+    SortOrder,
+} from './dto/admin-employee-performance-filter.dto';
+import {
+    AdminEmployeePerformanceDto,
+    AdminEmployeePerformanceRowDto,
+    AdminEmployeePerformanceTestRefDto,
+} from './dto/admin-employee-performance.dto';
 import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
+import {
+    isExamWindowClosed,
+    isExamWindowOpen,
+    isExamWindowPending,
+    toNullableDate,
+} from '../test/utils/exam-window.util';
 
 @Injectable()
 export class ResultsService {
@@ -110,6 +126,8 @@ export class ResultsService {
         private readonly questionRepository: Repository<Question>,
         @InjectRepository(Test)
         private readonly testRepository: Repository<Test>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
         private readonly leaderboardService: LeaderboardService,
         private readonly communicationsService: CommunicationsService,
         private readonly trainingProgressService: TrainingProgressService,
@@ -1549,6 +1567,566 @@ export class ResultsService {
             orgComparison,
             orgTrainingHoursTrend,
         };
+    }
+
+    /**
+     * Employee Performance roster for admins.
+     *
+     * Builds per-employee pass/fail/in-progress lists and flags scheduled tests
+     * the learner never started. "Not attempted" means the test has an
+     * `examStartDate` whose window has opened, the learner is in scope for that
+     * test, and there is no non-voided attempt with `startTime` on or after the
+     * UTC start of `examStartDate`.
+     *
+     * Aggregation is done in a few bulk queries (users, tests, results,
+     * attempts) to avoid N+1 per employee.
+     */
+    async getAdminEmployeePerformance(
+        scope: OrgBranchScope,
+        filterDto: AdminEmployeePerformanceFilterDto,
+    ): Promise<AdminEmployeePerformanceDto> {
+        this.assertAdminAccess(scope);
+
+        const page = filterDto.page ?? 1;
+        const limit = filterDto.limit ?? 20;
+        const includeVoided = filterDto.includeVoided === true;
+        const sortBy =
+            filterDto.sortBy ?? AdminEmployeePerformanceSortBy.NOT_ATTEMPTED;
+        const sortOrder = filterDto.sortOrder ?? SortOrder.DESC;
+        // Prefer explicit filter branch; otherwise fall back to JWT branch scope.
+        const branchFilter = filterDto.branchId ?? scope.branchId;
+
+        if (!scope.orgId) {
+            return {
+                summary: {
+                    totalEmployees: 0,
+                    employeesWithNotAttempted: 0,
+                    totalNotAttemptedAssignments: 0,
+                    totalInProgress: 0,
+                    averagePassRate: 0,
+                    scheduledTests: 0,
+                },
+                employees: [],
+                total: 0,
+                page,
+                limit,
+            };
+        }
+
+        const employees = await this.loadScopedLearners(
+            scope.orgId,
+            branchFilter,
+            filterDto.search,
+        );
+
+        const tests = await this.loadScopedActiveTests(
+            scope.orgId,
+            branchFilter,
+            filterDto.testId,
+            filterDto.examStartFrom,
+            filterDto.examStartTo,
+        );
+
+        const userIds = employees.map(user => user.id);
+        // Pass/fail and in-progress use all attempts/results for these users.
+        // Not-attempted matching uses the scoped `tests` list (exam windows).
+        const [results, attempts] = await Promise.all([
+            this.loadPerformanceResults(userIds, includeVoided, filterDto.testId),
+            this.loadPerformanceAttempts(
+                userIds,
+                includeVoided,
+                filterDto.testId,
+            ),
+        ]);
+
+        const resultsByUser = this.groupByUserId(results);
+        const attemptsByUser = this.groupByUserId(attempts);
+
+        const now = new Date();
+        const rows: AdminEmployeePerformanceRowDto[] = employees.map(user =>
+            this.buildEmployeePerformanceRow(
+                user,
+                tests,
+                resultsByUser.get(user.id) ?? [],
+                attemptsByUser.get(user.id) ?? [],
+                now,
+            ),
+        );
+
+        let filteredRows = rows;
+        if (filterDto.hasNotAttempted === true) {
+            filteredRows = filteredRows.filter(
+                row => row.notAttemptedCount > 0,
+            );
+        }
+
+        // When filtering by a specific test, keep employees who interacted with
+        // it or still owe an attempt for it.
+        if (filterDto.testId) {
+            const targetTestId = filterDto.testId;
+            filteredRows = filteredRows.filter(row => {
+                const inLists = [
+                    ...row.testsPassed,
+                    ...row.testsFailed,
+                    ...row.testsInProgress,
+                    ...row.testsNotAttempted,
+                ].some(item => item.testId === targetTestId);
+                return inLists;
+            });
+        }
+
+        filteredRows = this.sortEmployeePerformanceRows(
+            filteredRows,
+            sortBy,
+            sortOrder,
+        );
+
+        const totalInProgress = filteredRows.reduce(
+            (sum, row) => sum + row.testsInProgress.length,
+            0,
+        );
+        const employeesWithNotAttempted = filteredRows.filter(
+            row => row.notAttemptedCount > 0,
+        ).length;
+        const totalNotAttemptedAssignments = filteredRows.reduce(
+            (sum, row) => sum + row.notAttemptedCount,
+            0,
+        );
+        const passRateSum = filteredRows.reduce(
+            (sum, row) => sum + row.passRate,
+            0,
+        );
+        const scheduledTests = tests.filter(
+            test => toNullableDate(test.examStartDate) !== null,
+        ).length;
+
+        const total = filteredRows.length;
+        const skip = (page - 1) * limit;
+        const pagedEmployees = filteredRows.slice(skip, skip + limit);
+
+        return {
+            summary: {
+                totalEmployees: total,
+                employeesWithNotAttempted,
+                totalNotAttemptedAssignments,
+                totalInProgress,
+                averagePassRate:
+                    total > 0
+                        ? Math.round((passRateSum / total) * 100) / 100
+                        : 0,
+                scheduledTests,
+            },
+            employees: pagedEmployees,
+            total,
+            page,
+            limit,
+        };
+    }
+
+    /** Active learners in the org (optionally branch + name/email search). */
+    private async loadScopedLearners(
+        orgId: string,
+        branchId?: string,
+        search?: string,
+    ): Promise<User[]> {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoinAndSelect('user.orgId', 'org')
+            .leftJoinAndSelect('user.branchId', 'branch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
+            .andWhere('user.role = :role', { role: UserRole.USER })
+            .orderBy('user.firstName', 'ASC')
+            .addOrderBy('user.lastName', 'ASC');
+
+        if (branchId) {
+            query.andWhere('branch.id = :branchId', { branchId });
+        }
+
+        const trimmedSearch = search?.trim();
+        if (trimmedSearch) {
+            query.andWhere(
+                `(LOWER(user.firstName) LIKE :search
+                  OR LOWER(user.lastName) LIKE :search
+                  OR LOWER(user.email) LIKE :search
+                  OR LOWER(CONCAT(user.firstName, ' ', user.lastName)) LIKE :search)`,
+                { search: `%${trimmedSearch.toLowerCase()}%` },
+            );
+        }
+
+        return query.getMany();
+    }
+
+    /** Active tests visible in the admin scope (org-wide + branch). */
+    private async loadScopedActiveTests(
+        orgId: string,
+        branchId?: string,
+        testId?: number,
+        examStartFrom?: string,
+        examStartTo?: string,
+    ): Promise<Test[]> {
+        const query = this.testRepository
+            .createQueryBuilder('test')
+            .leftJoinAndSelect('test.orgId', 'org')
+            .leftJoinAndSelect('test.branchId', 'branch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('test.isActive = :active', { active: true });
+
+        if (branchId) {
+            // Branch admins see their branch tests plus org-wide (NULL) tests.
+            query.andWhere(
+                '(branch.id = :branchId OR test.branchId IS NULL)',
+                { branchId },
+            );
+        }
+
+        if (testId) {
+            query.andWhere('test.testId = :testId', { testId });
+        }
+
+        if (examStartFrom) {
+            query.andWhere('test.examStartDate >= :examStartFrom', {
+                examStartFrom: new Date(examStartFrom),
+            });
+        }
+
+        if (examStartTo) {
+            query.andWhere('test.examStartDate <= :examStartTo', {
+                examStartTo: new Date(examStartTo),
+            });
+        }
+
+        return query.getMany();
+    }
+
+    private async loadPerformanceResults(
+        userIds: string[],
+        includeVoided: boolean,
+        testId?: number,
+    ): Promise<Result[]> {
+        if (userIds.length === 0) {
+            return [];
+        }
+
+        const query = this.resultRepository
+            .createQueryBuilder('result')
+            .leftJoinAndSelect('result.test', 'test')
+            .where('result.userId IN (:...userIds)', { userIds })
+            .orderBy('result.calculatedAt', 'DESC');
+
+        if (testId) {
+            query.andWhere('result.testId = :testId', { testId });
+        }
+
+        if (!includeVoided) {
+            query.andWhere('result.voidedByResetId IS NULL');
+        }
+
+        return query.getMany();
+    }
+
+    private async loadPerformanceAttempts(
+        userIds: string[],
+        includeVoided: boolean,
+        testId?: number,
+    ): Promise<TestAttempt[]> {
+        if (userIds.length === 0) {
+            return [];
+        }
+
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .leftJoinAndSelect('attempt.test', 'test')
+            .where('attempt.userId IN (:...userIds)', { userIds })
+            .orderBy('attempt.startTime', 'DESC');
+
+        if (testId) {
+            query.andWhere('attempt.testId = :testId', { testId });
+        }
+
+        if (!includeVoided) {
+            query.andWhere('attempt.voidedByResetId IS NULL');
+        }
+
+        return query.getMany();
+    }
+
+    private groupByUserId<T extends { userId: string }>(
+        items: T[],
+    ): Map<string, T[]> {
+        const map = new Map<string, T[]>();
+        for (const item of items) {
+            const existing = map.get(item.userId);
+            if (existing) {
+                existing.push(item);
+            } else {
+                map.set(item.userId, [item]);
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Builds one employee performance row from preloaded results/attempts.
+     *
+     * Passed/failed use the latest non-voided result per test. Not-attempted
+     * only considers tests whose exam window has opened (not pending).
+     */
+    private buildEmployeePerformanceRow(
+        user: User,
+        tests: Test[],
+        userResults: Result[],
+        userAttempts: TestAttempt[],
+        now: Date,
+    ): AdminEmployeePerformanceRowDto {
+        const availableTests = tests.filter(test =>
+            this.isTestAvailableToUser(test, user),
+        );
+
+        const latestResultByTest = new Map<number, Result>();
+        for (const result of userResults) {
+            if (!latestResultByTest.has(result.testId)) {
+                latestResultByTest.set(result.testId, result);
+            }
+        }
+
+        const testsPassed: AdminEmployeePerformanceTestRefDto[] = [];
+        const testsFailed: AdminEmployeePerformanceTestRefDto[] = [];
+
+        for (const result of latestResultByTest.values()) {
+            const ref = this.toResultTestRef(result);
+            if (result.passed) {
+                testsPassed.push(ref);
+            } else {
+                testsFailed.push(ref);
+            }
+        }
+
+        const testsInProgress: AdminEmployeePerformanceTestRefDto[] =
+            userAttempts
+                .filter(
+                    attempt => attempt.status === AttemptStatus.IN_PROGRESS,
+                )
+                .map(attempt => this.toAttemptTestRef(attempt));
+
+        // Deduplicate in-progress by testId (keep newest — already DESC ordered)
+        const seenInProgress = new Set<number>();
+        const uniqueInProgress = testsInProgress.filter(item => {
+            if (seenInProgress.has(item.testId)) {
+                return false;
+            }
+            seenInProgress.add(item.testId);
+            return true;
+        });
+
+        const testsNotAttempted: AdminEmployeePerformanceTestRefDto[] = [];
+        for (const test of availableTests) {
+            const examStart = toNullableDate(test.examStartDate);
+            // Unscheduled tests are never "required on a date".
+            if (!examStart) {
+                continue;
+            }
+            // Window not opened yet — employee is not late.
+            if (isExamWindowPending(test, now)) {
+                continue;
+            }
+
+            const windowStartBound = new Date(
+                Date.UTC(
+                    examStart.getUTCFullYear(),
+                    examStart.getUTCMonth(),
+                    examStart.getUTCDate(),
+                ),
+            );
+
+            const hasAttemptInWindow = userAttempts.some(
+                attempt =>
+                    attempt.testId === test.testId &&
+                    attempt.startTime >= windowStartBound,
+            );
+
+            if (!hasAttemptInWindow) {
+                testsNotAttempted.push(this.toScheduledTestRef(test, now));
+            }
+        }
+
+        const percentages = Array.from(latestResultByTest.values()).map(
+            result => Number(result.percentage) || 0,
+        );
+        const averageScore =
+            percentages.length > 0
+                ? Math.round(
+                      (percentages.reduce((sum, value) => sum + value, 0) /
+                          percentages.length) *
+                          100,
+                  ) / 100
+                : 0;
+
+        const gradedCount = testsPassed.length + testsFailed.length;
+        const passRate =
+            gradedCount > 0
+                ? Math.round((testsPassed.length / gradedCount) * 10000) / 100
+                : 0;
+
+        const lastResultAt = userResults[0]?.calculatedAt;
+        const lastAttemptAt = userAttempts[0]?.startTime;
+        let lastActivityAt: string | null = null;
+        if (lastResultAt || lastAttemptAt) {
+            const resultTime = lastResultAt
+                ? new Date(lastResultAt).getTime()
+                : 0;
+            const attemptTime = lastAttemptAt
+                ? new Date(lastAttemptAt).getTime()
+                : 0;
+            lastActivityAt = new Date(
+                Math.max(resultTime, attemptTime),
+            ).toISOString();
+        }
+
+        return {
+            userId: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            branchId: user.branchId?.id ?? null,
+            branchName: user.branchId?.name ?? null,
+            totalTestsPassed: testsPassed.length,
+            totalTestsFailed: testsFailed.length,
+            passRate,
+            averageScore,
+            lastActivityAt,
+            testsAvailable: availableTests.length,
+            testsCompleted: latestResultByTest.size,
+            testsPassed,
+            testsFailed,
+            testsInProgress: uniqueInProgress,
+            testsNotAttempted,
+            notAttemptedCount: testsNotAttempted.length,
+        };
+    }
+
+    /** Org-wide tests (NULL branch) are available to every learner in the org. */
+    private isTestAvailableToUser(test: Test, user: User): boolean {
+        const testBranchId = test.branchId?.id ?? null;
+        if (testBranchId === null) {
+            return true;
+        }
+        return user.branchId?.id === testBranchId;
+    }
+
+    private toResultTestRef(result: Result): AdminEmployeePerformanceTestRefDto {
+        return {
+            testId: result.testId,
+            testTitle: result.test?.title ?? `Test #${result.testId}`,
+            examStartDate: result.test?.examStartDate
+                ? new Date(result.test.examStartDate).toISOString()
+                : null,
+            examEndDate: result.test?.examEndDate
+                ? new Date(result.test.examEndDate).toISOString()
+                : null,
+            percentage: Math.round(Number(result.percentage || 0) * 100) / 100,
+            calculatedAt: result.calculatedAt
+                ? new Date(result.calculatedAt).toISOString()
+                : undefined,
+        };
+    }
+
+    private toAttemptTestRef(
+        attempt: TestAttempt,
+    ): AdminEmployeePerformanceTestRefDto {
+        return {
+            testId: attempt.testId,
+            testTitle: attempt.test?.title ?? `Test #${attempt.testId}`,
+            examStartDate: attempt.test?.examStartDate
+                ? new Date(attempt.test.examStartDate).toISOString()
+                : null,
+            examEndDate: attempt.test?.examEndDate
+                ? new Date(attempt.test.examEndDate).toISOString()
+                : null,
+            attemptId: attempt.attemptId,
+            startTime: attempt.startTime
+                ? new Date(attempt.startTime).toISOString()
+                : undefined,
+        };
+    }
+
+    private toScheduledTestRef(
+        test: Test,
+        now: Date,
+    ): AdminEmployeePerformanceTestRefDto {
+        let windowStatus: 'open' | 'closed' | 'pending' = 'open';
+        if (isExamWindowPending(test, now)) {
+            windowStatus = 'pending';
+        } else if (isExamWindowClosed(test, now)) {
+            windowStatus = 'closed';
+        } else if (!isExamWindowOpen(test, now)) {
+            windowStatus = 'closed';
+        }
+
+        return {
+            testId: test.testId,
+            testTitle: test.title,
+            examStartDate: test.examStartDate
+                ? new Date(test.examStartDate).toISOString()
+                : null,
+            examEndDate: test.examEndDate
+                ? new Date(test.examEndDate).toISOString()
+                : null,
+            windowStatus,
+        };
+    }
+
+    private sortEmployeePerformanceRows(
+        rows: AdminEmployeePerformanceRowDto[],
+        sortBy: AdminEmployeePerformanceSortBy,
+        sortOrder: SortOrder,
+    ): AdminEmployeePerformanceRowDto[] {
+        const direction = sortOrder === SortOrder.ASC ? 1 : -1;
+
+        return [...rows].sort((left, right) => {
+            let comparison = 0;
+
+            switch (sortBy) {
+                case AdminEmployeePerformanceSortBy.PASS_RATE:
+                    comparison = left.passRate - right.passRate;
+                    break;
+                case AdminEmployeePerformanceSortBy.AVERAGE_SCORE:
+                    comparison = left.averageScore - right.averageScore;
+                    break;
+                case AdminEmployeePerformanceSortBy.NOT_ATTEMPTED:
+                    comparison =
+                        left.notAttemptedCount - right.notAttemptedCount;
+                    break;
+                case AdminEmployeePerformanceSortBy.TESTS_PASSED:
+                    comparison =
+                        left.totalTestsPassed - right.totalTestsPassed;
+                    break;
+                case AdminEmployeePerformanceSortBy.LAST_ACTIVITY: {
+                    const leftTime = left.lastActivityAt
+                        ? new Date(left.lastActivityAt).getTime()
+                        : 0;
+                    const rightTime = right.lastActivityAt
+                        ? new Date(right.lastActivityAt).getTime()
+                        : 0;
+                    comparison = leftTime - rightTime;
+                    break;
+                }
+                case AdminEmployeePerformanceSortBy.NAME:
+                default:
+                    comparison = `${left.firstName} ${left.lastName}`.localeCompare(
+                        `${right.firstName} ${right.lastName}`,
+                    );
+                    break;
+            }
+
+            if (comparison === 0) {
+                return `${left.firstName} ${left.lastName}`.localeCompare(
+                    `${right.firstName} ${right.lastName}`,
+                );
+            }
+
+            return comparison * direction;
+        });
     }
 
     async findUserResults(
