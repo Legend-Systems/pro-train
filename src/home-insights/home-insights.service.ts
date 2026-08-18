@@ -57,7 +57,7 @@ export class HomeInsightsService {
 
         const [personal, leaderboard, admin] = await Promise.all([
             this.buildPersonal(scope),
-            this.buildLeaderboardSnapshot(scope),
+            this.buildLeaderboardSnapshot(scope, isAdmin),
             isAdmin ? this.buildAdmin(scope) : Promise.resolve(undefined),
         ]);
 
@@ -143,6 +143,7 @@ export class HomeInsightsService {
     /** Top/bottom users, improvers, and branch rankings for slide 3. */
     private async buildLeaderboardSnapshot(
         scope: OrgBranchScope,
+        includeAdminCoachingData: boolean,
     ): Promise<HomeInsightLeaderboardDto> {
         const query: LeaderboardOverviewQueryDto = {
             page: 1,
@@ -166,10 +167,12 @@ export class HomeInsightsService {
         const topUsers = entries.slice(0, SNAPSHOT_LIMIT).map(entry =>
             this.mapOverviewPerson(entry),
         );
-        const bottomUsers = [...entries]
-            .reverse()
-            .slice(0, SNAPSHOT_LIMIT)
-            .map(entry => this.mapOverviewPerson(entry));
+        const bottomUsers = includeAdminCoachingData
+            ? [...entries]
+                  .reverse()
+                  .slice(0, SNAPSHOT_LIMIT)
+                  .map(entry => this.mapOverviewPerson(entry))
+            : [];
 
         const topImprovers = (overview?.topImprovers ?? [])
             .slice(0, SNAPSHOT_LIMIT)
@@ -193,7 +196,9 @@ export class HomeInsightsService {
             bottomUsers,
             topImprovers,
             topBranches: branches.slice(0, BRANCH_LIMIT),
-            bottomBranches: [...branches].reverse().slice(0, BRANCH_LIMIT),
+            bottomBranches: includeAdminCoachingData
+                ? [...branches].reverse().slice(0, BRANCH_LIMIT)
+                : [],
         };
     }
 
