@@ -132,4 +132,15 @@ export class ResultFilterDto {
     @Transform(({ value }) => value === true || value === 'true')
     @IsBoolean()
     includeVoided?: boolean;
+
+    @ApiPropertyOptional({
+        description:
+            'When true, clears cached result payloads before building the dashboard so the response reflects the latest attempt data.',
+        example: false,
+        default: false,
+    })
+    @IsOptional()
+    @Transform(({ value }) => value === true || value === 'true')
+    @IsBoolean()
+    refresh?: boolean;
 }

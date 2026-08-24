@@ -48,6 +48,11 @@ export enum ReportSection {
     KEY_AREAS = 'key-areas',
     MOST_FAILED_TESTS = 'most-failed-tests',
     PASS_FAIL_RATES = 'pass-fail-rates',
+    /**
+     * Learners who still need to finish tests in the selected month:
+     * never started, or started and left `in_progress` / `expired`.
+     */
+    TESTS_NOT_COMPLETED = 'tests-not-completed',
 }
 
 /** Every selectable section, in presentation order. */
@@ -67,6 +72,7 @@ export const SENSITIVE_REPORT_SECTIONS: readonly ReportSection[] = [
     ReportSection.PASS_FAIL_RATES,
     ReportSection.KPI_AT_RISK_USERS,
     ReportSection.KPI_KEY_AREAS,
+    ReportSection.TESTS_NOT_COMPLETED,
 ];
 
 /** Default content for the leaderboard preset (celebratory sections only). */
@@ -183,4 +189,11 @@ export function requiresLeaderboardInsights(
         sections.includes(ReportSection.TOP_SCORERS) ||
         sections.includes(ReportSection.TEST_COMPLETION)
     );
+}
+
+/** True when the tests-not-completed month roster must be loaded. */
+export function requiresTestsNotCompleted(
+    sections: readonly ReportSection[],
+): boolean {
+    return sections.includes(ReportSection.TESTS_NOT_COMPLETED);
 }

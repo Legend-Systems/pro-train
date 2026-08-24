@@ -51,6 +51,7 @@ import {
     AdminReportFiltersDto,
     AdminSkillGapDto,
     AdminTestPassFailDto,
+    AdminTestsNotCompletedReportDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
 import {
@@ -252,6 +253,31 @@ export class AdminReportsController {
                 filters,
             );
         return this.ok('Leaderboard insights retrieved successfully', data);
+    }
+
+    @Get('tests-not-completed')
+    @ApiOperation({
+        summary: 'Tests not completed for a calendar month',
+        description:
+            'Two groups for the selected yearMonth: learners with no attempts, and learners whose attempts are still in_progress or expired. Each row includes name, surname, branch, and the missed test titles.',
+    })
+    @ApiOkResponse({ type: AdminTestsNotCompletedReportDto })
+    @ApiQuery({ name: 'branchId', required: false })
+    @ApiQuery({
+        name: 'yearMonth',
+        required: false,
+        example: '2026-08',
+        description: 'Calendar month (YYYY-MM). Defaults to the current UTC month.',
+    })
+    async getTestsNotCompleted(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query() filters: AdminReportFiltersDto,
+    ): Promise<StandardApiResponse<AdminTestsNotCompletedReportDto>> {
+        const data = await this.adminInsightsReportsService.getTestsNotCompleted(
+            scope,
+            filters,
+        );
+        return this.ok('Tests not completed retrieved successfully', data);
     }
 
     @Get('branch-comparison')

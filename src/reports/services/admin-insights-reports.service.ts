@@ -11,6 +11,11 @@ import { Answer } from '../../answers/entities/answer.entity';
 import { Leaderboard } from '../../leaderboard/entities/leaderboard.entity';
 import { Result } from '../../results/entities/result.entity';
 import { TrainingSession } from '../../training-hours/entities/training-session.entity';
+import { Test } from '../../test/entities/test.entity';
+import {
+    AttemptStatus,
+    TestAttempt,
+} from '../../test_attempts/entities/test_attempt.entity';
 import { User, UserRole, UserStatus } from '../../user/entities/user.entity';
 import {
     AdminAtRiskUserDto,
@@ -33,6 +38,8 @@ import {
     AdminSkillGapDto,
     AdminTestCompletionSummaryDto,
     AdminTestPassFailDto,
+    AdminTestsNotCompletedReportDto,
+    AdminTestsNotCompletedUserDto,
     AdminTopScorerDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
@@ -82,6 +89,20 @@ interface DateWindow {
     label: AdminReportTimeframe;
 }
 
+/** Active test that was available during the selected report month. */
+interface RelevantReportTest {
+    readonly testId: number;
+    readonly testTitle: string;
+    readonly courseTitle: string | null;
+    readonly testBranchId: string | null;
+    readonly courseBranchId: string | null;
+    readonly examStartDate: Date | null;
+    readonly examEndDate: Date | null;
+}
+
+/** Best attempt outcome for a learner+test as of month-end. */
+type AttemptOutcome = 'submitted' | 'incomplete' | 'none';
+
 /**
  * Org-scoped admin reporting catalogue for owner / admin / master_admin.
  * All queries require organization context and optionally filter by branch.
@@ -101,6 +122,10 @@ export class AdminInsightsReportsService {
         private readonly answerRepository: Repository<Answer>,
         @InjectRepository(User)
         private readonly userRepository: Repository<User>,
+        @InjectRepository(Test)
+        private readonly testRepository: Repository<Test>,
+        @InjectRepository(TestAttempt)
+        private readonly testAttemptRepository: Repository<TestAttempt>,
     ) {}
 
     /** Executive hub payload combining KPIs and actionable slices. */
@@ -591,6 +616,101 @@ export class AdminInsightsReportsService {
             branchTopPerformers: this.buildBranchTopPerformers(fullRankings),
             topScorers,
             testCompletion: this.summariseTestCompletion(windowTotals),
+        };
+    }
+
+    /**
+     * Learners who still owe tests for a calendar month.
+     *
+     * Month filter (`filters.yearMonth`, default current UTC month):
+     * - Relevant tests are those available during that month (created before
+     *   month-end, exam window overlapping the month when scheduled).
+     * - Completion is evaluated as of month-end (a July submit still counts
+     *   in August so people are not re-flagged after they finish).
+     *
+     * Two groups:
+     * 1. No attempts — never started the test before month-end.
+     * 2. Incomplete — only `in_progress` or `expired` attempts (started, never submitted).
+     */
+    async getTestsNotCompleted(
+        scope: OrgBranchScope,
+        filters: AdminReportFiltersDto = {},
+    ): Promise<AdminTestsNotCompletedReportDto> {
+        const orgId = this.requireOrg(scope);
+        const yearMonth = filters.yearMonth ?? this.currentYearMonth();
+        const { monthStartDate, monthEndDate } =
+            this.getMonthDateStrings(yearMonth);
+        const monthStart = new Date(`${monthStartDate}T00:00:00.000Z`);
+        const monthEnd = new Date(`${monthEndDate}T00:00:00.000Z`);
+
+        const [roster, tests] = await Promise.all([
+            this.getLearnerRoster(orgId, filters.branchId),
+            this.getTestsAvailableInMonth(
+                orgId,
+                filters.branchId,
+                monthStart,
+                monthEnd,
+            ),
+        ]);
+
+        if (roster.length === 0 || tests.length === 0) {
+            return {
+                yearMonth,
+                monthLabel: this.formatMonthLabel(yearMonth),
+                usersWithNoAttempts: [],
+                usersWithIncompleteAttempts: [],
+            };
+        }
+
+        const attemptsByUserAndTest = await this.getAttemptOutcomesByUserAndTest(
+            tests.map(test => test.testId),
+            monthEnd,
+        );
+
+        const usersWithNoAttempts: AdminTestsNotCompletedUserDto[] = [];
+        const usersWithIncompleteAttempts: AdminTestsNotCompletedUserDto[] = [];
+
+        for (const learner of roster) {
+            const expectedTests = tests.filter(test =>
+                this.isTestExpectedForLearner(test, learner.branchId),
+            );
+            if (expectedTests.length === 0) {
+                continue;
+            }
+
+            const noAttemptTests: RelevantReportTest[] = [];
+            const incompleteTests: RelevantReportTest[] = [];
+
+            for (const test of expectedTests) {
+                const key = `${learner.userId}:${test.testId}`;
+                const outcome = attemptsByUserAndTest.get(key) ?? 'none';
+                if (outcome === 'submitted') {
+                    continue;
+                }
+                if (outcome === 'incomplete') {
+                    incompleteTests.push(test);
+                } else {
+                    noAttemptTests.push(test);
+                }
+            }
+
+            if (noAttemptTests.length > 0) {
+                usersWithNoAttempts.push(
+                    this.mapTestsNotCompletedUser(learner, noAttemptTests),
+                );
+            }
+            if (incompleteTests.length > 0) {
+                usersWithIncompleteAttempts.push(
+                    this.mapTestsNotCompletedUser(learner, incompleteTests),
+                );
+            }
+        }
+
+        return {
+            yearMonth,
+            monthLabel: this.formatMonthLabel(yearMonth),
+            usersWithNoAttempts,
+            usersWithIncompleteAttempts,
         };
     }
 
@@ -1112,6 +1232,166 @@ export class AdminInsightsReportsService {
             branchName: row.branchName ?? null,
             branchAlias: row.branchAlias ?? null,
         }));
+    }
+
+    /**
+     * Active tests whose availability overlapped the selected month.
+     * Scheduled exams must overlap [monthStart, monthEnd); unscheduled tests
+     * are included if they already existed by month-end.
+     */
+    private async getTestsAvailableInMonth(
+        orgId: string,
+        branchId: string | undefined,
+        monthStart: Date,
+        monthEnd: Date,
+    ): Promise<RelevantReportTest[]> {
+        const query = this.testRepository
+            .createQueryBuilder('test')
+            .leftJoin('test.orgId', 'org')
+            .leftJoin('test.course', 'course')
+            .leftJoin('test.branchId', 'testBranch')
+            .leftJoin('course.branchId', 'courseBranch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('test.isActive = :isActive', { isActive: true })
+            .andWhere('test.createdAt < :monthEnd', { monthEnd })
+            .andWhere(
+                '(test.examStartDate IS NULL OR test.examStartDate < :monthEnd)',
+                { monthEnd },
+            )
+            .andWhere(
+                '(test.examEndDate IS NULL OR test.examEndDate >= :monthStart)',
+                { monthStart },
+            )
+            .select('test.testId', 'testId')
+            .addSelect('test.title', 'testTitle')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect('testBranch.id', 'testBranchId')
+            .addSelect('courseBranch.id', 'courseBranchId')
+            .addSelect('test.examStartDate', 'examStartDate')
+            .addSelect('test.examEndDate', 'examEndDate')
+            .orderBy('test.title', 'ASC');
+
+        if (branchId) {
+            query.andWhere(
+                '(testBranch.id = :branchId OR (testBranch.id IS NULL AND (courseBranch.id = :branchId OR courseBranch.id IS NULL)))',
+                { branchId },
+            );
+        }
+
+        const rows = await query.getRawMany<{
+            testId: number | string;
+            testTitle: string;
+            courseTitle: string | null;
+            testBranchId: string | null;
+            courseBranchId: string | null;
+            examStartDate: Date | null;
+            examEndDate: Date | null;
+        }>();
+
+        return rows.map(row => ({
+            testId: Number(row.testId),
+            testTitle: row.testTitle,
+            courseTitle: row.courseTitle ?? null,
+            testBranchId: row.testBranchId ?? null,
+            courseBranchId: row.courseBranchId ?? null,
+            examStartDate: row.examStartDate ?? null,
+            examEndDate: row.examEndDate ?? null,
+        }));
+    }
+
+    /**
+     * Best outcome per user+test using non-voided attempts started before month-end.
+     * Submitted wins over incomplete; cancelled-only counts as none.
+     */
+    private async getAttemptOutcomesByUserAndTest(
+        testIds: number[],
+        monthEnd: Date,
+    ): Promise<Map<string, AttemptOutcome>> {
+        if (testIds.length === 0) {
+            return new Map();
+        }
+
+        const rows = await this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .where('attempt.testId IN (:...testIds)', { testIds })
+            .andWhere('attempt.voidedByResetId IS NULL')
+            .andWhere('attempt.startTime < :monthEnd', { monthEnd })
+            .andWhere('attempt.status != :cancelledStatus', {
+                cancelledStatus: AttemptStatus.CANCELLED,
+            })
+            .select('attempt.userId', 'userId')
+            .addSelect('attempt.testId', 'testId')
+            .addSelect('attempt.status', 'status')
+            .getRawMany<{
+                userId: string;
+                testId: number | string;
+                status: AttemptStatus;
+            }>();
+
+        const outcomes = new Map<string, AttemptOutcome>();
+        for (const row of rows) {
+            const key = `${row.userId}:${Number(row.testId)}`;
+            const current = outcomes.get(key) ?? 'none';
+            if (row.status === AttemptStatus.SUBMITTED) {
+                outcomes.set(key, 'submitted');
+                continue;
+            }
+            if (
+                current !== 'submitted' &&
+                (row.status === AttemptStatus.IN_PROGRESS ||
+                    row.status === AttemptStatus.EXPIRED)
+            ) {
+                outcomes.set(key, 'incomplete');
+            }
+        }
+
+        return outcomes;
+    }
+
+    /** Branch-scoped tests only apply to learners in that branch. */
+    private isTestExpectedForLearner(
+        test: RelevantReportTest,
+        learnerBranchId: string | null,
+    ): boolean {
+        const requiredBranch = test.testBranchId ?? test.courseBranchId;
+        if (!requiredBranch) {
+            return true;
+        }
+        return learnerBranchId === requiredBranch;
+    }
+
+    private mapTestsNotCompletedUser(
+        learner: {
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+        },
+        tests: readonly RelevantReportTest[],
+    ): AdminTestsNotCompletedUserDto {
+        return {
+            userId: learner.userId,
+            firstName: learner.firstName,
+            lastName: learner.lastName,
+            branchName: learner.branchName,
+            missedTestCount: tests.length,
+            missedTests: tests.map(test => ({
+                testId: test.testId,
+                testTitle: test.testTitle,
+                courseTitle: test.courseTitle,
+                examStartDate: test.examStartDate,
+                examEndDate: test.examEndDate,
+            })),
+        };
+    }
+
+    private formatMonthLabel(yearMonth: string): string {
+        const [year, month] = yearMonth.split('-').map(Number);
+        return new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-GB', {
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC',
+        });
     }
 
     /** Cumulative leaderboard points per learner (drives current rank). */
