@@ -109,6 +109,7 @@ export class ReportExportService {
         this.appendTopScorersCsv(lines, overview, selected);
         this.appendPerformerCsv(lines, overview, selected, style);
         this.appendTestCsv(lines, overview, selected);
+        this.appendTestsNotCompletedCsv(lines, overview, selected);
         this.appendKeyAreaCsv(lines, overview, selected);
         this.appendBranchComparisonCsv(lines, overview, selected);
 
@@ -171,6 +172,7 @@ export class ReportExportService {
         this.writePdfHighPotentialSection(doc, overview, selected, style);
         this.writePdfBranchComparisonSection(doc, overview, selected);
         this.writePdfTestSections(doc, overview, selected);
+        this.writePdfTestsNotCompletedSection(doc, overview, selected);
         this.writePdfNeedsSupportSection(doc, overview, selected);
         this.writePdfKeyAreasSection(doc, overview, selected);
 
@@ -632,6 +634,86 @@ export class ReportExportService {
         lines.push('');
     }
 
+    /**
+     * Two CSV blocks for the selected calendar month:
+     * users who never started, then users who started but did not submit.
+     */
+    private appendTestsNotCompletedCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TESTS_NOT_COMPLETED)) {
+            return;
+        }
+
+        const report = overview.testsNotCompleted;
+        const monthLabel = report?.monthLabel ?? 'Unknown month';
+
+        this.appendTestsNotCompletedCsvGroup(
+            lines,
+            `Users who made no attempts (${monthLabel})`,
+            report?.usersWithNoAttempts ?? [],
+            monthLabel,
+        );
+        this.appendTestsNotCompletedCsvGroup(
+            lines,
+            `Users who did not complete attempts (${monthLabel})`,
+            report?.usersWithIncompleteAttempts ?? [],
+            monthLabel,
+        );
+    }
+
+    private appendTestsNotCompletedCsvGroup(
+        lines: string[],
+        sectionName: string,
+        users: ReadonlyArray<{
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+            missedTestCount: number;
+            missedTests: ReadonlyArray<{
+                testTitle: string;
+                courseTitle: string | null;
+                examStartDate: Date | null;
+                examEndDate: Date | null;
+            }>;
+        }>,
+        monthLabel: string,
+    ): void {
+        lines.push(
+            'Section,Month,Name,Surname,Branch,TestTitle,Course,ExamStart,ExamEnd,MissedTestCount',
+        );
+
+        if (users.length === 0) {
+            lines.push(
+                this.row(sectionName, monthLabel, '', '', '', '', '', '', '', 0),
+            );
+            lines.push('');
+            return;
+        }
+
+        users.forEach(user => {
+            user.missedTests.forEach(test => {
+                lines.push(
+                    this.row(
+                        sectionName,
+                        monthLabel,
+                        user.firstName,
+                        user.lastName,
+                        user.branchName ?? '',
+                        test.testTitle,
+                        test.courseTitle ?? '',
+                        this.formatOptionalDate(test.examStartDate),
+                        this.formatOptionalDate(test.examEndDate),
+                        user.missedTestCount,
+                    ),
+                );
+            });
+        });
+        lines.push('');
+    }
+
     private appendKeyAreaCsv(
         lines: string[],
         overview: AdminOverviewReportDto,
@@ -690,10 +772,13 @@ export class ReportExportService {
     ): void {
         doc.fillColor('#413DFB').fontSize(20).text(reportTitle, { align: 'left' });
         doc.moveDown(0.4);
+        const monthSuffix = overview.testsNotCompleted?.monthLabel
+            ? `  ·  Month: ${overview.testsNotCompleted.monthLabel}`
+            : '';
         doc.fillColor('#6b7280')
             .fontSize(10)
             .text(
-                `Timeframe: ${overview.timeframe}  ·  Generated: ${overview.generatedAt.toISOString()}`,
+                `Timeframe: ${overview.timeframe}${monthSuffix}  ·  Generated: ${overview.generatedAt.toISOString()}`,
             );
         doc.moveDown(1);
     }
@@ -977,6 +1062,83 @@ export class ReportExportService {
         }
     }
 
+    /**
+     * PDF counterpart of the tests-not-completed metric: two labelled groups
+     * for the selected month, each listing name, surname, branch, and titles.
+     */
+    private writePdfTestsNotCompletedSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TESTS_NOT_COMPLETED)) {
+            return;
+        }
+
+        const report = overview.testsNotCompleted;
+        const monthLabel = report?.monthLabel ?? 'Unknown month';
+
+        this.writePdfHeading(
+            doc,
+            `Tests not completed (Month: ${monthLabel})`,
+        );
+        this.writePdfTestsNotCompletedGroup(
+            doc,
+            'Users who made no attempts',
+            report?.usersWithNoAttempts ?? [],
+        );
+        this.writePdfTestsNotCompletedGroup(
+            doc,
+            'Users who did not complete their attempts (expired / in progress)',
+            report?.usersWithIncompleteAttempts ?? [],
+        );
+    }
+
+    private writePdfTestsNotCompletedGroup(
+        doc: PDFKit.PDFDocument,
+        heading: string,
+        users: ReadonlyArray<{
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+            missedTests: ReadonlyArray<{ testTitle: string }>;
+        }>,
+    ): void {
+        if (doc.y > PDF_PAGE_BREAK_Y) {
+            doc.addPage();
+        }
+        doc.fillColor('#413DFB').fontSize(11).text(heading);
+        doc.moveDown(0.35);
+
+        if (users.length === 0) {
+            doc.fontSize(10)
+                .fillColor('#6b7280')
+                .text('No learners in this group for the selected month.');
+            doc.moveDown(0.6);
+            return;
+        }
+
+        users.forEach(user => {
+            if (doc.y > PDF_ROW_BREAK_Y) {
+                doc.addPage();
+            }
+            const branch = user.branchName ?? 'No branch';
+            doc.fontSize(10)
+                .fillColor('#111827')
+                .text(`${user.firstName} ${user.lastName} | ${branch}`);
+            user.missedTests.forEach(test => {
+                if (doc.y > PDF_ROW_BREAK_Y) {
+                    doc.addPage();
+                }
+                doc.fontSize(9)
+                    .fillColor('#6b7280')
+                    .text(`  ${test.testTitle}`);
+            });
+            doc.moveDown(0.35);
+        });
+        doc.moveDown(0.3);
+    }
+
     private writePdfNeedsSupportSection(
         doc: PDFKit.PDFDocument,
         overview: AdminOverviewReportDto,
@@ -1226,6 +1388,17 @@ export class ReportExportService {
 
     private row(...cells: Array<string | number>): string {
         return cells.map(cell => this.escapeCsv(String(cell))).join(',');
+    }
+
+    private formatOptionalDate(value: Date | string | null | undefined): string {
+        if (!value) {
+            return '';
+        }
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        return date.toISOString().slice(0, 10);
     }
 
     private escapeCsv(value: string): string {

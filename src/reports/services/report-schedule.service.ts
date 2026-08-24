@@ -27,6 +27,7 @@ import {
     ReportPreset,
     ReportSection,
     requiresLeaderboardInsights,
+    requiresTestsNotCompleted,
     resolveReportSections,
 } from '../constants/report-sections.constant';
 import {
@@ -316,8 +317,8 @@ export class ReportScheduleService {
     }
 
     /**
-     * Loads the overview and, only when a leaderboard section is selected,
-     * the heavier full-ranking datasets.
+     * Loads the overview and, only when requested, the heavier extra datasets
+     * (leaderboard rankings / tests-not-completed).
      */
     private async buildReportPayload(
         scope: OrgBranchScope,
@@ -329,17 +330,29 @@ export class ReportScheduleService {
             filters,
         );
 
-        if (!requiresLeaderboardInsights(sections)) {
-            return overview;
+        let payload: AdminOverviewReportDto = overview;
+
+        if (requiresLeaderboardInsights(sections)) {
+            const insights =
+                await this.adminInsightsReportsService.getLeaderboardInsights(
+                    scope,
+                    filters,
+                );
+            payload = { ...payload, ...insights };
         }
 
-        const insights =
-            await this.adminInsightsReportsService.getLeaderboardInsights(
-                scope,
-                filters,
-            );
+        if (requiresTestsNotCompleted(sections)) {
+            payload = {
+                ...payload,
+                testsNotCompleted:
+                    await this.adminInsightsReportsService.getTestsNotCompleted(
+                        scope,
+                        filters,
+                    ),
+            };
+        }
 
-        return { ...overview, ...insights };
+        return payload;
     }
 
     /** Cron entry: process due active schedules only. */

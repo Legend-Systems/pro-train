@@ -784,6 +784,11 @@ export class ResultsService {
     ): Promise<AdminResultsDashboardDto> {
         this.assertAdminAccess(scope);
 
+        // Manual refresh from the admin UI — drop stale cached test/course result payloads first.
+        if (filterDto.refresh === true) {
+            await this.invalidateCachesAfterAttemptReset();
+        }
+
         const { page = 1, limit = 20, ...filters } = filterDto;
         const skip = (page - 1) * limit;
         // Read only after the role assertion above: learner-facing endpoints

@@ -52,8 +52,9 @@ export class AdminReportFiltersDto {
     endDate?: string;
 
     @ApiPropertyOptional({
-        description: 'Month bucket for training hours (YYYY-MM)',
-        example: '2026-07',
+        description:
+            'Calendar month (YYYY-MM) for month-scoped slices such as training hours and tests not completed',
+        example: '2026-08',
     })
     @IsOptional()
     @IsString()
@@ -336,6 +337,74 @@ export class AdminTopScorerDto {
     achievedAt: Date;
 }
 
+/** A test the learner still needs to finish in the selected month. */
+export class AdminMissedTestDto {
+    @ApiProperty()
+    testId: number;
+
+    @ApiProperty()
+    testTitle: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    courseTitle: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Exam window start, when the test is scheduled',
+    })
+    examStartDate: Date | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Exam window end, when the test is scheduled',
+    })
+    examEndDate: Date | null;
+}
+
+/**
+ * One learner in the tests-not-completed report, with the tests they still
+ * owe for the selected month.
+ */
+export class AdminTestsNotCompletedUserDto {
+    @ApiProperty()
+    userId: string;
+
+    @ApiProperty()
+    firstName: string;
+
+    @ApiProperty()
+    lastName: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    branchName: string | null;
+
+    @ApiProperty()
+    missedTestCount: number;
+
+    @ApiProperty({ type: [AdminMissedTestDto] })
+    missedTests: AdminMissedTestDto[];
+}
+
+/**
+ * Month-scoped “who still needs to complete tests” payload.
+ *
+ * Two groups are kept separate so admins can tell “never started” apart from
+ * “started but abandoned” (`in_progress` / `expired`).
+ */
+export class AdminTestsNotCompletedReportDto {
+    @ApiProperty({ example: '2026-08', description: 'Calendar month (YYYY-MM)' })
+    yearMonth: string;
+
+    @ApiProperty({ example: 'August 2026' })
+    monthLabel: string;
+
+    @ApiProperty({ type: [AdminTestsNotCompletedUserDto] })
+    usersWithNoAttempts: AdminTestsNotCompletedUserDto[];
+
+    @ApiProperty({ type: [AdminTestsNotCompletedUserDto] })
+    usersWithIncompleteAttempts: AdminTestsNotCompletedUserDto[];
+}
+
 /** Org-level completion totals used for the motivational summary. */
 export class AdminTestCompletionSummaryDto {
     @ApiProperty()
@@ -600,6 +669,13 @@ export class AdminOverviewReportDto {
 
     @ApiPropertyOptional({ type: AdminTestCompletionSummaryDto })
     testCompletion?: AdminTestCompletionSummaryDto;
+
+    /**
+     * Present when the tests-not-completed section is selected.
+     * Always month-scoped via `filters.yearMonth` (defaults to the current UTC month).
+     */
+    @ApiPropertyOptional({ type: AdminTestsNotCompletedReportDto })
+    testsNotCompleted?: AdminTestsNotCompletedReportDto;
 
     @ApiProperty()
     generatedAt: Date;
