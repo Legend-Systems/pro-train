@@ -19,7 +19,8 @@ import { HomeInsightsService } from './home-insights.service';
 
 /**
  * Home carousel insights for web HomePage and mobile HomeScreen.
- * Admin-only fields are stripped server-side for regular users.
+ * Admin-only fields are stripped server-side for regular users,
+ * including bottom performers and lowest branch rankings on the leaderboard snapshot.
  */
 @ApiTags('🏠 Home Insights')
 @Controller('home-insights')
