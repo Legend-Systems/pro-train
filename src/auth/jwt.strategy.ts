@@ -36,6 +36,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password: _, ...userWithoutPassword } = user;
+        const orgIdFromUser =
+            user.orgId && typeof user.orgId === 'object'
+                ? user.orgId.id
+                : undefined;
+        const branchIdFromUser =
+            user.branchId && typeof user.branchId === 'object'
+                ? user.branchId.id
+                : undefined;
+
         return {
             id: user.id,
             email: user.email,
@@ -43,8 +52,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             lastName: user.lastName,
             avatar: user.avatar,
             role: user.role,
-            orgId: payload.orgId,
-            branchId: payload.branchId,
+            orgId: orgIdFromUser ?? payload.orgId,
+            branchId: branchIdFromUser ?? payload.branchId,
             preferredLanguage: user.preferredLanguage ?? null,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,

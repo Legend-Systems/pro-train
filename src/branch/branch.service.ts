@@ -62,12 +62,25 @@ export class BranchService {
     // Scoped version - returns only branches user has access to
     async findAllScoped(scope: OrgBranchScope): Promise<Branch[]> {
         return this.retryOperation(async () => {
+            // Master Admin can assign users across every organization.
+            if (scope.userRole === 'master_admin') {
+                return await this.branchRepository.find({
+                    relations: ['organization'],
+                    order: { createdAt: 'DESC' },
+                });
+            }
+
             if (!scope.orgId) {
                 return []; // User not assigned to any organization
             }
 
-            // If user has branchId, return only their branch
-            if (scope.branchId) {
+            // Master Admin and Owner may assign users to any branch in the org.
+            const canAccessAllOrgBranches =
+                scope.userRole === 'master_admin' ||
+                scope.userRole === 'owner';
+
+            // Branch-scoped admins only see their own branch.
+            if (scope.branchId && !canAccessAllOrgBranches) {
                 const branch = await this.branchRepository.find({
                     where: {
                         id: scope.branchId,
@@ -79,7 +92,6 @@ export class BranchService {
                 return branch;
             }
 
-            // Otherwise, return all branches in their organization
             return await this.branchRepository.find({
                 where: { organization: { id: scope.orgId } },
                 relations: ['organization'],

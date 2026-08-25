@@ -149,7 +149,11 @@ export class OrgService {
     ): Promise<Organization> {
         const organization = await this.findOrganizationById(id);
 
-        // Validate user has access to this organization
+        // Master Admin may inspect any organization; others must match JWT org scope.
+        if (scope.userRole === 'master_admin') {
+            return organization;
+        }
+
         if (!scope.orgId || scope.orgId !== id) {
             throw new ForbiddenException('Access denied to this organization');
         }
@@ -261,12 +265,23 @@ export class OrgService {
     // Scoped version - returns only branches user has access to
     async findAllBranchesScoped(scope: OrgBranchScope): Promise<Branch[]> {
         return this.retryOperation(async () => {
+            // Master Admin can assign users across every organization.
+            if (scope.userRole === 'master_admin') {
+                return await this.branchRepository.find({
+                    relations: ['organization'],
+                    order: { createdAt: 'DESC' },
+                });
+            }
+
             if (!scope.orgId) {
                 return []; // User not assigned to any organization
             }
 
-            // If user has branchId, return only their branch
-            if (scope.branchId) {
+            const canAccessAllOrgBranches =
+                scope.userRole === 'master_admin' ||
+                scope.userRole === 'owner';
+
+            if (scope.branchId && !canAccessAllOrgBranches) {
                 const branch = await this.branchRepository.find({
                     where: {
                         id: scope.branchId,
@@ -278,7 +293,6 @@ export class OrgService {
                 return branch;
             }
 
-            // Otherwise, return all branches in their organization
             return await this.branchRepository.find({
                 where: { organization: { id: scope.orgId } },
                 relations: ['organization'],
