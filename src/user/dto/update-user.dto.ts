@@ -11,7 +11,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
-import { UserRole } from '../entities/user.entity';
+import { UserRole, UserStatus } from '../entities/user.entity';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
     @ApiProperty({
@@ -137,4 +137,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
         message: 'Preferred language must be a valid locale tag (e.g. en, pt-PT)',
     })
     preferredLanguage?: string | null;
+
+    @ApiProperty({
+        description:
+            'Account status (active or inactive). Only Master Admin and Owner may change this via admin update.',
+        example: UserStatus.ACTIVE,
+        enum: UserStatus,
+        required: false,
+        type: String,
+        title: 'Account Status',
+    })
+    @IsOptional()
+    @IsEnum(UserStatus, { message: 'Status must be a valid user status' })
+    status?: UserStatus;
 }

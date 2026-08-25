@@ -8,7 +8,7 @@ import {
     IsEnum,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '../entities/user.entity';
+import { UserRole, UserStatus } from '../entities/user.entity';
 
 /**
  * Data Transfer Object for creating a new user account
@@ -128,4 +128,17 @@ export class CreateUserDto {
     @IsOptional()
     @IsString({ message: 'Branch ID must be a string' })
     branchId?: string;
+
+    @ApiProperty({
+        description:
+            'Initial account status (active or inactive). Only Master Admin and Owner may set this on create.',
+        example: UserStatus.ACTIVE,
+        enum: UserStatus,
+        required: false,
+        type: String,
+        title: 'Account Status',
+    })
+    @IsOptional()
+    @IsEnum(UserStatus, { message: 'Status must be a valid user status' })
+    status?: UserStatus;
 }

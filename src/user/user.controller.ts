@@ -62,7 +62,7 @@ export class UserController {
     constructor(private readonly userService: UserService) {}
 
     @Post()
-    @Roles(UserRole.ADMIN) // Only admins can create users
+    @Roles(UserRole.ADMIN, UserRole.OWNER) // Only admins can create users
     @ApiOperation({
         summary: '👥 Create New User',
         description: `
@@ -182,11 +182,16 @@ export class UserController {
                 throw new ConflictException('Email address already in use');
             }
 
-            // Use organization and branch from the authenticated user's scope
-            // This ensures the new user is created within the same organization/branch context
+            // Master Admin and Owner may pick any branch from the DTO; admins stay branch-scoped.
+            const canAssignAnyBranch =
+                scope.userRole === UserRole.MASTER_ADMIN ||
+                scope.userRole === UserRole.OWNER;
+
             const userScope = {
                 orgId: scope.orgId,
-                branchId: scope.branchId || createUserDto.branchId,
+                branchId: canAssignAnyBranch
+                    ? createUserDto.branchId || scope.branchId
+                    : scope.branchId || createUserDto.branchId,
                 userId: scope.userId,
                 userRole: scope.userRole,
             };
@@ -214,7 +219,7 @@ export class UserController {
     }
 
     @Get('admin/all')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '📋 Get All Users (Admin)',
         description: `
@@ -369,7 +374,7 @@ export class UserController {
     }
 
     @Get('admin/:id')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '👤 Get User by ID (Admin)',
         description: `
@@ -468,7 +473,7 @@ export class UserController {
     }
 
     @Put('admin/:id')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '✏️ Update User by ID (Admin)',
         description: `
@@ -541,7 +546,7 @@ export class UserController {
     }
 
     @Delete('admin/:id')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '🗑️ Delete User by ID (Admin)',
         description: `
@@ -1300,7 +1305,7 @@ export class UserController {
     }
 
     @Get('admin/deleted')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '📋 Get Deleted Users (Admin)',
         description: `
@@ -1409,7 +1414,7 @@ export class UserController {
     }
 
     @Patch('admin/restore/:userId')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '♻️ Restore User by ID (Admin)',
         description: `
@@ -1553,7 +1558,7 @@ export class UserController {
     }
 
     @Post('admin/re-invite-all')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '📧 Re-invite All Users (Admin)',
         description: `
@@ -1671,7 +1676,7 @@ export class UserController {
     }
 
     @Post('admin/:userId/re-invite')
-    @Roles(UserRole.ADMIN)
+    @Roles(UserRole.ADMIN, UserRole.OWNER)
     @ApiOperation({
         summary: '📧 Re-invite Individual User (Admin)',
         description: `

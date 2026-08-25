@@ -2,6 +2,7 @@ import {
     Injectable,
     NotFoundException,
     BadRequestException,
+    ForbiddenException,
     Inject,
     Logger,
 } from '@nestjs/common';
@@ -82,10 +83,22 @@ export class UserService {
     ) {}
 
     /**
-     * Helper method to determine if deleted users should be included
+     * Admin/owner/master-admin lists include every account status unless a
+     * specific status filter is requested.
      */
-    private shouldIncludeDeleted(userRole?: string): boolean {
-        return userRole === UserRole.MASTER_ADMIN || userRole === UserRole.ADMIN;
+    private readonly adminListUserStatuses: UserStatus[] = [
+        UserStatus.ACTIVE,
+        UserStatus.INACTIVE,
+        UserStatus.SUSPENDED,
+        UserStatus.DELETED,
+    ];
+
+    private canListAllUserStatuses(userRole?: string): boolean {
+        return (
+            userRole === UserRole.MASTER_ADMIN ||
+            userRole === UserRole.OWNER ||
+            userRole === UserRole.ADMIN
+        );
     }
 
     /**
@@ -248,15 +261,20 @@ export class UserService {
             });
 
             // Generate the exact key format used by findAllWithFilters
-            keysToInvalidate.push(
-                this.CACHE_KEYS.USERS_LIST(`all:${filterKey}`, orgId, branchId),
-            );
-
-            // Also generate global scoped versions
-            if (orgId || branchId) {
+            for (const prefix of ['all', 'all-statuses'] as const) {
                 keysToInvalidate.push(
-                    this.CACHE_KEYS.USERS_LIST(`all:${filterKey}`),
+                    this.CACHE_KEYS.USERS_LIST(
+                        `${prefix}:${filterKey}`,
+                        orgId,
+                        branchId,
+                    ),
                 );
+
+                if (orgId || branchId) {
+                    keysToInvalidate.push(
+                        this.CACHE_KEYS.USERS_LIST(`${prefix}:${filterKey}`),
+                    );
+                }
             }
         }
 
@@ -513,7 +531,8 @@ export class UserService {
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { avatar, password, branchId, ...userData } = createUserDto;
+            const { avatar, password, branchId, status, ...userData } =
+                createUserDto;
             const userToCreate: Partial<User> = { ...userData };
 
             // Hash password before saving
@@ -526,12 +545,69 @@ export class UserService {
                 userToCreate.avatar = { id: avatar } as MediaFile;
             }
 
-            // Set organization and branch from scope if available
-            if (scope?.orgId) {
-                userToCreate.orgId = { id: scope.orgId } as Organization;
+            // Only Master Admin and Owner may set initial status (active/inactive).
+            if (status !== undefined) {
+                if (!this.canManageUserStatus(scope?.userRole)) {
+                    throw new ForbiddenException(
+                        'Only Master Admin or Owner can set user status',
+                    );
+                }
+                if (
+                    status !== UserStatus.ACTIVE &&
+                    status !== UserStatus.INACTIVE
+                ) {
+                    throw new BadRequestException(
+                        'Status can only be set to active or inactive on create',
+                    );
+                }
+                userToCreate.status = status;
             }
-            if (scope?.branchId) {
-                userToCreate.branchId = { id: scope.branchId } as Branch;
+
+            const effectiveBranchId = scope?.branchId;
+            if (effectiveBranchId) {
+                const branchRepo =
+                    this.userRepository.manager.getRepository(Branch);
+                const branch = await branchRepo.findOne({
+                    where: { id: effectiveBranchId },
+                    relations: ['organization'],
+                });
+
+                if (!branch) {
+                    throw new NotFoundException(
+                        `Branch with ID ${effectiveBranchId} not found`,
+                    );
+                }
+
+                // Generic admins may only create users in their own branch.
+                if (
+                    scope?.userRole === UserRole.ADMIN &&
+                    scope.branchId &&
+                    branchId &&
+                    branchId !== scope.branchId
+                ) {
+                    throw new ForbiddenException(
+                        'Admins can only assign users to their own branch',
+                    );
+                }
+
+                if (
+                    scope?.orgId &&
+                    scope.userRole !== UserRole.MASTER_ADMIN &&
+                    branch.organization?.id !== scope.orgId
+                ) {
+                    throw new BadRequestException(
+                        `Branch ${effectiveBranchId} does not belong to the specified organization`,
+                    );
+                }
+
+                userToCreate.branchId = { id: effectiveBranchId } as Branch;
+                if (branch.organization) {
+                    userToCreate.orgId = {
+                        id: branch.organization.id,
+                    } as Organization;
+                }
+            } else if (scope?.orgId) {
+                userToCreate.orgId = { id: scope.orgId } as Organization;
             }
 
             const user = this.userRepository.create(userToCreate);
@@ -572,6 +648,13 @@ export class UserService {
     /**
      * Load avatar variants for a user
      */
+    /** Master Admin and Owner may assign any org branch and set active/inactive status. */
+    private canManageUserStatus(userRole?: string): boolean {
+        return (
+            userRole === UserRole.MASTER_ADMIN || userRole === UserRole.OWNER
+        );
+    }
+
     private async loadAvatarVariants(user: User): Promise<User> {
         if (user.avatar?.id) {
             try {
@@ -718,10 +801,10 @@ export class UserService {
                 .leftJoinAndSelect('user.branchId', 'branch')
                 .leftJoinAndSelect('user.avatar', 'avatar');
 
-            // Include deleted users only for master_admin/admin roles
-            if (this.shouldIncludeDeleted(scope?.userRole)) {
+            // Admin roles see every status (active, inactive, suspended, deleted).
+            if (this.canListAllUserStatuses(scope?.userRole)) {
                 queryBuilder.where('user.status IN (:...statuses)', {
-                    statuses: [UserStatus.ACTIVE, UserStatus.DELETED],
+                    statuses: this.adminListUserStatuses,
                 });
             } else {
                 queryBuilder.where('user.status = :status', {
@@ -783,7 +866,7 @@ export class UserService {
             // Check cache first
             const cacheKey = this.generateCacheKeyForUsers(
                 filters,
-                'all',
+                'all-statuses',
                 scope?.orgId,
                 scope?.branchId,
             );
@@ -813,20 +896,18 @@ export class UserService {
                 .leftJoinAndSelect('user.branchId', 'branch')
                 .leftJoinAndSelect('user.avatar', 'avatar');
 
-            // Apply where conditions properly - include deleted users for master_admin/admin
-            if (this.shouldIncludeDeleted(scope?.userRole)) {
-                // For master_admin/admin, use the provided status or show all statuses including deleted
+            // Apply where conditions properly - admin roles see every status
+            if (this.canListAllUserStatuses(scope?.userRole)) {
                 if (filters.status) {
                     queryBuilder.where('user.status = :status', {
                         status: filters.status,
                     });
                 } else {
                     queryBuilder.where('user.status IN (:...statuses)', {
-                        statuses: [UserStatus.ACTIVE, UserStatus.DELETED],
+                        statuses: this.adminListUserStatuses,
                     });
                 }
             } else {
-                // For regular users, only show active users
                 queryBuilder.where('user.status = :status', {
                     status: filters.status || UserStatus.ACTIVE,
                 });
@@ -1365,11 +1446,30 @@ export class UserService {
             userRole?: string;
         },
     ): Promise<StandardOperationResponse> {
-        const { avatar, branchId, password, ...updateData } = updateUserDto;
+        const { avatar, branchId, password, status, ...updateData } =
+            updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
         // Admin updates must resolve users the same way as GET /user/admin/:id (any status).
         const existingUser = await this.findUserForAdminUpdate(id, scope);
+
+        // Only Master Admin and Owner may toggle active/inactive status.
+        if (status !== undefined) {
+            if (!this.canManageUserStatus(scope?.userRole)) {
+                throw new ForbiddenException(
+                    'Only Master Admin or Owner can change user status',
+                );
+            }
+            if (
+                status !== UserStatus.ACTIVE &&
+                status !== UserStatus.INACTIVE
+            ) {
+                throw new BadRequestException(
+                    'Status can only be set to active or inactive',
+                );
+            }
+            dataToUpdate.status = status;
+        }
 
         // Convert avatar ID to MediaFile reference if provided
         const previousAvatarId = existingUser.avatar?.id;
@@ -1397,8 +1497,23 @@ export class UserService {
                     );
                 }
 
-                // Validate organization scope if provided
-                if (scope?.orgId && branch.organization?.id !== scope.orgId) {
+                // Branch-scoped admins may only assign their own branch.
+                if (
+                    scope?.userRole === UserRole.ADMIN &&
+                    scope.branchId &&
+                    branchId !== scope.branchId
+                ) {
+                    throw new ForbiddenException(
+                        'Admins can only assign users to their own branch',
+                    );
+                }
+
+                // Validate organization scope (Master Admin may assign cross-org branches).
+                if (
+                    scope?.orgId &&
+                    scope.userRole !== UserRole.MASTER_ADMIN &&
+                    branch.organization?.id !== scope.orgId
+                ) {
                     throw new BadRequestException(
                         `Branch ${branchId} does not belong to the specified organization`,
                     );
