@@ -157,8 +157,15 @@ export class TestAttemptsService {
     /**
      * Whether the caller holds a leadership role.
      *
+     * Elevated roles (admin, owner, master_admin) may:
+     * - read voided attempts
+     * - start and submit tests that are inactive or outside the exam window
+     *   so they can verify questions and the submission flow
+     *
+     * Generic `user` callers never receive this bypass.
+     *
      * @param userRole - Role carried on the request scope.
-     * @returns True when the role may read voided attempts.
+     * @returns True when the role may perform admin testing / reset work.
      */
     private isElevatedRole(userRole?: string): boolean {
         return TestAttemptsService.ELEVATED_ROLES.includes(
@@ -373,17 +380,25 @@ export class TestAttemptsService {
                 );
             }
 
-            if (!test.isActive) {
+            // Admin testing bypass: master_admin, owner, and admin may start a
+            // test even when it is inactive or outside its exam window so they
+            // can verify questions, options, and the submission flow.
+            // Generic `user` callers remain fully gated.
+            const mayBypassAvailability = this.isElevatedRole(scope.userRole);
+
+            if (!test.isActive && !mayBypassAvailability) {
                 throw new BadRequestException('Test is not active');
             }
 
             // Exam window gate (replaces the old single exam-day rule): a new
             // attempt may only begin between examStartDate and examEndDate.
-            if (isExamWindowPending(test)) {
-                throw new BadRequestException(EXAM_WINDOW_NOT_OPEN_MESSAGE);
-            }
-            if (isExamWindowClosed(test)) {
-                throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+            if (!mayBypassAvailability) {
+                if (isExamWindowPending(test)) {
+                    throw new BadRequestException(EXAM_WINDOW_NOT_OPEN_MESSAGE);
+                }
+                if (isExamWindowClosed(test)) {
+                    throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+                }
             }
 
             // Smart attempt detection and cleanup
@@ -762,13 +777,19 @@ export class TestAttemptsService {
             // legitimately started while the window was open is still allowed
             // through, so work in progress at the exact moment the window
             // closes is never silently lost (the attempt timer still applies).
+            // Admin testing bypass: elevated roles may also submit attempts
+            // they started outside the window (inactive / not-yet-open tests)
+            // so verification of questions and scoring can complete.
             if (attempt.test && isExamWindowClosed(attempt.test)) {
                 const startedWhileWindowOpen = !isExamWindowClosed(
                     attempt.test,
                     attempt.startTime,
                 );
 
-                if (!startedWhileWindowOpen) {
+                if (
+                    !startedWhileWindowOpen &&
+                    !this.isElevatedRole(scope.userRole)
+                ) {
                     throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
                 }
             }
@@ -1420,7 +1441,12 @@ export class TestAttemptsService {
                 throw new NotFoundException('Test not found');
             }
 
-            if (!testConfig.isActive) {
+            // Admin testing bypass: elevated roles may validate/start attempts
+            // on inactive tests. Learners cannot.
+            if (
+                !testConfig.isActive &&
+                !this.isElevatedRole(scope.userRole)
+            ) {
                 return {
                     canAttempt: false,
                     reason: 'Test is not active',

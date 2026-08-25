@@ -84,10 +84,15 @@ export class CourseService {
             `org:${orgId || 'global'}:branch:${
                 branchId || 'global'
             }:courses:creator:${userId}:${filters}`,
-        COURSE_STATS: (courseId: number, orgId?: number, branchId?: number) =>
+        COURSE_STATS: (
+            courseId: number,
+            orgId?: number,
+            branchId?: number,
+            audience: 'admin' | 'learner' = 'learner',
+        ) =>
             `org:${orgId || 'global'}:branch:${
                 branchId || 'global'
-            }:course:stats:${courseId}`,
+            }:course:stats:${courseId}:${audience}`,
         COURSE_LIST: (filters: string, orgId?: number, branchId?: number) =>
             `org:${orgId || 'global'}:branch:${
                 branchId || 'global'
@@ -100,10 +105,15 @@ export class CourseService {
             `org:${orgId || 'global'}:branch:${
                 branchId || 'global'
             }:courses:all`,
-        COURSE_DETAIL: (id: number, orgId?: number, branchId?: number) =>
+        COURSE_DETAIL: (
+            id: number,
+            orgId?: number,
+            branchId?: number,
+            audience: 'admin' | 'learner' = 'learner',
+        ) =>
             `org:${orgId || 'global'}:branch:${
                 branchId || 'global'
-            }:course:detail:${id}`,
+            }:course:detail:${id}:${audience}`,
         COURSE_TESTS_COUNT: (
             courseId: number,
             orgId?: number,
@@ -191,10 +201,15 @@ export class CourseService {
     ): Promise<void> {
         const keysToDelete = [
             this.CACHE_KEYS.COURSE_BY_ID(courseId, orgId, branchId),
-            this.CACHE_KEYS.COURSE_DETAIL(courseId, orgId, branchId),
-            this.CACHE_KEYS.COURSE_STATS(courseId, orgId, branchId),
+            this.CACHE_KEYS.COURSE_DETAIL(courseId, orgId, branchId, 'admin'),
+            this.CACHE_KEYS.COURSE_DETAIL(courseId, orgId, branchId, 'learner'),
+            this.CACHE_KEYS.COURSE_STATS(courseId, orgId, branchId, 'admin'),
+            this.CACHE_KEYS.COURSE_STATS(courseId, orgId, branchId, 'learner'),
             this.CACHE_KEYS.COURSE_TESTS_COUNT(courseId, orgId, branchId),
             this.CACHE_KEYS.COURSE_STUDENTS_COUNT(courseId, orgId, branchId),
+            // Legacy keys without audience (pre-admin-bypass cache format).
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:course:detail:${courseId}`,
+            `org:${orgId || 'global'}:branch:${branchId || 'global'}:course:stats:${courseId}`,
         ];
 
         if (userId) {
@@ -482,7 +497,8 @@ export class CourseService {
     }
 
     /**
-     * Leadership roles that may list/manage every course status.
+     * Leadership roles that may list/manage every course status and open
+     * inactive/draft courses (including nested materials and tests).
      * Regular `user` callers only receive active courses.
      */
     private isAdminScope(scope?: OrgBranchScope): boolean {
@@ -824,11 +840,15 @@ export class CourseService {
         locale: string = DEFAULT_LOCALE,
     ): Promise<CourseDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
-            // Check cache first
+            const audience = this.isAdminScope(scope) ? 'admin' : 'learner';
+
+            // Check cache first. Audience is part of the key so a learner can
+            // never be served an inactive-course payload cached by an admin.
             const cacheKey = this.CACHE_KEYS.COURSE_DETAIL(
                 id,
                 scope?.orgId ? Number(scope.orgId) : undefined,
                 scope?.branchId ? Number(scope.branchId) : undefined,
+                audience,
             );
 
             try {
@@ -886,7 +906,8 @@ export class CourseService {
             query.leftJoinAndSelect('trainingProgress.user', 'progressUser');
             query.where('course.courseId = :id', { id });
 
-            // Learners may only open active courses; admins can open any status to edit.
+            // Learners may only open active courses; admins can open inactive
+            // and draft courses to review materials and linked tests.
             if (!this.isAdminScope(scope)) {
                 query.andWhere('course.status = :status', {
                     status: CourseStatus.ACTIVE,
@@ -928,8 +949,9 @@ export class CourseService {
                 branchId: course.branchId?.id,
             });
 
-            // Get statistics with caching
-            const stats = await this.getStats(id);
+            // Get statistics with caching. Pass scope so admin viewers of
+            // inactive/draft courses are not 404'd by the learner-only ACTIVE gate.
+            const stats = await this.getStats(id, scope);
 
             // Calculate user-specific progress if userId is provided
             let userProgress: {
@@ -962,8 +984,11 @@ export class CourseService {
                         this.mapCourseMaterialToResponseDto(material),
                     ),
                 ),
+                // Learners only receive active tests. Admins viewing an inactive
+                // course still need every linked test (including inactive ones)
+                // so they can review materials and start verification attempts.
                 tests: (course.tests || [])
-                    .filter(test => test.isActive)
+                    .filter(test => this.isAdminScope(scope) || test.isActive)
                     .map(test => ({
                         ...test,
                         questionCount: test.questions?.length || 0,
@@ -1223,11 +1248,14 @@ export class CourseService {
         scope?: OrgBranchScope,
     ): Promise<CourseStatsDto> {
         return this.retryService.executeDatabase(async () => {
+            const audience = this.isAdminScope(scope) ? 'admin' : 'learner';
+
             // Check cache first
             const cacheKey = this.CACHE_KEYS.COURSE_STATS(
                 id,
                 scope?.orgId ? Number(scope.orgId) : undefined,
                 scope?.branchId ? Number(scope.branchId) : undefined,
+                audience,
             );
 
             try {
@@ -1249,12 +1277,25 @@ export class CourseService {
 
             // Check if course exists without calling findOne to avoid circular dependency.
             // Method 1: stats must include org-wide (NULL branchId) courses for branch users.
+            // Learners may only resolve ACTIVE courses. Admin/owner/master_admin may
+            // resolve inactive/draft courses so "View Course" on a paused course
+            // does not 404 after the detail query already found the row.
             const courseExistsQuery = this.courseRepository
                 .createQueryBuilder('course')
-                .where('course.courseId = :id', { id })
-                .andWhere('course.status = :status', {
+                .where('course.courseId = :id', { id });
+            if (!this.isAdminScope(scope)) {
+                courseExistsQuery.andWhere('course.status = :status', {
                     status: CourseStatus.ACTIVE,
                 });
+            } else {
+                courseExistsQuery.andWhere('course.status IN (:...statuses)', {
+                    statuses: [
+                        CourseStatus.ACTIVE,
+                        CourseStatus.INACTIVE,
+                        CourseStatus.DRAFT,
+                    ],
+                });
+            }
             if (scope?.orgId) {
                 courseExistsQuery.andWhere('course.orgId = :orgId', {
                     orgId: scope.orgId,

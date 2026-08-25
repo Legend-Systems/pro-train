@@ -484,9 +484,17 @@ export class TestService {
 
             // Learners only see tests whose exam window is currently open, so a
             // test disappears from their lists once examEndDate has passed.
-            // Admins keep full visibility in order to manage schedules.
+            // They also never receive inactive tests unless they explicitly
+            // filtered for them (which learner clients do not).
+            // Admins keep full visibility in order to manage schedules and
+            // start verification attempts on inactive / not-yet-open tests.
             if (this.isLearnerScope(scope)) {
                 applyOpenExamWindowFilter(query, 'test');
+                if (isActive === undefined) {
+                    query.andWhere('test.isActive = :learnerActive', {
+                        learnerActive: true,
+                    });
+                }
             }
 
             // Add sorting
@@ -771,12 +779,14 @@ export class TestService {
                 );
             }
 
-            // Learners cannot open a test outside its exam window, so the
-            // detail view 404s the same way the listing hides it.
+            // Learners cannot open a test that is inactive or outside its exam
+            // window, so the detail view 404s the same way the listing hides it.
+            // Admin/owner/master_admin keep access so they can review and start
+            // verification attempts before the window opens.
             if (
                 scope &&
                 this.isLearnerScope(scope) &&
-                !isExamWindowOpen(test)
+                (!test.isActive || !isExamWindowOpen(test))
             ) {
                 return null;
             }
