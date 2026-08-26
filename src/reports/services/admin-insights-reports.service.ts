@@ -37,6 +37,12 @@ import {
     AdminReportTimeframe,
     AdminSkillGapDto,
     AdminTestCompletionSummaryDto,
+    AdminAttemptResultItemDto,
+    AdminAttemptsResultsBreakdownReportDto,
+    AdminImprovementTrend,
+    AdminIncompleteAttemptItemDto,
+    AdminLearnerAttemptsBreakdownDto,
+    AdminLearnerTestBreakdownDto,
     AdminTestPassFailDto,
     AdminTestsNotCompletedReportDto,
     AdminTestsNotCompletedUserDto,
@@ -74,6 +80,15 @@ const AT_RISK_MAX_RESULTS = 2;
 /** Hard ceiling on full-org ranking rows so a PDF stays deliverable by email. */
 const MAX_RANKING_ROWS = 1000;
 
+/** Score-delta threshold (percentage points) used to label improving/declining. */
+const TREND_DELTA_THRESHOLD = 5;
+
+/** Milliseconds in one hour for span metrics. */
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+/** Hard ceiling so a dense breakdown stays deliverable by email. */
+const MAX_BREAKDOWN_LEARNERS = 500;
+
 /** Learners celebrated per branch in the leaderboard report. */
 const BRANCH_TOP_PERFORMER_COUNT = 3;
 
@@ -102,6 +117,63 @@ interface RelevantReportTest {
 
 /** Best attempt outcome for a learner+test as of month-end. */
 type AttemptOutcome = 'submitted' | 'incomplete' | 'none';
+
+/** Graded result row used while assembling the attempts/results breakdown. */
+interface BreakdownResultRow {
+    readonly resultId: number;
+    readonly attemptId: number;
+    readonly attemptNumber: number;
+    readonly userId: string;
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly branchName: string | null;
+    readonly testId: number;
+    readonly testTitle: string;
+    readonly courseTitle: string | null;
+    readonly score: number;
+    readonly maxScore: number;
+    readonly percentage: number;
+    readonly passed: boolean;
+    readonly submittedAt: Date;
+}
+
+/** Attempt row used while assembling the attempts/results breakdown. */
+interface BreakdownAttemptRow {
+    readonly attemptId: number;
+    readonly attemptNumber: number;
+    readonly userId: string;
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly branchName: string | null;
+    readonly testId: number;
+    readonly testTitle: string;
+    readonly courseTitle: string | null;
+    readonly status: AttemptStatus;
+    readonly startTime: Date;
+    readonly submitTime: Date | null;
+    readonly progressPercentage: number;
+}
+
+/** Per-test accumulator used while grouping breakdown rows. */
+interface BreakdownTestBucket {
+    testId: number;
+    testTitle: string;
+    courseTitle: string | null;
+    results: AdminAttemptResultItemDto[];
+    incompleteAttempts: AdminIncompleteAttemptItemDto[];
+    attemptIds: Set<number>;
+}
+
+/** Per-learner accumulator used while grouping breakdown rows. */
+interface BreakdownLearnerBucket {
+    profile: {
+        userId: string;
+        firstName: string;
+        lastName: string;
+        branchName: string | null;
+    };
+    tests: Map<number, BreakdownTestBucket>;
+}
 
 /**
  * Org-scoped admin reporting catalogue for owner / admin / master_admin.
@@ -711,6 +783,36 @@ export class AdminInsightsReportsService {
             monthLabel: this.formatMonthLabel(yearMonth),
             usersWithNoAttempts,
             usersWithIncompleteAttempts,
+        };
+    }
+
+    /**
+     * Full per-learner, per-test attempt and result history for the window.
+     *
+     * Unlike leaderboard slices (best/final score only), every non-voided
+     * graded result is returned so retries and earlier failures stay visible.
+     * Learners with no attempts and no results in the window are omitted.
+     */
+    async getAttemptsResultsBreakdown(
+        scope: OrgBranchScope,
+        filters: AdminReportFiltersDto = {},
+    ): Promise<AdminAttemptsResultsBreakdownReportDto> {
+        const orgId = this.requireOrg(scope);
+        const window = this.resolveWindow(filters);
+        const [resultRows, attemptRows] = await Promise.all([
+            this.fetchBreakdownResultRows(orgId, filters.branchId, window),
+            this.fetchBreakdownAttemptRows(orgId, filters.branchId, window),
+        ]);
+
+        const learners = this.assembleAttemptsResultsBreakdown(
+            resultRows,
+            attemptRows,
+        );
+
+        return {
+            timeframe: window.label,
+            learnerCount: learners.length,
+            learners,
         };
     }
 
@@ -1827,6 +1929,444 @@ export class AdminInsightsReportsService {
             averageScore: Number(row.averageScore) || 0,
             resultsCount: Number(row.resultsCount) || 0,
         }));
+    }
+
+    /**
+     * Graded, non-voided results in the window for active learners.
+     * Joins attempt number, test title, course, and the learner's branch.
+     */
+    private async fetchBreakdownResultRows(
+        orgId: string,
+        branchId: string | undefined,
+        window: DateWindow,
+    ): Promise<BreakdownResultRow[]> {
+        const query = this.buildScopedResultsQuery(orgId, branchId)
+            .innerJoin('result.user', 'user')
+            .leftJoin('user.branchId', 'userBranch')
+            .leftJoin('result.test', 'test')
+            .leftJoin('result.course', 'course')
+            .leftJoin('result.attempt', 'attempt')
+            .andWhere('result.voidedByResetId IS NULL')
+            .andWhere('result.calculatedAt >= :start', { start: window.start })
+            .andWhere('result.calculatedAt < :end', { end: window.end })
+            .andWhere('user.role = :learnerRole', {
+                learnerRole: UserRole.USER,
+            })
+            .select('result.resultId', 'resultId')
+            .addSelect('result.attemptId', 'attemptId')
+            .addSelect('attempt.attemptNumber', 'attemptNumber')
+            .addSelect('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('userBranch.name', 'branchName')
+            .addSelect('result.testId', 'testId')
+            .addSelect('test.title', 'testTitle')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect('result.score', 'score')
+            .addSelect('result.maxScore', 'maxScore')
+            .addSelect('result.percentage', 'percentage')
+            .addSelect('result.passed', 'passed')
+            .addSelect('result.calculatedAt', 'submittedAt')
+            .orderBy('user.lastName', 'ASC')
+            .addOrderBy('user.firstName', 'ASC')
+            .addOrderBy('test.title', 'ASC')
+            .addOrderBy('result.calculatedAt', 'ASC');
+
+        const rows = await query.getRawMany<{
+            resultId: number | string;
+            attemptId: number | string;
+            attemptNumber: number | string | null;
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+            testId: number | string;
+            testTitle: string | null;
+            courseTitle: string | null;
+            score: string;
+            maxScore: string;
+            percentage: string;
+            passed: number | boolean | string;
+            submittedAt: Date | string;
+        }>();
+
+        return rows.map(row => ({
+            resultId: Number(row.resultId),
+            attemptId: Number(row.attemptId),
+            attemptNumber: Number(row.attemptNumber) || 0,
+            userId: row.userId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            branchName: row.branchName ?? null,
+            testId: Number(row.testId),
+            testTitle: row.testTitle ?? 'Untitled test',
+            courseTitle: row.courseTitle ?? null,
+            score: Number(row.score) || 0,
+            maxScore: Number(row.maxScore) || 0,
+            percentage: Number(row.percentage) || 0,
+            passed: row.passed === true || row.passed === 1 || row.passed === '1',
+            submittedAt:
+                row.submittedAt instanceof Date
+                    ? row.submittedAt
+                    : new Date(row.submittedAt),
+        }));
+    }
+
+    /**
+     * Non-voided, non-cancelled attempts that started or were submitted in the
+     * window. Incomplete rows (`in_progress` / `expired`) distinguish started
+     * tests from graded results.
+     */
+    private async fetchBreakdownAttemptRows(
+        orgId: string,
+        branchId: string | undefined,
+        window: DateWindow,
+    ): Promise<BreakdownAttemptRow[]> {
+        const query = this.testAttemptRepository
+            .createQueryBuilder('attempt')
+            .leftJoin('attempt.orgId', 'org')
+            .innerJoin('attempt.user', 'user')
+            .leftJoin('user.branchId', 'userBranch')
+            .leftJoin('attempt.test', 'test')
+            .leftJoin('test.course', 'course')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('attempt.voidedByResetId IS NULL')
+            .andWhere('attempt.status != :cancelledStatus', {
+                cancelledStatus: AttemptStatus.CANCELLED,
+            })
+            .andWhere(
+                '((attempt.startTime >= :start AND attempt.startTime < :end) OR (attempt.submitTime IS NOT NULL AND attempt.submitTime >= :start AND attempt.submitTime < :end))',
+                { start: window.start, end: window.end },
+            )
+            .andWhere('user.role = :learnerRole', {
+                learnerRole: UserRole.USER,
+            })
+            .select('attempt.attemptId', 'attemptId')
+            .addSelect('attempt.attemptNumber', 'attemptNumber')
+            .addSelect('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('userBranch.name', 'branchName')
+            .addSelect('attempt.testId', 'testId')
+            .addSelect('test.title', 'testTitle')
+            .addSelect('course.title', 'courseTitle')
+            .addSelect('attempt.status', 'status')
+            .addSelect('attempt.startTime', 'startTime')
+            .addSelect('attempt.submitTime', 'submitTime')
+            .addSelect('attempt.progressPercentage', 'progressPercentage');
+
+        if (branchId) {
+            query
+                .leftJoin('attempt.branchId', 'filterBranch')
+                .andWhere('filterBranch.id = :branchId', { branchId });
+        }
+
+        const rows = await query.getRawMany<{
+            attemptId: number | string;
+            attemptNumber: number | string;
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchName: string | null;
+            testId: number | string;
+            testTitle: string | null;
+            courseTitle: string | null;
+            status: AttemptStatus;
+            startTime: Date | string;
+            submitTime: Date | string | null;
+            progressPercentage: string;
+        }>();
+
+        return rows.map(row => ({
+            attemptId: Number(row.attemptId),
+            attemptNumber: Number(row.attemptNumber) || 0,
+            userId: row.userId,
+            firstName: row.firstName,
+            lastName: row.lastName,
+            branchName: row.branchName ?? null,
+            testId: Number(row.testId),
+            testTitle: row.testTitle ?? 'Untitled test',
+            courseTitle: row.courseTitle ?? null,
+            status: row.status,
+            startTime:
+                row.startTime instanceof Date
+                    ? row.startTime
+                    : new Date(row.startTime),
+            submitTime: row.submitTime
+                ? row.submitTime instanceof Date
+                    ? row.submitTime
+                    : new Date(row.submitTime)
+                : null,
+            progressPercentage: Number(row.progressPercentage) || 0,
+        }));
+    }
+
+    /**
+     * Groups result and attempt rows by learner, then by test, and computes
+     * summary metrics. Empty learners never appear in the output.
+     */
+    private assembleAttemptsResultsBreakdown(
+        resultRows: readonly BreakdownResultRow[],
+        attemptRows: readonly BreakdownAttemptRow[],
+    ): AdminLearnerAttemptsBreakdownDto[] {
+        const learners = new Map<string, BreakdownLearnerBucket>();
+
+        const ensureLearner = (
+            userId: string,
+            firstName: string,
+            lastName: string,
+            branchName: string | null,
+        ): BreakdownLearnerBucket => {
+            const existing = learners.get(userId);
+            if (existing) {
+                return existing;
+            }
+            const created: BreakdownLearnerBucket = {
+                profile: { userId, firstName, lastName, branchName },
+                tests: new Map<number, BreakdownTestBucket>(),
+            };
+            learners.set(userId, created);
+            return created;
+        };
+
+        const ensureTest = (
+            learner: BreakdownLearnerBucket,
+            testId: number,
+            testTitle: string,
+            courseTitle: string | null,
+        ): BreakdownTestBucket => {
+            const existing = learner.tests.get(testId);
+            if (existing) {
+                return existing;
+            }
+            const created: BreakdownTestBucket = {
+                testId,
+                testTitle,
+                courseTitle,
+                results: [],
+                incompleteAttempts: [],
+                attemptIds: new Set<number>(),
+            };
+            learner.tests.set(testId, created);
+            return created;
+        };
+
+        for (const row of resultRows) {
+            const learner = ensureLearner(
+                row.userId,
+                row.firstName,
+                row.lastName,
+                row.branchName,
+            );
+            const test = ensureTest(
+                learner,
+                row.testId,
+                row.testTitle,
+                row.courseTitle,
+            );
+            test.attemptIds.add(row.attemptId);
+            test.results.push({
+                resultId: row.resultId,
+                attemptId: row.attemptId,
+                attemptNumber: row.attemptNumber,
+                score: this.round(row.score),
+                maxScore: this.round(row.maxScore),
+                percentage: this.round(row.percentage),
+                passed: row.passed,
+                submittedAt: row.submittedAt,
+            });
+        }
+
+        const resultAttemptIds = new Set(
+            resultRows.map(row => row.attemptId),
+        );
+
+        for (const row of attemptRows) {
+            const learner = ensureLearner(
+                row.userId,
+                row.firstName,
+                row.lastName,
+                row.branchName,
+            );
+            const test = ensureTest(
+                learner,
+                row.testId,
+                row.testTitle,
+                row.courseTitle,
+            );
+            test.attemptIds.add(row.attemptId);
+            if (resultAttemptIds.has(row.attemptId)) {
+                continue;
+            }
+            if (
+                row.status !== AttemptStatus.IN_PROGRESS &&
+                row.status !== AttemptStatus.EXPIRED
+            ) {
+                continue;
+            }
+            test.incompleteAttempts.push({
+                attemptId: row.attemptId,
+                attemptNumber: row.attemptNumber,
+                status:
+                    row.status === AttemptStatus.EXPIRED
+                        ? 'expired'
+                        : 'in_progress',
+                startTime: row.startTime,
+                submitTime: row.submitTime,
+                progressPercentage: this.round(row.progressPercentage),
+            });
+        }
+
+        const mapped = Array.from(learners.values())
+            .map(learner => this.mapLearnerBreakdown(learner))
+            .filter(
+                learner =>
+                    learner.totalAttempts > 0 || learner.totalResults > 0,
+            )
+            .sort((a, b) => {
+                const last = a.lastName.localeCompare(b.lastName);
+                if (last !== 0) {
+                    return last;
+                }
+                return a.firstName.localeCompare(b.firstName);
+            });
+
+        return mapped.slice(0, MAX_BREAKDOWN_LEARNERS);
+    }
+
+    private mapLearnerBreakdown(
+        learner: BreakdownLearnerBucket,
+    ): AdminLearnerAttemptsBreakdownDto {
+        const tests = Array.from(learner.tests.values())
+            .map(test => this.mapTestBreakdown(test))
+            .sort((a, b) => a.testTitle.localeCompare(b.testTitle));
+
+        const totalResults = tests.reduce(
+            (sum, test) => sum + test.totalResults,
+            0,
+        );
+        const passedCount = tests.reduce(
+            (sum, test) => sum + test.passedCount,
+            0,
+        );
+        const failedCount = tests.reduce(
+            (sum, test) => sum + test.failedCount,
+            0,
+        );
+        const totalAttempts = tests.reduce(
+            (sum, test) => sum + test.totalAttempts,
+            0,
+        );
+        const scoreSum = tests.reduce(
+            (sum, test) =>
+                sum + test.averageScore * test.totalResults,
+            0,
+        );
+
+        return {
+            userId: learner.profile.userId,
+            firstName: learner.profile.firstName,
+            lastName: learner.profile.lastName,
+            branchName: learner.profile.branchName,
+            testsParticipated: tests.length,
+            totalAttempts,
+            totalResults,
+            passedCount,
+            failedCount,
+            overallPassRate:
+                totalResults > 0
+                    ? this.round((passedCount / totalResults) * 100)
+                    : 0,
+            overallAverageScore:
+                totalResults > 0 ? this.round(scoreSum / totalResults) : 0,
+            tests,
+        };
+    }
+
+    private mapTestBreakdown(
+        test: BreakdownTestBucket,
+    ): AdminLearnerTestBreakdownDto {
+        const results = [...test.results].sort((a, b) => {
+            return (
+                this.toTimestamp(a.submittedAt) - this.toTimestamp(b.submittedAt)
+            );
+        });
+        const incompleteAttempts = [...test.incompleteAttempts].sort(
+            (a, b) => this.toTimestamp(a.startTime) - this.toTimestamp(b.startTime),
+        );
+        const passedCount = results.filter(result => result.passed).length;
+        const failedCount = results.length - passedCount;
+        const percentages = results.map(result => result.percentage);
+        const firstScore = percentages[0] ?? null;
+        const lastScore = percentages[percentages.length - 1] ?? null;
+        const scoreDelta =
+            firstScore !== null && lastScore !== null
+                ? this.round(lastScore - firstScore)
+                : null;
+        const firstPassIndex = results.findIndex(result => result.passed);
+        const timestamps = [
+            ...results.map(result => this.toTimestamp(result.submittedAt)),
+            ...incompleteAttempts.map(attempt =>
+                this.toTimestamp(attempt.startTime),
+            ),
+        ];
+        const hoursBetweenFirstAndLast =
+            timestamps.length >= 2
+                ? this.round(
+                      (Math.max(...timestamps) - Math.min(...timestamps)) /
+                          MS_PER_HOUR,
+                  )
+                : null;
+
+        return {
+            testId: test.testId,
+            testTitle: test.testTitle,
+            courseTitle: test.courseTitle,
+            totalAttempts: test.attemptIds.size,
+            totalResults: results.length,
+            passedCount,
+            failedCount,
+            averageScore:
+                results.length > 0
+                    ? this.round(
+                          percentages.reduce((sum, value) => sum + value, 0) /
+                              results.length,
+                      )
+                    : 0,
+            bestScore:
+                percentages.length > 0 ? this.round(Math.max(...percentages)) : null,
+            worstScore:
+                percentages.length > 0 ? this.round(Math.min(...percentages)) : null,
+            firstScore,
+            lastScore,
+            scoreDelta,
+            attemptsToPass: firstPassIndex >= 0 ? firstPassIndex + 1 : null,
+            improvementTrend: this.resolveImprovementTrend(scoreDelta, results.length),
+            hoursBetweenFirstAndLast,
+            results,
+            incompleteAttempts,
+        };
+    }
+
+    private resolveImprovementTrend(
+        scoreDelta: number | null,
+        resultsCount: number,
+    ): AdminImprovementTrend {
+        if (resultsCount < 2 || scoreDelta === null) {
+            return 'insufficient_data';
+        }
+        if (scoreDelta >= TREND_DELTA_THRESHOLD) {
+            return 'improving';
+        }
+        if (scoreDelta <= -TREND_DELTA_THRESHOLD) {
+            return 'declining';
+        }
+        return 'stable';
+    }
+
+    private toTimestamp(value: Date | string): number {
+        const date = value instanceof Date ? value : new Date(value);
+        return date.getTime();
     }
 
     private buildScopedResultsQuery(

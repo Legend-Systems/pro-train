@@ -121,7 +121,9 @@ export class TestResponseDto {
 }
 
 /**
- * Detailed test response DTO with comprehensive information
+ * Detailed test response DTO with comprehensive information.
+ * Attempt history and per-user results are not embedded — use
+ * GET /test-attempts/test/:id and GET /tests/:id/stats instead.
  */
 export class TestDetailDto extends TestResponseDto {
     @ApiProperty({

@@ -36,6 +36,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { UserRole } from '../../user/entities/user.entity';
 import { StandardApiResponse } from '../../user/dto/common-response.dto';
 import {
+    AdminAttemptsResultsBreakdownReportDto,
     AdminAtRiskUserDto,
     AdminBranchComparisonDto,
     AdminChallengingQuestionDto,
@@ -278,6 +279,32 @@ export class AdminReportsController {
             filters,
         );
         return this.ok('Tests not completed retrieved successfully', data);
+    }
+
+    @Get('attempts-results-breakdown')
+    @ApiOperation({
+        summary: 'Per-learner, per-test attempts and results breakdown',
+        description:
+            'Every graded result (score, pass/fail, date/time) grouped by learner and test, plus incomplete attempts. Only learners with at least one attempt or result in the window are returned. High scores no longer hide earlier failures.',
+    })
+    @ApiOkResponse({ type: AdminAttemptsResultsBreakdownReportDto })
+    @ApiQuery({ name: 'branchId', required: false })
+    @ApiQuery({ name: 'timeframe', required: false, enum: ['week', 'month'] })
+    @ApiQuery({ name: 'startDate', required: false })
+    @ApiQuery({ name: 'endDate', required: false })
+    async getAttemptsResultsBreakdown(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query() filters: AdminReportFiltersDto,
+    ): Promise<StandardApiResponse<AdminAttemptsResultsBreakdownReportDto>> {
+        const data =
+            await this.adminInsightsReportsService.getAttemptsResultsBreakdown(
+                scope,
+                filters,
+            );
+        return this.ok(
+            'Test attempts and results breakdown retrieved successfully',
+            data,
+        );
     }
 
     @Get('branch-comparison')

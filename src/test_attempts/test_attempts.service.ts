@@ -1317,11 +1317,10 @@ export class TestAttemptsService {
         }
 
         const result = await this.retryService.executeDatabase(async () => {
-            // Verify test exists and is accessible
-            const test = await this.testService.findOne(testId, scope);
-            if (!test) {
-                throw new NotFoundException('Test not found');
-            }
+            // Cheap PK + access check — do not call TestService.findOne() here.
+            // findOne loads questions/options and used to join every attempt/result,
+            // which timed out (read ETIMEDOUT) when listing attempts for a busy test.
+            await this.testService.ensureTestAccessible(testId, scope);
 
             // Clean up expired attempts before retrieving data
             await this.cleanupExpiredAttemptsForTest(testId, scope);

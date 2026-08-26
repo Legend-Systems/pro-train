@@ -53,6 +53,11 @@ export enum ReportSection {
      * never started, or started and left `in_progress` / `expired`.
      */
     TESTS_NOT_COMPLETED = 'tests-not-completed',
+    /**
+     * Full per-learner, per-test history of every graded result and any
+     * incomplete attempt. Surfaces retries that a high-score-only view hides.
+     */
+    TEST_ATTEMPTS_RESULTS_BREAKDOWN = 'test-attempts-results-breakdown',
 }
 
 /** Every selectable section, in presentation order. */
@@ -73,6 +78,7 @@ export const SENSITIVE_REPORT_SECTIONS: readonly ReportSection[] = [
     ReportSection.KPI_AT_RISK_USERS,
     ReportSection.KPI_KEY_AREAS,
     ReportSection.TESTS_NOT_COMPLETED,
+    ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN,
 ];
 
 /** Default content for the leaderboard preset (celebratory sections only). */
@@ -196,4 +202,14 @@ export function requiresTestsNotCompleted(
     sections: readonly ReportSection[],
 ): boolean {
     return sections.includes(ReportSection.TESTS_NOT_COMPLETED);
+}
+
+/**
+ * True when the per-learner, per-test attempts/results breakdown must be loaded.
+ * Diagnostic-only: never included in leaderboard presets.
+ */
+export function requiresAttemptsResultsBreakdown(
+    sections: readonly ReportSection[],
+): boolean {
+    return sections.includes(ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN);
 }

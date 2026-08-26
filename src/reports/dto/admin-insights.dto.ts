@@ -405,6 +405,196 @@ export class AdminTestsNotCompletedReportDto {
     usersWithIncompleteAttempts: AdminTestsNotCompletedUserDto[];
 }
 
+/**
+ * Score movement across a learner's results for one test.
+ * `insufficient_data` means fewer than two graded results.
+ */
+export type AdminImprovementTrend =
+    | 'improving'
+    | 'declining'
+    | 'stable'
+    | 'insufficient_data';
+
+/** One graded result for a learner on a single test. */
+export class AdminAttemptResultItemDto {
+    @ApiProperty()
+    resultId: number;
+
+    @ApiProperty()
+    attemptId: number;
+
+    @ApiProperty({ description: '1-based attempt number for this user+test' })
+    attemptNumber: number;
+
+    @ApiProperty({ description: 'Raw points scored' })
+    score: number;
+
+    @ApiProperty()
+    maxScore: number;
+
+    @ApiProperty({ description: 'Score as a percentage of max (0–100)' })
+    percentage: number;
+
+    @ApiProperty({ description: 'True when percentage meets the org pass mark' })
+    passed: boolean;
+
+    @ApiProperty({ description: 'When the result was calculated (submit time)' })
+    submittedAt: Date;
+}
+
+/**
+ * An attempt that was started but never produced a result in this window
+ * (`in_progress` or `expired`). Cancelled and voided attempts are omitted.
+ */
+export class AdminIncompleteAttemptItemDto {
+    @ApiProperty()
+    attemptId: number;
+
+    @ApiProperty()
+    attemptNumber: number;
+
+    @ApiProperty({ enum: ['in_progress', 'expired'] })
+    status: 'in_progress' | 'expired';
+
+    @ApiProperty()
+    startTime: Date;
+
+    @ApiPropertyOptional({ nullable: true })
+    submitTime: Date | null;
+
+    @ApiProperty()
+    progressPercentage: number;
+}
+
+/**
+ * One test inside a learner's breakdown: counts, extra insight metrics,
+ * then the individual result and incomplete-attempt rows.
+ */
+export class AdminLearnerTestBreakdownDto {
+    @ApiProperty()
+    testId: number;
+
+    @ApiProperty()
+    testTitle: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    courseTitle: string | null;
+
+    @ApiProperty({ description: 'Non-cancelled, non-voided attempts in the window' })
+    totalAttempts: number;
+
+    @ApiProperty({ description: 'Graded results in the window' })
+    totalResults: number;
+
+    @ApiProperty()
+    passedCount: number;
+
+    @ApiProperty()
+    failedCount: number;
+
+    @ApiProperty({ description: 'Mean percentage across all results (pass + fail)' })
+    averageScore: number;
+
+    @ApiPropertyOptional({ nullable: true })
+    bestScore: number | null;
+
+    @ApiPropertyOptional({ nullable: true })
+    worstScore: number | null;
+
+    @ApiPropertyOptional({ nullable: true })
+    firstScore: number | null;
+
+    @ApiPropertyOptional({ nullable: true })
+    lastScore: number | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Last score minus first score, in percentage points',
+    })
+    scoreDelta: number | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description:
+            'Number of graded results until the first pass (inclusive). Null if never passed.',
+    })
+    attemptsToPass: number | null;
+
+    @ApiProperty({ enum: ['improving', 'declining', 'stable', 'insufficient_data'] })
+    improvementTrend: AdminImprovementTrend;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Hours between the first and last result (or incomplete start)',
+    })
+    hoursBetweenFirstAndLast: number | null;
+
+    @ApiProperty({ type: [AdminAttemptResultItemDto] })
+    results: AdminAttemptResultItemDto[];
+
+    @ApiProperty({ type: [AdminIncompleteAttemptItemDto] })
+    incompleteAttempts: AdminIncompleteAttemptItemDto[];
+}
+
+/**
+ * One learner in the attempts/results breakdown.
+ * Only learners with at least one attempt or result in the window appear.
+ */
+export class AdminLearnerAttemptsBreakdownDto {
+    @ApiProperty()
+    userId: string;
+
+    @ApiProperty()
+    firstName: string;
+
+    @ApiProperty()
+    lastName: string;
+
+    @ApiPropertyOptional({ nullable: true })
+    branchName: string | null;
+
+    @ApiProperty({ description: 'Distinct tests with an attempt or result' })
+    testsParticipated: number;
+
+    @ApiProperty()
+    totalAttempts: number;
+
+    @ApiProperty()
+    totalResults: number;
+
+    @ApiProperty()
+    passedCount: number;
+
+    @ApiProperty()
+    failedCount: number;
+
+    @ApiProperty({ description: 'Share of this learner\'s results that passed' })
+    overallPassRate: number;
+
+    @ApiProperty({ description: 'Mean percentage across all of this learner\'s results' })
+    overallAverageScore: number;
+
+    @ApiProperty({ type: [AdminLearnerTestBreakdownDto] })
+    tests: AdminLearnerTestBreakdownDto[];
+}
+
+/**
+ * Per-learner, per-test attempts and results for the reporting window.
+ *
+ * This is the diagnostic counterpart to high-score leaderboards: every graded
+ * result is listed so a later pass cannot hide earlier failures.
+ */
+export class AdminAttemptsResultsBreakdownReportDto {
+    @ApiProperty({ enum: ['week', 'month'] })
+    timeframe: AdminReportTimeframe;
+
+    @ApiProperty({ description: 'Learners included after empty-row filtering' })
+    learnerCount: number;
+
+    @ApiProperty({ type: [AdminLearnerAttemptsBreakdownDto] })
+    learners: AdminLearnerAttemptsBreakdownDto[];
+}
+
 /** Org-level completion totals used for the motivational summary. */
 export class AdminTestCompletionSummaryDto {
     @ApiProperty()
@@ -676,6 +866,14 @@ export class AdminOverviewReportDto {
      */
     @ApiPropertyOptional({ type: AdminTestsNotCompletedReportDto })
     testsNotCompleted?: AdminTestsNotCompletedReportDto;
+
+    /**
+     * Present when the test-attempts-results-breakdown section is selected.
+     * Grouped by learner then by test; only learners with at least one
+     * non-voided attempt or result in the reporting window are included.
+     */
+    @ApiPropertyOptional({ type: AdminAttemptsResultsBreakdownReportDto })
+    attemptsResultsBreakdown?: AdminAttemptsResultsBreakdownReportDto;
 
     @ApiProperty()
     generatedAt: Date;
