@@ -104,6 +104,34 @@ export class TestAttemptResponseDto {
     };
 
     @ApiProperty({
+        description: 'Persisted result id — present only after grading succeeds',
+        example: 42,
+        required: false,
+    })
+    resultId?: number;
+
+    @ApiProperty({
+        description: 'Score awarded after grading',
+        example: 5,
+        required: false,
+    })
+    score?: number;
+
+    @ApiProperty({
+        description: 'Percentage score after grading',
+        example: 100,
+        required: false,
+    })
+    percentage?: number;
+
+    @ApiProperty({
+        description: 'Whether the graded result met the pass mark',
+        example: true,
+        required: false,
+    })
+    passed?: boolean;
+
+    @ApiProperty({
         description: 'Number of answers submitted for this attempt',
         example: 5,
     })

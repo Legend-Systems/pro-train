@@ -8,7 +8,7 @@ import {
     forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Answer } from './entities/answer.entity';
@@ -903,16 +903,8 @@ export class AnswersService {
 
             const answersWithQuestions = await answersQuery.getMany();
 
-            console.log(
-                'answersWithQuestions',
-                answersWithQuestions,
-                'attemptId',
-                attemptId,
-                'last time this shit did not work',
-            );
-
             this.logger.log(
-                `📊 Found ${answersWithQuestions.length} scoped answers for attempt ${attemptId}`,
+                `Found ${answersWithQuestions.length} scoped answers for attempt ${attemptId}`,
             );
 
             // Step 2: Filter to only unmarked answers
@@ -937,73 +929,50 @@ export class AnswersService {
             let incorrectCount = 0;
             let skippedCount = 0;
 
-            this.logger.log(
-                `🎯 Step 4: Starting individual answer processing...`,
-            );
+            // Load every option for unmarked questions in one query. Per-answer
+            // option fetches were taking 3–5s each on Render and exhausted the
+            // MySQL pool before result creation (read ETIMEDOUT on attempt 668).
+            const questionIds = [
+                ...new Set(unmarkedAnswers.map(answer => answer.questionId)),
+            ];
+            const allOptions =
+                questionIds.length > 0
+                    ? await this.questionOptionRepository.find({
+                          where: { questionId: In(questionIds) },
+                          order: { orderIndex: 'ASC' },
+                      })
+                    : [];
+            const optionsByQuestionId = new Map<number, QuestionOption[]>();
+            for (const option of allOptions) {
+                const existing = optionsByQuestionId.get(option.questionId) ?? [];
+                existing.push(option);
+                optionsByQuestionId.set(option.questionId, existing);
+            }
+
+            const answersToSave: Answer[] = [];
 
             for (const answer of unmarkedAnswers) {
                 const questionId = answer.questionId;
                 const questionType = answer.question?.questionType;
-                const questionText =
-                    answer.question?.questionText || 'Unknown Question';
                 const maxPoints = answer.question?.points || 0;
 
-                this.logger.log(
-                    `\n🔍 PROCESSING ANSWER ${answer.answerId} for Question ${questionId}`,
-                );
-                this.logger.log(`   📋 Question: "${questionText}"`);
-                this.logger.log(`   🏷️  Type: ${questionType}`);
-                this.logger.log(`   💯 Max Points: ${maxPoints}`);
-                this.logger.log(
-                    `   👤 User Selection: ${answer.selectedOptionId || 'None'}`,
-                );
-                this.logger.log(
-                    `   📝 Text Answer: ${answer.textAnswer || 'None'}`,
-                );
-
-                // Check if this is an auto-markable question type
                 if (!this.isAutoMarkableQuestionType(questionType)) {
-                    this.logger.log(
-                        `   ⏭️  SKIPPED: Question type '${questionType}' requires manual marking`,
-                    );
                     skippedCount++;
                     continue;
                 }
 
                 try {
-                    // Step 5: Get all options for this question
-                    this.logger.log(
-                        `   🔍 Fetching options for question ${questionId}...`,
-                    );
-
                     const questionOptions =
-                        await this.questionOptionRepository.find({
-                            where: { questionId: questionId },
-                            order: { orderIndex: 'ASC' },
-                        });
-
-                    this.logger.log(
-                        `   📊 Found ${questionOptions.length} options for question ${questionId}`,
-                    );
+                        optionsByQuestionId.get(questionId) ?? [];
 
                     if (questionOptions.length === 0) {
                         this.logger.warn(
-                            `   ❌ SKIPPED: No options found for question ${questionId}`,
+                            `No options found for question ${questionId} — skipping auto-mark`,
                         );
                         skippedCount++;
                         continue;
                     }
 
-                    // Log all available options
-                    this.logger.log(`   📋 Available Options:`);
-                    questionOptions.forEach(option => {
-                        this.logger.log(
-                            `      ${option.isCorrect ? '✅' : '❌'} Option ${option.optionId}: "${option.optionText}" (Correct: ${option.isCorrect})`,
-                        );
-                    });
-
-                    // Resolve selection(s): multiple_choice may include up to 3 option ids
-                    // (JSON array in textAnswer); true_false may send only textAnswer.
                     const selectedOptionIds =
                         this.resolveSelectedOptionIdsForMarking(
                             answer,
@@ -1011,14 +980,10 @@ export class AnswersService {
                         );
 
                     if (selectedOptionIds.length === 0) {
-                        this.logger.log(
-                            `   ⏭️  SKIPPED: No option selected for objective question`,
-                        );
                         skippedCount++;
                         continue;
                     }
 
-                    // Persist primary option id for true_false text-only submissions
                     if (
                         !answer.selectedOptionId &&
                         questionType === QuestionType.TRUE_FALSE
@@ -1026,83 +991,38 @@ export class AnswersService {
                         answer.selectedOptionId = selectedOptionIds[0];
                     }
 
-                    // Find all correct options
-                    const correctOptions = questionOptions.filter(
-                        opt => opt.isCorrect,
-                    );
-                    const correctOptionIds = correctOptions.map(
-                        opt => opt.optionId,
-                    );
+                    const correctOptionIds = questionOptions
+                        .filter(opt => opt.isCorrect)
+                        .map(opt => opt.optionId);
 
-                    this.logger.log(
-                        `   ✅ Correct Answer(s): ${correctOptions.map(opt => `"${opt.optionText}" (ID: ${opt.optionId})`).join(', ')}`,
-                    );
-
-                    // Multi-select: exact set match against all correct options.
-                    // Single-correct questions still work (one correct id vs one selected id).
                     const isCorrect = this.areOptionIdSetsEqual(
                         selectedOptionIds,
                         correctOptionIds,
                     );
-                    const pointsAwarded = isCorrect ? maxPoints : 0;
 
-                    const selectedLabels = selectedOptionIds
-                        .map(optionId => {
-                            const option = questionOptions.find(
-                                item => item.optionId === optionId,
-                            );
-                            return option
-                                ? `"${option.optionText}" (ID: ${option.optionId})`
-                                : `ID: ${optionId}`;
-                        })
-                        .join(', ');
-
-                    // Log the marking decision
-                    this.logger.log(`   👤 User Selected: ${selectedLabels}`);
-                    this.logger.log(
-                        `   🎯 MARKING RESULT: ${isCorrect ? '✅ CORRECT' : '❌ INCORRECT'}`,
-                    );
-                    this.logger.log(
-                        `   💯 Points Awarded: ${pointsAwarded}/${maxPoints}`,
-                    );
-
-                    // Step 6: Update the answer with marking results
                     answer.isCorrect = isCorrect;
-                    answer.pointsAwarded = pointsAwarded;
+                    answer.pointsAwarded = isCorrect ? maxPoints : 0;
                     answer.isMarked = true;
                     answer.markedAt = new Date();
+                    answersToSave.push(answer);
 
-                    // Save the marked answer
-                    await this.answerRepository.save(answer);
-
-                    // Update counters
                     markedCount++;
                     if (isCorrect) {
                         correctCount++;
                     } else {
                         incorrectCount++;
                     }
-
-                    this.logger.log(
-                        `   ✅ Answer ${answer.answerId} successfully marked and saved`,
-                    );
-
-                    // Invalidate cache for this answer
-                    await this.invalidateAnswerCache(
-                        answer.answerId,
-                        attemptId,
-                        questionId,
-                        scope.userId,
-                        scope.orgId,
-                        scope.branchId,
-                    );
                 } catch (error) {
                     this.logger.error(
-                        `   ❌ ERROR marking answer ${answer.answerId}:`,
+                        `Error marking answer ${answer.answerId}:`,
                         error,
                     );
                     skippedCount++;
                 }
+            }
+
+            if (answersToSave.length > 0) {
+                await this.answerRepository.save(answersToSave);
             }
 
             // Step 7: Final summary
