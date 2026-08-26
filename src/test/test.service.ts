@@ -39,7 +39,7 @@ import {
     AttemptStatus,
 } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
-import { isPassingPercentage, PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
+import { PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
 import { CourseService } from '../course/course.service';
 import { Course } from '../course/entities/course.entity';
 import { RetryService } from '../common/services/retry.service';
@@ -417,8 +417,10 @@ export class TestService {
             query.leftJoinAndSelect('course.branchId', 'courseBranch');
             query.leftJoinAndSelect('test.orgId', 'org');
             query.leftJoinAndSelect('test.branchId', 'branch');
-            query.leftJoinAndSelect('test.questions', 'questions');
-            query.leftJoinAndSelect('questions.options', 'questionOptions');
+            // Do not join questions/options here. Those OneToMany collections
+            // cartesian-expand every list row and fight skip/take pagination.
+            // Question counts are queried separately; full question payloads
+            // belong on GET /tests/:id.
 
             // Apply org/branch scoping
             if (scope.orgId) {
@@ -563,22 +565,6 @@ export class TestService {
                         attemptCount,
                         userAttemptData,
                         statistics,
-                        questions:
-                            test.questions?.map(q => ({
-                                questionId: q.questionId,
-                                questionText: q.questionText,
-                                questionType: q.questionType,
-                                points: q.points,
-                                orderIndex: q.orderIndex,
-                                difficulty: q.difficulty,
-                                options:
-                                    q.options?.map(option => ({
-                                        optionId: option.optionId,
-                                        optionText: option.optionText,
-                                        isCorrect: option.isCorrect,
-                                        orderIndex: option.orderIndex,
-                                    })) || [],
-                            })) || [],
                     };
                 }),
             );
@@ -594,7 +580,9 @@ export class TestService {
     }
 
     /**
-     * Calculate comprehensive test statistics
+     * Aggregate attempt/result stats in SQL instead of hydrating every row.
+     * Loading all attempts+results in JS (and joining them) was a major
+     * contributor to GET /tests/:id timing out under production load.
      */
     private async calculateTestStatistics(testId: number): Promise<{
         totalQuestions: number;
@@ -618,134 +606,217 @@ export class TestService {
             '0-49': number;
         };
     }> {
-        // Get question count
-        const totalQuestions = await this.questionRepository.count({
-            where: { testId },
-        });
+        const [totalQuestions, attemptRow, resultRow] = await Promise.all([
+            this.questionRepository.count({ where: { testId } }),
+            this.testAttemptRepository
+                .createQueryBuilder('attempt')
+                .select('COUNT(attempt.attemptId)', 'totalAttempts')
+                .addSelect('COUNT(DISTINCT attempt.userId)', 'uniqueStudents')
+                .addSelect(
+                    `SUM(CASE WHEN attempt.status = :submitted THEN 1 ELSE 0 END)`,
+                    'completedAttempts',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN attempt.status = :inProgress THEN 1 ELSE 0 END)`,
+                    'inProgressAttempts',
+                )
+                .addSelect(
+                    `AVG(CASE WHEN attempt.status = :submitted AND attempt.startTime IS NOT NULL AND attempt.submitTime IS NOT NULL THEN TIMESTAMPDIFF(SECOND, attempt.startTime, attempt.submitTime) / 60 END)`,
+                    'averageCompletionTime',
+                )
+                .where('attempt.testId = :testId', { testId })
+                .setParameter('submitted', AttemptStatus.SUBMITTED)
+                .setParameter('inProgress', AttemptStatus.IN_PROGRESS)
+                .getRawOne<{
+                    totalAttempts: string | number | null;
+                    uniqueStudents: string | number | null;
+                    completedAttempts: string | number | null;
+                    inProgressAttempts: string | number | null;
+                    averageCompletionTime: string | number | null;
+                }>(),
+            this.resultRepository
+                .createQueryBuilder('result')
+                .select('COUNT(result.resultId)', 'resultCount')
+                .addSelect('AVG(result.score)', 'averageScore')
+                .addSelect('MAX(result.percentage)', 'highestScore')
+                .addSelect('MIN(result.percentage)', 'lowestScore')
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= :passMark THEN 1 ELSE 0 END)`,
+                    'passedCount',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= 90 THEN 1 ELSE 0 END)`,
+                    'bucket90',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= 80 AND result.percentage < 90 THEN 1 ELSE 0 END)`,
+                    'bucket80',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= 70 AND result.percentage < 80 THEN 1 ELSE 0 END)`,
+                    'bucket70',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= 60 AND result.percentage < 70 THEN 1 ELSE 0 END)`,
+                    'bucket60',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage >= 50 AND result.percentage < 60 THEN 1 ELSE 0 END)`,
+                    'bucket50',
+                )
+                .addSelect(
+                    `SUM(CASE WHEN result.percentage < 50 THEN 1 ELSE 0 END)`,
+                    'bucket0',
+                )
+                .where('result.testId = :testId', { testId })
+                .setParameter('passMark', PASSING_SCORE_PERCENTAGE)
+                .getRawOne<{
+                    resultCount: string | number | null;
+                    averageScore: string | number | null;
+                    highestScore: string | number | null;
+                    lowestScore: string | number | null;
+                    passedCount: string | number | null;
+                    bucket90: string | number | null;
+                    bucket80: string | number | null;
+                    bucket70: string | number | null;
+                    bucket60: string | number | null;
+                    bucket50: string | number | null;
+                    bucket0: string | number | null;
+                }>(),
+        ]);
 
-        // Get all attempts for this test
-        const attempts = await this.testAttemptRepository.find({
-            where: { testId },
-            relations: ['results'],
-        });
-
-        const totalAttempts = attempts.length;
-        const uniqueStudents = new Set(attempts.map(a => a.userId)).size;
-        const completedAttempts = attempts.filter(
-            a => a.status === AttemptStatus.SUBMITTED,
-        ).length;
-        const inProgressAttempts = attempts.filter(
-            a => a.status === AttemptStatus.IN_PROGRESS,
-        ).length;
-
-        // Calculate completion rate
+        const totalAttempts = this.toNumber(attemptRow?.totalAttempts);
+        const completedAttempts = this.toNumber(attemptRow?.completedAttempts);
+        const resultCount = this.toNumber(resultRow?.resultCount);
         const completionRate =
             totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
 
-        // Get all results for completed attempts
-        const results = await this.resultRepository.find({
-            where: { testId },
-            relations: ['attempt'],
-        });
-
-        let averageScore = 0;
-        let medianScore = 0;
-        let highestScore = 0;
-        let lowestScore = 0;
-        let passRate = 0;
-        let averageCompletionTime = 0;
-
         const distribution = {
-            '90-100': 0,
-            '80-89': 0,
-            '70-79': 0,
-            '60-69': 0,
-            '50-59': 0,
-            '0-49': 0,
+            '90-100': this.toNumber(resultRow?.bucket90),
+            '80-89': this.toNumber(resultRow?.bucket80),
+            '70-79': this.toNumber(resultRow?.bucket70),
+            '60-69': this.toNumber(resultRow?.bucket60),
+            '50-59': this.toNumber(resultRow?.bucket50),
+            '0-49': this.toNumber(resultRow?.bucket0),
         };
 
-        if (results.length > 0) {
-            const scores = results.map(r => r.score || 0);
-            const percentages = results.map(r => r.percentage || 0);
-
-            // Calculate average score
-            averageScore =
-                scores.reduce((sum, score) => sum + score, 0) / scores.length;
-
-            // Calculate median score
-            const sortedPercentages = [...percentages].sort((a, b) => a - b);
-            const mid = Math.floor(sortedPercentages.length / 2);
+        let medianScore = 0;
+        if (resultCount > 0) {
+            // Median of percentages only: two middle rows when the count is even.
+            const isEven = resultCount % 2 === 0;
+            const offset = isEven
+                ? resultCount / 2 - 1
+                : Math.floor(resultCount / 2);
+            const limit = isEven ? 2 : 1;
+            const midRows = await this.resultRepository
+                .createQueryBuilder('result')
+                .select('result.percentage', 'percentage')
+                .where('result.testId = :testId', { testId })
+                .orderBy('result.percentage', 'ASC')
+                .offset(offset)
+                .limit(limit)
+                .getRawMany<{ percentage: string | number | null }>();
+            const values = midRows.map(row => this.toNumber(row.percentage));
             medianScore =
-                sortedPercentages.length % 2 !== 0
-                    ? sortedPercentages[mid]
-                    : (sortedPercentages[mid - 1] + sortedPercentages[mid]) / 2;
-
-            // Calculate highest and lowest scores
-            highestScore = Math.max(...percentages);
-            lowestScore = Math.min(...percentages);
-
-            // Pass mark raised from 70% (local assumption) to global 80%
-            const passedCount = percentages.filter(p =>
-                isPassingPercentage(p),
-            ).length;
-            passRate = (passedCount / results.length) * 100;
-
-            // Calculate score distribution
-            percentages.forEach(percentage => {
-                if (percentage >= 90) distribution['90-100']++;
-                else if (percentage >= 80) distribution['80-89']++;
-                else if (percentage >= 70) distribution['70-79']++;
-                else if (percentage >= 60) distribution['60-69']++;
-                else if (percentage >= 50) distribution['50-59']++;
-                else distribution['0-49']++;
-            });
-
-            // Calculate average completion time
-            const completedAttemptsWithTime = attempts.filter(
-                a =>
-                    a.status === AttemptStatus.SUBMITTED &&
-                    a.startTime &&
-                    a.submitTime,
-            );
-
-            if (completedAttemptsWithTime.length > 0) {
-                const totalTime = completedAttemptsWithTime.reduce(
-                    (sum, attempt) => {
-                        const duration =
-                            attempt.submitTime!.getTime() -
-                            attempt.startTime.getTime();
-                        return sum + duration / (1000 * 60); // Convert to minutes
-                    },
-                    0,
-                );
-                averageCompletionTime =
-                    totalTime / completedAttemptsWithTime.length;
-            }
+                values.length > 0
+                    ? values.reduce((sum, value) => sum + value, 0) /
+                      values.length
+                    : 0;
         }
 
         return {
             totalQuestions,
             totalAttempts,
-            uniqueStudents,
+            uniqueStudents: this.toNumber(attemptRow?.uniqueStudents),
             completedAttempts,
-            inProgressAttempts,
-            averageScore,
+            inProgressAttempts: this.toNumber(attemptRow?.inProgressAttempts),
+            averageScore:
+                resultCount > 0 ? this.toNumber(resultRow?.averageScore) : 0,
             medianScore,
-            highestScore,
-            lowestScore,
-            passRate,
+            highestScore:
+                resultCount > 0 ? this.toNumber(resultRow?.highestScore) : 0,
+            lowestScore:
+                resultCount > 0 ? this.toNumber(resultRow?.lowestScore) : 0,
+            passRate:
+                resultCount > 0
+                    ? (this.toNumber(resultRow?.passedCount) / resultCount) *
+                      100
+                    : 0,
             completionRate,
-            averageCompletionTime,
+            averageCompletionTime:
+                resultCount > 0
+                    ? this.toNumber(attemptRow?.averageCompletionTime)
+                    : 0,
             distribution,
         };
     }
 
+    /** mysql2 can return aggregates as strings when bigNumberStrings is enabled. */
+    private toNumber(value: string | number | null | undefined): number {
+        if (value === null || value === undefined) {
+            return 0;
+        }
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    /**
+     * Confirms a test exists and the caller may access it, without loading
+     * questions, attempts, or results. Attempt-list routes used to call
+     * findOne() for this check, which re-ran the cartesian join under load.
+     */
+    async ensureTestAccessible(
+        testId: number,
+        scope: OrgBranchScope,
+    ): Promise<void> {
+        return this.retryService.executeDatabase(async () => {
+            const test = await this.testRepository.findOne({
+                where: { testId },
+                select: [
+                    'testId',
+                    'courseId',
+                    'isActive',
+                    'examStartDate',
+                    'examEndDate',
+                ],
+            });
+
+            if (!test) {
+                throw new NotFoundException('Test not found');
+            }
+
+            if (scope.userId) {
+                await this.validateCourseAccess(
+                    test.courseId,
+                    scope.userId,
+                    scope,
+                    false,
+                );
+            }
+
+            if (
+                this.isLearnerScope(scope) &&
+                (!test.isActive || !isExamWindowOpen(test))
+            ) {
+                throw new NotFoundException('Test not found');
+            }
+        });
+    }
+
+    /**
+     * Loads one test for take/edit/detail views.
+     *
+     * Relations are fetched in separate queries so TypeORM cannot JOIN
+     * questions × options × attempts × results into one result set
+     * (production `read ETIMEDOUT` on GET /tests/:id, e.g. test 83).
+     */
     async findOne(
         id: number,
         scope?: OrgBranchScope,
         locale: string = DEFAULT_LOCALE,
     ): Promise<TestDetailDto | null> {
         return this.retryService.executeDatabase(async () => {
+            // ManyToOne only — never mix independent OneToMany collections here.
             const test = await this.testRepository.findOne({
                 where: { testId: id },
                 relations: [
@@ -755,13 +826,6 @@ export class TestService {
                     'course.branchId',
                     'orgId',
                     'branchId',
-                    'questions',
-                    'questions.options',
-                    'questions.mediaFile',
-                    'testAttempts',
-                    'testAttempts.user',
-                    'results',
-                    'results.user',
                 ],
             });
 
@@ -791,22 +855,27 @@ export class TestService {
                 return null;
             }
 
-            // Calculate comprehensive statistics
-            const statistics = await this.calculateTestStatistics(id);
+            // Questions×options is bounded by test content; stats are SQL aggregates.
+            // Attempt/result rows belong on dedicated list/stats endpoints.
+            const [statistics, questions] = await Promise.all([
+                this.calculateTestStatistics(id),
+                this.questionRepository.find({
+                    where: { testId: id },
+                    relations: ['options', 'mediaFile'],
+                    order: { orderIndex: 'ASC', createdAt: 'ASC' },
+                }),
+            ]);
 
-            // Get questions with proper ordering if not already loaded
-            const questions = test.questions?.length
-                ? test.questions.sort(
-                      (a, b) => (a.orderIndex || 0) - (b.orderIndex || 0),
-                  )
-                : await this.questionRepository.find({
-                      where: { testId: id },
-                      relations: ['options', 'mediaFile'],
-                      order: { orderIndex: 'ASC', createdAt: 'ASC' },
-                  });
+            const {
+                questions: _unusedQuestions,
+                testAttempts: _unusedAttempts,
+                results: _unusedResults,
+                trainingProgress: _unusedProgress,
+                ...testFields
+            } = test;
 
             const detail = {
-                ...test,
+                ...testFields,
                 course: test.course
                     ? {
                           courseId: test.course.courseId,
@@ -855,43 +924,6 @@ export class TestService {
                             orderIndex: option.orderIndex,
                         })) || [],
                 })),
-                testAttempts:
-                    test.testAttempts?.map(attempt => ({
-                        attemptId: attempt.attemptId,
-                        userId: attempt.userId,
-                        attemptNumber: attempt.attemptNumber,
-                        status: attempt.status,
-                        startTime: attempt.startTime,
-                        submitTime: attempt.submitTime,
-                        progressPercentage: attempt.progressPercentage,
-                        user: attempt.user
-                            ? {
-                                  id: attempt.user.id,
-                                  firstName: attempt.user.firstName,
-                                  lastName: attempt.user.lastName,
-                                  email: attempt.user.email,
-                              }
-                            : undefined,
-                    })) || [],
-                results:
-                    test.results?.map(result => ({
-                        resultId: result.resultId,
-                        attemptId: result.attemptId,
-                        userId: result.userId,
-                        score: result.score,
-                        percentage: result.percentage,
-                        passed: result.passed,
-                        maxScore: result.maxScore,
-                        calculatedAt: result.calculatedAt,
-                        user: result.user
-                            ? {
-                                  id: result.user.id,
-                                  firstName: result.user.firstName,
-                                  lastName: result.user.lastName,
-                                  email: result.user.email,
-                              }
-                            : undefined,
-                    })) || [],
             };
 
             return this.localizeTestDetail(detail, id, locale);

@@ -63,6 +63,25 @@ export class ErrorCategorizer {
             };
         }
 
+        // In-flight query read timeouts are not retried. Repeating a heavy
+        // SELECT (e.g. the old GET /tests/:id join) multiplies database load.
+        // connect ETIMEDOUT remains retryable via the network block below.
+        if (errorMessage.includes('read etimedout')) {
+            return {
+                category: ErrorCategory.TIMEOUT,
+                severity: ErrorSeverity.HIGH,
+                isRetryable: false,
+                originalError: error,
+                context: { ...context, timestamp: new Date() },
+                message: `Query read timed out: ${error.message}`,
+                suggestions: [
+                    'Reduce query size and joined relations',
+                    'Check MySQL load and slow-query logs',
+                    'Do not retry the same in-flight query',
+                ],
+            };
+        }
+
         // Network/connection errors
         if (errorMessage.includes('econnreset') ||
             errorMessage.includes('connection lost') ||

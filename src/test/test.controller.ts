@@ -601,6 +601,8 @@ export class TestController {
         try {
             this.logger.log(`Getting test ${id} for user: ${scope.userId}`);
 
+            // Service loads metadata, questions, and SQL stats in separate queries
+            // (not one cartesian join of attempts/results — that timed out in production).
             const test = await this.testService.findOne(id, scope, locale);
 
             if (!test) {

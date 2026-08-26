@@ -26,6 +26,7 @@ import {
 import {
     ReportPreset,
     ReportSection,
+    requiresAttemptsResultsBreakdown,
     requiresLeaderboardInsights,
     requiresTestsNotCompleted,
     resolveReportSections,
@@ -346,6 +347,17 @@ export class ReportScheduleService {
                 ...payload,
                 testsNotCompleted:
                     await this.adminInsightsReportsService.getTestsNotCompleted(
+                        scope,
+                        filters,
+                    ),
+            };
+        }
+
+        if (requiresAttemptsResultsBreakdown(sections)) {
+            payload = {
+                ...payload,
+                attemptsResultsBreakdown:
+                    await this.adminInsightsReportsService.getAttemptsResultsBreakdown(
                         scope,
                         filters,
                     ),

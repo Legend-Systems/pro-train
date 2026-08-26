@@ -245,11 +245,14 @@ export class RetryService {
             },
             shouldRetry: (error: Error) => {
                 const categorizedError = ErrorCategorizer.categorize(error, context);
-                // Allow retries for network, timeout, and some system errors
+                // Respect isRetryable so in-flight query read timeouts are not
+                // replayed 7 times (that amplified the GET /tests/:id outage).
+                if (!categorizedError.isRetryable) {
+                    return false;
+                }
                 return categorizedError.category === ErrorCategory.NETWORK ||
                        categorizedError.category === ErrorCategory.TIMEOUT ||
-                       (categorizedError.category === ErrorCategory.UNKNOWN && 
-                        categorizedError.isRetryable);
+                       categorizedError.category === ErrorCategory.UNKNOWN;
             }
         });
     }

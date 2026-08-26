@@ -110,6 +110,7 @@ export class ReportExportService {
         this.appendPerformerCsv(lines, overview, selected, style);
         this.appendTestCsv(lines, overview, selected);
         this.appendTestsNotCompletedCsv(lines, overview, selected);
+        this.appendAttemptsResultsBreakdownCsv(lines, overview, selected);
         this.appendKeyAreaCsv(lines, overview, selected);
         this.appendBranchComparisonCsv(lines, overview, selected);
 
@@ -173,6 +174,7 @@ export class ReportExportService {
         this.writePdfBranchComparisonSection(doc, overview, selected);
         this.writePdfTestSections(doc, overview, selected);
         this.writePdfTestsNotCompletedSection(doc, overview, selected);
+        this.writePdfAttemptsResultsBreakdownSection(doc, overview, selected);
         this.writePdfNeedsSupportSection(doc, overview, selected);
         this.writePdfKeyAreasSection(doc, overview, selected);
 
@@ -714,6 +716,194 @@ export class ReportExportService {
         lines.push('');
     }
 
+    /**
+     * Three CSV blocks for the attempts/results breakdown:
+     * 1. Learner header (name, branch, overall stats)
+     * 2. Per-test summary (counts, average, improvement)
+     * 3. Individual results and incomplete attempts
+     */
+    private appendAttemptsResultsBreakdownCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN)) {
+            return;
+        }
+
+        const report = overview.attemptsResultsBreakdown;
+        const learners = report?.learners ?? [];
+
+        lines.push(
+            'Section,Name,Surname,Branch,TestsParticipated,TotalAttempts,TotalResults,Passed,Failed,OverallPassRate,OverallAverageScore',
+        );
+        if (learners.length === 0) {
+            lines.push(
+                this.row(
+                    'Test attempts & results — learners',
+                    '',
+                    '',
+                    '',
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ),
+            );
+        } else {
+            learners.forEach(learner => {
+                lines.push(
+                    this.row(
+                        'Test attempts & results — learners',
+                        learner.firstName,
+                        learner.lastName,
+                        learner.branchName ?? '',
+                        learner.testsParticipated,
+                        learner.totalAttempts,
+                        learner.totalResults,
+                        learner.passedCount,
+                        learner.failedCount,
+                        learner.overallPassRate,
+                        learner.overallAverageScore,
+                    ),
+                );
+            });
+        }
+        lines.push('');
+
+        lines.push(
+            'Section,Name,Surname,Branch,TestTitle,Course,TotalAttempts,TotalResults,Passed,Failed,AverageScore,BestScore,WorstScore,FirstScore,LastScore,ScoreDelta,AttemptsToPass,ImprovementTrend,HoursBetweenFirstAndLast',
+        );
+        if (learners.length === 0) {
+            lines.push(
+                this.row(
+                    'Test attempts & results — tests',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                ),
+            );
+        } else {
+            learners.forEach(learner => {
+                learner.tests.forEach(test => {
+                    lines.push(
+                        this.row(
+                            'Test attempts & results — tests',
+                            learner.firstName,
+                            learner.lastName,
+                            learner.branchName ?? '',
+                            test.testTitle,
+                            test.courseTitle ?? '',
+                            test.totalAttempts,
+                            test.totalResults,
+                            test.passedCount,
+                            test.failedCount,
+                            test.averageScore,
+                            test.bestScore ?? '',
+                            test.worstScore ?? '',
+                            test.firstScore ?? '',
+                            test.lastScore ?? '',
+                            test.scoreDelta ?? '',
+                            test.attemptsToPass ?? '',
+                            this.trendLabel(test.improvementTrend),
+                            test.hoursBetweenFirstAndLast ?? '',
+                        ),
+                    );
+                });
+            });
+        }
+        lines.push('');
+
+        lines.push(
+            'Section,Name,Surname,Branch,TestTitle,Kind,AttemptNumber,Score,Percentage,Outcome,DateTime,MaxScore,ProgressPercentage',
+        );
+        if (learners.length === 0) {
+            lines.push(
+                this.row(
+                    'Test attempts & results — detail',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                ),
+            );
+            lines.push('');
+            return;
+        }
+
+        learners.forEach(learner => {
+            learner.tests.forEach(test => {
+                test.results.forEach(result => {
+                    lines.push(
+                        this.row(
+                            'Test attempts & results — detail',
+                            learner.firstName,
+                            learner.lastName,
+                            learner.branchName ?? '',
+                            test.testTitle,
+                            'Result',
+                            result.attemptNumber,
+                            result.score,
+                            result.percentage,
+                            result.passed ? 'Passed' : 'Failed',
+                            this.formatDateTimeUtc(result.submittedAt),
+                            result.maxScore,
+                            '',
+                        ),
+                    );
+                });
+                test.incompleteAttempts.forEach(attempt => {
+                    lines.push(
+                        this.row(
+                            'Test attempts & results — detail',
+                            learner.firstName,
+                            learner.lastName,
+                            learner.branchName ?? '',
+                            test.testTitle,
+                            'Incomplete attempt',
+                            attempt.attemptNumber,
+                            '',
+                            '',
+                            attempt.status === 'expired'
+                                ? 'Expired'
+                                : 'In progress',
+                            this.formatDateTimeUtc(attempt.startTime),
+                            '',
+                            attempt.progressPercentage,
+                        ),
+                    );
+                });
+            });
+        });
+        lines.push('');
+    }
+
     private appendKeyAreaCsv(
         lines: string[],
         overview: AdminOverviewReportDto,
@@ -1139,6 +1329,110 @@ export class ReportExportService {
         doc.moveDown(0.3);
     }
 
+    /**
+     * Nested PDF layout: learner header, then each test with counts and
+     * every individual result (score, pass/fail, date/time).
+     */
+    private writePdfAttemptsResultsBreakdownSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN)) {
+            return;
+        }
+
+        this.writePdfHeading(doc, 'Test attempts & results breakdown');
+        const learners = overview.attemptsResultsBreakdown?.learners ?? [];
+
+        if (learners.length === 0) {
+            doc.fontSize(10)
+                .fillColor('#6b7280')
+                .text(
+                    'No learners with attempts or results in the selected window.',
+                );
+            doc.moveDown(0.6);
+            return;
+        }
+
+        learners.forEach(learner => {
+            if (doc.y > PDF_PAGE_BREAK_Y) {
+                doc.addPage();
+            }
+            const branch = learner.branchName ?? 'No branch';
+            doc.fontSize(11)
+                .fillColor('#111827')
+                .text(
+                    `${learner.firstName} ${learner.lastName} | ${branch}`,
+                );
+            doc.fontSize(8)
+                .fillColor('#6b7280')
+                .text(
+                    `Tests: ${learner.testsParticipated}  ·  Attempts: ${learner.totalAttempts}  ·  Results: ${learner.totalResults}  ·  Passed: ${learner.passedCount}  ·  Failed: ${learner.failedCount}  ·  Pass rate: ${learner.overallPassRate}%  ·  Avg: ${learner.overallAverageScore}%`,
+                );
+            doc.moveDown(0.2);
+
+            learner.tests.forEach(test => {
+                if (doc.y > PDF_ROW_BREAK_Y) {
+                    doc.addPage();
+                }
+                doc.fontSize(10)
+                    .fillColor('#413DFB')
+                    .text(test.testTitle);
+                const insightParts = [
+                    `Attempts: ${test.totalAttempts}`,
+                    `Results: ${test.totalResults}`,
+                    `Passed: ${test.passedCount}`,
+                    `Failed: ${test.failedCount}`,
+                    `Avg: ${test.averageScore}%`,
+                ];
+                if (test.attemptsToPass !== null) {
+                    insightParts.push(
+                        `Attempts to pass: ${test.attemptsToPass}`,
+                    );
+                }
+                if (test.scoreDelta !== null) {
+                    insightParts.push(
+                        `Delta: ${test.scoreDelta > 0 ? '+' : ''}${test.scoreDelta}pp`,
+                    );
+                }
+                insightParts.push(this.trendLabel(test.improvementTrend));
+                doc.fontSize(8)
+                    .fillColor('#6b7280')
+                    .text(insightParts.join('  ·  '));
+
+                test.results.forEach((result, index) => {
+                    if (doc.y > PDF_ROW_BREAK_Y) {
+                        doc.addPage();
+                    }
+                    const outcome = result.passed ? 'Passed' : 'Failed';
+                    doc.fontSize(9)
+                        .fillColor('#111827')
+                        .text(
+                            `  Result ${index + 1} – ${result.percentage}% (${outcome}) – ${this.formatDateTimeUtc(result.submittedAt)}`,
+                        );
+                });
+                test.incompleteAttempts.forEach(attempt => {
+                    if (doc.y > PDF_ROW_BREAK_Y) {
+                        doc.addPage();
+                    }
+                    const statusLabel =
+                        attempt.status === 'expired'
+                            ? 'Expired'
+                            : 'In progress';
+                    doc.fontSize(9)
+                        .fillColor('#6b7280')
+                        .text(
+                            `  Attempt ${attempt.attemptNumber} – ${statusLabel} – ${this.formatDateTimeUtc(attempt.startTime)}`,
+                        );
+                });
+                doc.moveDown(0.25);
+            });
+            doc.moveDown(0.35);
+        });
+        doc.moveDown(0.2);
+    }
+
     private writePdfNeedsSupportSection(
         doc: PDFKit.PDFDocument,
         overview: AdminOverviewReportDto,
@@ -1399,6 +1693,33 @@ export class ReportExportService {
             return '';
         }
         return date.toISOString().slice(0, 10);
+    }
+
+    /** UTC date and time for result/attempt rows (`2026-08-12 09:14`). */
+    private formatDateTimeUtc(value: Date | string): string {
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return '';
+        }
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        const hours = String(date.getUTCHours()).padStart(2, '0');
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
+    }
+
+    private trendLabel(trend: string): string {
+        if (trend === 'improving') {
+            return 'Improving';
+        }
+        if (trend === 'declining') {
+            return 'Declining';
+        }
+        if (trend === 'stable') {
+            return 'Stable';
+        }
+        return 'Insufficient data';
     }
 
     private escapeCsv(value: string): string {
