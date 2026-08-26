@@ -745,6 +745,7 @@ export class TestAttemptsController {
                 req.user.id,
             );
 
+            // Only log success after the service persisted the results row.
             this.logger.log(`Test attempt ${id} submitted successfully`);
 
             return {

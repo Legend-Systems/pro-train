@@ -4,6 +4,7 @@ import {
     BadRequestException,
     ConflictException,
     ForbiddenException,
+    InternalServerErrorException,
     Logger,
     Inject,
 } from '@nestjs/common';
@@ -767,7 +768,10 @@ export class TestAttemptsService {
                 scope,
             );
 
-            if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+            if (
+                attempt.status !== AttemptStatus.IN_PROGRESS &&
+                attempt.status !== AttemptStatus.SUBMITTED
+            ) {
                 throw new BadRequestException(
                     'Cannot submit attempt that is not in progress',
                 );
@@ -883,14 +887,40 @@ export class TestAttemptsService {
                 }
             }
 
-            // Update attempt status
-            attempt.status = AttemptStatus.SUBMITTED;
-            attempt.submitTime = new Date();
-            attempt.progressPercentage = 100;
+            // Mark + persist the result BEFORE flipping status. The previous order
+            // reported HTTP success after answers were saved even when result
+            // creation timed out, which sent learners to an empty Past Results page.
+            this.logger.log(
+                `Starting auto-processing for attempt ${attemptId}`,
+            );
+            const markedCount = await this.answersService.autoMark(
+                attemptId,
+                scope,
+            );
+            this.logger.log(
+                `Auto-marking completed for attempt ${attemptId} - marked ${markedCount} questions`,
+            );
 
-            const savedAttempt = await this.testAttemptRepository.save(attempt);
+            const createdResult =
+                await this.resultsService.createFromAttempt(attemptId);
+            if (!createdResult?.resultId) {
+                throw new InternalServerErrorException(
+                    'Failed to save the test result. Please try submitting again.',
+                );
+            }
+            this.logger.log(
+                `Result created for attempt ${attemptId}: ${createdResult.resultId}`,
+            );
 
-            // Phase 3 — emit submitted event (XP awarded via ResultsService chain)
+            if (attempt.status !== AttemptStatus.SUBMITTED) {
+                attempt.status = AttemptStatus.SUBMITTED;
+                attempt.submitTime = new Date();
+                attempt.progressPercentage = 100;
+            }
+
+            const savedAttempt =
+                await this.testAttemptRepository.save(attempt);
+
             if (scope.orgId) {
                 const courseId =
                     attempt.test?.courseId ??
@@ -916,7 +946,6 @@ export class TestAttemptsService {
                 }
             }
 
-            // Invalidate related caches
             await this.invalidateAttemptCache(
                 attemptId,
                 userId,
@@ -925,50 +954,24 @@ export class TestAttemptsService {
                 scope.branchId,
             );
 
-            // Trigger auto-marking and result creation flow
             try {
-                this.logger.log(
-                    `Starting auto-processing for attempt ${attemptId}`,
-                );
-
-                // Step 1: Auto-mark objective questions
-                this.logger.log(
-                    `🔍 DEBUG: Passing ${createdAnswerEntities.length} entities to autoMark`,
-                );
-                const markedCount = await this.answersService.autoMark(
-                    attemptId,
-                    scope,
-                );
-                this.logger.log(
-                    `Auto-marking completed for attempt ${attemptId} - marked ${markedCount} questions`,
-                );
-
-                // Step 2: Create result based on marked answers
-                const result =
-                    await this.resultsService.createFromAttempt(attemptId);
-                this.logger.log(
-                    `Result created for attempt ${attemptId}: ${result.resultId}`,
-                );
-
-                // Step 3: Refresh test statistics
                 await this.testService.refreshTestStatistics(attempt.testId);
-                this.logger.log(
-                    `Test statistics refreshed for test ${attempt.testId}`,
+            } catch (statsError) {
+                this.logger.warn(
+                    `Test statistics refresh failed after result ${createdResult.resultId} (non-fatal)`,
+                    statsError instanceof Error
+                        ? statsError.message
+                        : String(statsError),
                 );
-
-                this.logger.log(
-                    `Auto-processing completed successfully for attempt ${attemptId}`,
-                );
-            } catch (error) {
-                this.logger.error(
-                    `Error during auto-processing for attempt ${attemptId}`,
-                    error instanceof Error ? error.stack : String(error),
-                );
-                // Don't throw here - the attempt submission itself was successful
-                // The processing can be retried later if needed
             }
 
-            return this.mapToResponseDto(savedAttempt);
+            return {
+                ...this.mapToResponseDto(savedAttempt),
+                resultId: createdResult.resultId,
+                score: createdResult.score,
+                percentage: createdResult.percentage,
+                passed: createdResult.passed,
+            };
         });
     }
 
@@ -1219,9 +1222,10 @@ export class TestAttemptsService {
         const query = this.testAttemptRepository
             .createQueryBuilder('attempt')
             .leftJoinAndSelect('attempt.test', 'test')
-            .leftJoinAndSelect('test.course', 'course')
-            .leftJoinAndSelect('attempt.orgId', 'orgId')
-            .leftJoinAndSelect('attempt.branchId', 'branchId')
+            .leftJoin('attempt.orgId', 'orgId')
+            .addSelect(['orgId.id'])
+            .leftJoin('attempt.branchId', 'branchId')
+            .addSelect(['branchId.id'])
             .where('attempt.attemptId = :attemptId', { attemptId })
             .andWhere('attempt.userId = :userId', { userId });
 

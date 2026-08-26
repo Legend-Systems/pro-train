@@ -141,14 +141,15 @@ export class ResultsService {
         try {
             this.logger.log(`Creating result from attempt ${attemptId}`);
 
-            // Use query builder for more reliable relation loading
+            // Load test metadata only — joining org/branch hydrates whiteLabelingConfig
+            // JSON and timed out on Render after auto-mark (read ETIMEDOUT).
             const attempt = await this.testAttemptRepository
                 .createQueryBuilder('attempt')
                 .leftJoinAndSelect('attempt.test', 'test')
-                .leftJoinAndSelect('test.course', 'course')
-                .leftJoinAndSelect('attempt.user', 'user')
-                .leftJoinAndSelect('attempt.orgId', 'orgId')
-                .leftJoinAndSelect('attempt.branchId', 'branchId')
+                .leftJoin('attempt.orgId', 'orgId')
+                .addSelect(['orgId.id'])
+                .leftJoin('attempt.branchId', 'branchId')
+                .addSelect(['branchId.id'])
                 .where('attempt.attemptId = :attemptId', { attemptId })
                 .getOne();
 
@@ -171,26 +172,40 @@ export class ResultsService {
                 hasCourse: !!attempt.test?.course,
             });
 
-            if (attempt.status !== AttemptStatus.SUBMITTED) {
-                this.logger.warn(
-                    `Attempt ${attemptId} status is ${attempt.status}, not SUBMITTED`,
-                );
-                throw new BadRequestException(
-                    'Cannot create result for incomplete attempt',
-                );
-            }
-
             // Check if result already exists
             const existingResult = await this.resultRepository.findOne({
                 where: { attemptId },
             });
 
             if (existingResult) {
-                this.logger.warn(
+                this.logger.log(
                     `Result already exists for attempt ${attemptId}: ${existingResult.resultId}`,
                 );
+                return {
+                    resultId: existingResult.resultId,
+                    attemptId: existingResult.attemptId,
+                    userId: existingResult.userId,
+                    testId: existingResult.testId,
+                    courseId: existingResult.courseId,
+                    score: Number(existingResult.score),
+                    maxScore: Number(existingResult.maxScore),
+                    percentage: Number(existingResult.percentage),
+                    passed: existingResult.passed,
+                    calculatedAt: existingResult.calculatedAt,
+                } as ResultResponseDto;
+            }
+
+            // IN_PROGRESS is allowed so submit can persist the result before
+            // flipping the attempt to submitted (avoids a success with no row).
+            if (
+                attempt.status !== AttemptStatus.SUBMITTED &&
+                attempt.status !== AttemptStatus.IN_PROGRESS
+            ) {
+                this.logger.warn(
+                    `Attempt ${attemptId} status is ${attempt.status}, cannot create result`,
+                );
                 throw new BadRequestException(
-                    'Result already exists for this attempt',
+                    'Cannot create result for incomplete attempt',
                 );
             }
 
@@ -202,15 +217,10 @@ export class ResultsService {
 
                 // Fallback: manually fetch test data
                 try {
-                    const test = await this.testRepository
-                        .createQueryBuilder('test')
-                        .leftJoinAndSelect('test.course', 'course')
-                        .leftJoinAndSelect('test.orgId', 'orgId')
-                        .leftJoinAndSelect('test.branchId', 'branchId')
-                        .where('test.testId = :testId', {
-                            testId: attempt.testId,
-                        })
-                        .getOne();
+                    const test = await this.testRepository.findOne({
+                        where: { testId: attempt.testId },
+                        select: ['testId', 'courseId', 'title'],
+                    });
 
                     if (test) {
                         attempt.test = test;
@@ -246,7 +256,7 @@ export class ResultsService {
             // Calculate the score
             this.logger.debug(`Calculating score for attempt ${attemptId}`);
             const { score, maxScore, percentage, totalQuestions, questionsAnswered } =
-                await this.calculateScore(attemptId);
+                await this.calculateScore(attemptId, attempt.testId);
 
             this.logger.debug(`Score calculated for attempt ${attemptId}:`, {
                 score,
@@ -261,38 +271,19 @@ export class ResultsService {
             let orgId = attempt.orgId;
             let branchId = attempt.branchId;
 
-            // If attempt doesn't have org/branch, try to get from test or course
-            if (!orgId && attempt.test?.course) {
-                this.logger.debug(
-                    `Attempting to inherit org/branch from test/course for attempt ${attemptId}`,
-                );
-
-                // Try to get org/branch from test first
-                if (attempt.test.orgId) {
-                    orgId = attempt.test.orgId;
-                    this.logger.debug(`Inherited orgId from test: ${orgId.id}`);
+            // Slim join may omit org/branch objects — read FK columns directly.
+            if (!orgId?.id) {
+                const fkRow = await this.testAttemptRepository
+                    .createQueryBuilder('attempt')
+                    .select('attempt.orgIdId', 'orgId')
+                    .addSelect('attempt.branchIdId', 'branchId')
+                    .where('attempt.attemptId = :attemptId', { attemptId })
+                    .getRawOne<{ orgId?: string; branchId?: string | null }>();
+                if (fkRow?.orgId) {
+                    orgId = { id: fkRow.orgId } as Result['orgId'];
                 }
-
-                if (attempt.test.branchId) {
-                    branchId = attempt.test.branchId;
-                    this.logger.debug(
-                        `Inherited branchId from test: ${branchId.id}`,
-                    );
-                }
-
-                // If still no org/branch, get from course
-                if (!orgId && attempt.test.course.orgId) {
-                    orgId = attempt.test.course.orgId;
-                    this.logger.debug(
-                        `Inherited orgId from course: ${orgId.id}`,
-                    );
-                }
-
-                if (!branchId && attempt.test.course.branchId) {
-                    branchId = attempt.test.course.branchId;
-                    this.logger.debug(
-                        `Inherited branchId from course: ${branchId.id}`,
-                    );
+                if (fkRow?.branchId) {
+                    branchId = { id: fkRow.branchId } as Result['branchId'];
                 }
             }
 
@@ -595,15 +586,20 @@ export class ResultsService {
                 );
             }
 
-            return this.findOne(
-                savedResult.resultId,
-                {
-                    orgId: orgId?.id,
-                    branchId: branchId?.id,
-                    userId: attempt.userId,
-                },
-                attempt.userId,
-            );
+            // Return the saved row only. findOne() hydrates user/org/branch JSON
+            // and extra analytics — that second load timed out on Render after marking.
+            return {
+                resultId: savedResult.resultId,
+                attemptId: savedResult.attemptId,
+                userId: savedResult.userId,
+                testId: savedResult.testId,
+                courseId: savedResult.courseId,
+                score: Number(savedResult.score),
+                maxScore: Number(savedResult.maxScore),
+                percentage: Number(savedResult.percentage),
+                passed: savedResult.passed,
+                calculatedAt: savedResult.calculatedAt,
+            } as ResultResponseDto;
         } catch (error) {
             this.logger.error(
                 `Failed to create result from attempt ${attemptId}:`,
@@ -2661,7 +2657,15 @@ export class ResultsService {
         );
     }
 
-    private async calculateScore(attemptId: number): Promise<{
+    /**
+     * Score from answers + question points only. Do not reload the attempt with
+     * org/branch relations — that SELECT joined whiteLabelingConfig and timed
+     * out (read ETIMEDOUT) during submit of attempt 668.
+     */
+    private async calculateScore(
+        attemptId: number,
+        testId?: number,
+    ): Promise<{
         score: number;
         maxScore: number;
         percentage: number;
@@ -2672,121 +2676,52 @@ export class ResultsService {
             `Starting score calculation for attempt ${attemptId}`,
         );
 
-        // Get the attempt with org/branch info for scoping
-        const attempt = await this.testAttemptRepository.findOne({
-            where: { attemptId },
-            relations: ['test', 'orgId', 'branchId'],
-        });
-
-        if (!attempt) {
-            throw new NotFoundException(`Attempt ${attemptId} not found`);
+        let resolvedTestId = testId;
+        if (!resolvedTestId) {
+            const attemptRow = await this.testAttemptRepository.findOne({
+                where: { attemptId },
+                select: ['attemptId', 'testId'],
+            });
+            if (!attemptRow) {
+                throw new NotFoundException(`Attempt ${attemptId} not found`);
+            }
+            resolvedTestId = attemptRow.testId;
         }
+
+        const [answers, questions] = await Promise.all([
+            this.answerRepository.find({
+                where: { attemptId },
+                select: ['answerId', 'questionId', 'pointsAwarded'],
+            }),
+            this.questionRepository.find({
+                where: { testId: resolvedTestId },
+                select: ['questionId', 'points'],
+            }),
+        ]);
 
         this.logger.debug(
-            `Attempt found - testId: ${attempt.testId}, orgId: ${attempt.orgId?.id}, branchId: ${attempt.branchId?.id}`,
+            `Found ${answers.length} answers and ${questions.length} questions for attempt ${attemptId}`,
         );
 
-        // Get all answers for the attempt with proper scoping
-        const answersQuery = this.answerRepository
-            .createQueryBuilder('answer')
-            .leftJoinAndSelect('answer.question', 'question')
-            .leftJoinAndSelect('answer.selectedOption', 'selectedOption')
-            .where('answer.attemptId = :attemptId', { attemptId });
-
-        // Apply org/branch scoping to answers
-        if (attempt.orgId) {
-            answersQuery.andWhere('answer.orgId = :orgId', {
-                orgId: attempt.orgId.id,
-            });
-        }
-        if (attempt.branchId) {
-            answersQuery.andWhere('answer.branchId = :branchId', {
-                branchId: attempt.branchId.id,
-            });
-        }
-
-        const answers = await answersQuery.getMany();
-        this.logger.debug(
-            `Found ${answers.length} scoped answers for attempt ${attemptId}`,
-        );
-
-        // Get all questions for the test with proper scoping
-        const questionsQuery = this.questionRepository
-            .createQueryBuilder('question')
-            .where('question.testId = :testId', { testId: attempt.testId });
-
-        // Org-wide questions (NULL branchId) must remain visible to branch learners.
-        if (attempt.orgId) {
-            questionsQuery.andWhere('question.orgId = :orgId', {
-                orgId: attempt.orgId.id,
-            });
-        }
-        applyBranchVisibilityToQuery(
-            questionsQuery,
-            'question',
-            attempt.branchId?.id,
-            'scoreCalc',
-        );
-
-        const questions = await questionsQuery.getMany();
-        this.logger.debug(
-            `Found ${questions.length} scoped questions for test ${attempt.testId}`,
+        const pointsByQuestionId = new Map(
+            answers.map(answer => [
+                answer.questionId,
+                Number(answer.pointsAwarded) || 0,
+            ]),
         );
 
         let totalScore = 0;
         let maxScore = 0;
 
-        this.logger.debug(`Processing questions for score calculation:`);
-
         for (const question of questions) {
             const questionPoints = Number(question.points) || 0;
             maxScore += questionPoints;
-
-            const answer = answers.find(
-                a => a.questionId === question.questionId,
-            );
-
-            let pointsEarned = 0;
-
-            if (answer) {
-                // Check if answer has been marked with points
-                if (
-                    answer.pointsAwarded !== null &&
-                    answer.pointsAwarded !== undefined
-                ) {
-                    pointsEarned = Number(answer.pointsAwarded) || 0;
-                    this.logger.debug(
-                        `Question ${question.questionId}: Using marked points ${pointsEarned}/${questionPoints}`,
-                    );
-                } else if (answer.selectedOption) {
-                    // Auto-calculate for objective questions
-                    const isCorrect = answer.selectedOption.isCorrect;
-                    if (isCorrect) {
-                        pointsEarned = questionPoints;
-                    }
-                    this.logger.debug(
-                        `Question ${question.questionId}: Auto-calculated ${pointsEarned}/${questionPoints} (correct: ${isCorrect})`,
-                    );
-                } else {
-                    this.logger.debug(
-                        `Question ${question.questionId}: No answer or selection - 0/${questionPoints}`,
-                    );
-                }
-            } else {
-                this.logger.debug(
-                    `Question ${question.questionId}: No answer found - 0/${questionPoints}`,
-                );
-            }
-
-            totalScore += pointsEarned;
+            totalScore += pointsByQuestionId.get(question.questionId) ?? 0;
         }
 
-        // Calculate percentage with proper validation
         let percentage = 0;
         if (maxScore > 0) {
-            percentage = (totalScore / maxScore) * 100;
-            // Round to 2 decimal places
-            percentage = Math.round(percentage * 100) / 100;
+            percentage = Math.round((totalScore / maxScore) * 10000) / 100;
         }
 
         this.logger.debug(
