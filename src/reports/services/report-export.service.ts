@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 // without esModuleInterop — use `import = require` so `new PDFDocument()` works in Nest.
 import PDFDocument = require('pdfkit');
 import type {
+    AdminLearnerAttemptsBreakdownDto,
+    AdminLearnerTestBreakdownDto,
     AdminOverviewReportDto,
     AdminRankingEntryDto,
 } from '../dto/admin-insights.dto';
@@ -79,6 +81,32 @@ const RANKING_COLUMNS = {
     lastName: { x: 218, width: 130 },
     branch: { x: 348, width: 135 },
     tests: { x: 483, width: 64 },
+} as const;
+
+/** Y past which a breakdown learner/test block should start on a new page. */
+const PDF_CONTENT_BOTTOM_Y = 780;
+
+/** Minimum space needed for a learner name, alias, summary, and first test heading. */
+const PDF_BREAKDOWN_LEARNER_MIN_HEIGHT = 92;
+
+/** Minimum space needed for a test title, metrics, and one result row. */
+const PDF_BREAKDOWN_TEST_MIN_HEIGHT = 52;
+
+/** Indent for per-test headings and metrics. */
+const PDF_BREAKDOWN_TEST_INSET = 12;
+
+/** Indent for individual result / incomplete-attempt rows. */
+const PDF_BREAKDOWN_RESULT_INSET = 24;
+
+/** Subtle divider between learners — stronger than the section-heading rule. */
+const PDF_BREAKDOWN_SEPARATOR_COLOR = '#e5e7eb';
+
+/** Column geometry for a single result row inside the breakdown. */
+const BREAKDOWN_RESULT_COLUMNS = {
+    label: { offset: 0, width: 78 },
+    score: { offset: 82, width: 46 },
+    outcome: { offset: 132, width: 58 },
+    datetime: { offset: 196, width: 140 },
 } as const;
 
 /**
@@ -1330,8 +1358,8 @@ export class ReportExportService {
     }
 
     /**
-     * Nested PDF layout: learner header, then each test with counts and
-     * every individual result (score, pass/fail, date/time).
+     * Per-learner breakdown: name and branch alias as a grouped header,
+     * then tests and individual results with consistent indent and spacing.
      */
     private writePdfAttemptsResultsBreakdownSection(
         doc: PDFKit.PDFDocument,
@@ -1346,7 +1374,8 @@ export class ReportExportService {
         const learners = overview.attemptsResultsBreakdown?.learners ?? [];
 
         if (learners.length === 0) {
-            doc.fontSize(10)
+            doc.font('Helvetica')
+                .fontSize(10)
                 .fillColor('#6b7280')
                 .text(
                     'No learners with attempts or results in the selected window.',
@@ -1355,82 +1384,264 @@ export class ReportExportService {
             return;
         }
 
-        learners.forEach(learner => {
-            if (doc.y > PDF_PAGE_BREAK_Y) {
-                doc.addPage();
-            }
-            const branch = learner.branchName ?? 'No branch';
-            doc.fontSize(11)
-                .fillColor('#111827')
-                .text(
-                    `${learner.firstName} ${learner.lastName} | ${branch}`,
-                );
-            doc.fontSize(8)
-                .fillColor('#6b7280')
-                .text(
-                    `Tests: ${learner.testsParticipated}  ·  Attempts: ${learner.totalAttempts}  ·  Results: ${learner.totalResults}  ·  Passed: ${learner.passedCount}  ·  Failed: ${learner.failedCount}  ·  Pass rate: ${learner.overallPassRate}%  ·  Avg: ${learner.overallAverageScore}%`,
-                );
-            doc.moveDown(0.2);
-
-            learner.tests.forEach(test => {
-                if (doc.y > PDF_ROW_BREAK_Y) {
+        learners.forEach((learner, index) => {
+            if (index > 0) {
+                const separatorAndHeader =
+                    22 + PDF_BREAKDOWN_LEARNER_MIN_HEIGHT;
+                if (doc.y + separatorAndHeader > PDF_CONTENT_BOTTOM_Y) {
                     doc.addPage();
+                } else {
+                    this.writePdfLearnerSeparator(doc);
                 }
-                doc.fontSize(10)
-                    .fillColor('#413DFB')
-                    .text(test.testTitle);
-                const insightParts = [
-                    `Attempts: ${test.totalAttempts}`,
-                    `Results: ${test.totalResults}`,
-                    `Passed: ${test.passedCount}`,
-                    `Failed: ${test.failedCount}`,
-                    `Avg: ${test.averageScore}%`,
-                ];
-                if (test.attemptsToPass !== null) {
-                    insightParts.push(
-                        `Attempts to pass: ${test.attemptsToPass}`,
-                    );
-                }
-                if (test.scoreDelta !== null) {
-                    insightParts.push(
-                        `Delta: ${test.scoreDelta > 0 ? '+' : ''}${test.scoreDelta}pp`,
-                    );
-                }
-                insightParts.push(this.trendLabel(test.improvementTrend));
-                doc.fontSize(8)
-                    .fillColor('#6b7280')
-                    .text(insightParts.join('  ·  '));
-
-                test.results.forEach((result, index) => {
-                    if (doc.y > PDF_ROW_BREAK_Y) {
-                        doc.addPage();
-                    }
-                    const outcome = result.passed ? 'Passed' : 'Failed';
-                    doc.fontSize(9)
-                        .fillColor('#111827')
-                        .text(
-                            `  Result ${index + 1} – ${result.percentage}% (${outcome}) – ${this.formatDateTimeUtc(result.submittedAt)}`,
-                        );
-                });
-                test.incompleteAttempts.forEach(attempt => {
-                    if (doc.y > PDF_ROW_BREAK_Y) {
-                        doc.addPage();
-                    }
-                    const statusLabel =
-                        attempt.status === 'expired'
-                            ? 'Expired'
-                            : 'In progress';
-                    doc.fontSize(9)
-                        .fillColor('#6b7280')
-                        .text(
-                            `  Attempt ${attempt.attemptNumber} – ${statusLabel} – ${this.formatDateTimeUtc(attempt.startTime)}`,
-                        );
-                });
-                doc.moveDown(0.25);
-            });
-            doc.moveDown(0.35);
+            } else {
+                this.ensurePdfBreakdownSpace(
+                    doc,
+                    PDF_BREAKDOWN_LEARNER_MIN_HEIGHT,
+                );
+            }
+            this.writePdfLearnerBreakdown(doc, learner);
         });
-        doc.moveDown(0.2);
+
+        doc.font('Helvetica').fillColor('#111827');
+        doc.moveDown(0.35);
+    }
+
+    /**
+     * One learner as a self-contained block: prominent name, alias underneath,
+     * overall stats, then each test with its results.
+     */
+    private writePdfLearnerBreakdown(
+        doc: PDFKit.PDFDocument,
+        learner: AdminLearnerAttemptsBreakdownDto,
+    ): void {
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+        const fullName = `${learner.firstName} ${learner.lastName}`;
+        const branchAlias = learner.branchAlias?.trim() || 'No branch';
+
+        doc.x = left;
+        doc.font('Helvetica-Bold')
+            .fontSize(12)
+            .fillColor('#111827')
+            .text(fullName, left, doc.y, {
+                width,
+                lineGap: 1,
+            });
+
+        doc.moveDown(0.12);
+        doc.font('Helvetica-Oblique')
+            .fontSize(9)
+            .fillColor('#6b7280')
+            .text(branchAlias, left, doc.y, {
+                width,
+                lineGap: 1,
+            });
+
+        doc.moveDown(0.4);
+        doc.font('Helvetica')
+            .fontSize(8.5)
+            .fillColor('#4b5563')
+            .text(
+                [
+                    `Tests ${learner.testsParticipated}`,
+                    `Attempts ${learner.totalAttempts}`,
+                    `Results ${learner.totalResults}`,
+                    `Passed ${learner.passedCount}`,
+                    `Failed ${learner.failedCount}`,
+                    `Pass rate ${learner.overallPassRate}%`,
+                    `Avg ${learner.overallAverageScore}%`,
+                ].join('   ·   '),
+                left,
+                doc.y,
+                { width, lineGap: 2 },
+            );
+
+        doc.moveDown(0.45);
+
+        learner.tests.forEach(test => {
+            const yBefore = doc.y;
+            this.ensurePdfBreakdownSpace(doc, PDF_BREAKDOWN_TEST_MIN_HEIGHT);
+            if (doc.y < yBefore) {
+                this.writePdfLearnerContinuation(
+                    doc,
+                    fullName,
+                    branchAlias,
+                    left,
+                    width,
+                );
+            }
+            this.writePdfLearnerTestBreakdown(doc, test, left, width);
+        });
+    }
+
+    /** One test inside a learner block: title, summary metrics, then result rows. */
+    private writePdfLearnerTestBreakdown(
+        doc: PDFKit.PDFDocument,
+        test: AdminLearnerTestBreakdownDto,
+        left: number,
+        contentWidth: number,
+    ): void {
+        const testLeft = left + PDF_BREAKDOWN_TEST_INSET;
+        const testWidth = contentWidth - PDF_BREAKDOWN_TEST_INSET;
+
+        doc.font('Helvetica-Bold')
+            .fontSize(10)
+            .fillColor('#413DFB')
+            .text(test.testTitle, testLeft, doc.y, {
+                width: testWidth,
+                lineGap: 1,
+            });
+
+        const insightParts = [
+            `Attempts ${test.totalAttempts}`,
+            `Results ${test.totalResults}`,
+            `Passed ${test.passedCount}`,
+            `Failed ${test.failedCount}`,
+            `Avg ${test.averageScore}%`,
+        ];
+        if (test.attemptsToPass !== null) {
+            insightParts.push(`Attempts to pass ${test.attemptsToPass}`);
+        }
+        if (test.scoreDelta !== null) {
+            insightParts.push(
+                `Delta ${test.scoreDelta > 0 ? '+' : ''}${test.scoreDelta}pp`,
+            );
+        }
+        insightParts.push(this.trendLabel(test.improvementTrend));
+
+        doc.moveDown(0.12);
+        doc.font('Helvetica')
+            .fontSize(8)
+            .fillColor('#6b7280')
+            .text(insightParts.join('   ·   '), testLeft, doc.y, {
+                width: testWidth,
+                lineGap: 2,
+            });
+
+        doc.moveDown(0.22);
+
+        test.results.forEach((result, index) => {
+            this.ensurePdfBreakdownSpace(doc, 16);
+            this.writePdfBreakdownResultRow(
+                doc,
+                `Result ${index + 1}`,
+                `${result.percentage}%`,
+                result.passed ? 'Passed' : 'Failed',
+                this.formatDateTimeUtc(result.submittedAt),
+                result.passed ? '#111827' : '#6b7280',
+            );
+        });
+        test.incompleteAttempts.forEach(attempt => {
+            this.ensurePdfBreakdownSpace(doc, 16);
+            this.writePdfBreakdownResultRow(
+                doc,
+                `Attempt ${attempt.attemptNumber}`,
+                '',
+                attempt.status === 'expired' ? 'Expired' : 'In progress',
+                this.formatDateTimeUtc(attempt.startTime),
+                '#6b7280',
+            );
+        });
+
+        doc.moveDown(0.4);
+        doc.x = left;
+    }
+
+    /** Compact name + alias when a learner’s tests continue on a new page. */
+    private writePdfLearnerContinuation(
+        doc: PDFKit.PDFDocument,
+        fullName: string,
+        branchAlias: string,
+        left: number,
+        width: number,
+    ): void {
+        doc.font('Helvetica-Bold')
+            .fontSize(10)
+            .fillColor('#111827')
+            .text(`${fullName}  (continued)`, left, doc.y, {
+                width,
+                lineGap: 1,
+            });
+        doc.moveDown(0.08);
+        doc.font('Helvetica-Oblique')
+            .fontSize(8)
+            .fillColor('#6b7280')
+            .text(branchAlias, left, doc.y, { width, lineGap: 1 });
+        doc.moveDown(0.4);
+    }
+
+    /** Aligned result/attempt row: label, score, outcome, timestamp. */
+    private writePdfBreakdownResultRow(
+        doc: PDFKit.PDFDocument,
+        label: string,
+        score: string,
+        outcome: string,
+        datetime: string,
+        scoreColor: string,
+    ): void {
+        const originX = doc.page.margins.left + PDF_BREAKDOWN_RESULT_INSET;
+        const originY = doc.y;
+        const columns = BREAKDOWN_RESULT_COLUMNS;
+
+        doc.font('Helvetica')
+            .fontSize(8.5)
+            .fillColor('#6b7280')
+            .text(label, originX + columns.label.offset, originY, {
+                width: columns.label.width,
+                lineBreak: false,
+            });
+        if (score) {
+            doc.font('Helvetica-Bold')
+                .fontSize(9)
+                .fillColor(scoreColor)
+                .text(score, originX + columns.score.offset, originY, {
+                    width: columns.score.width,
+                    lineBreak: false,
+                });
+        }
+        doc.font('Helvetica')
+            .fontSize(8.5)
+            .fillColor('#4b5563')
+            .text(outcome, originX + columns.outcome.offset, originY, {
+                width: columns.outcome.width,
+                lineBreak: false,
+            });
+        doc.fontSize(8.5)
+            .fillColor('#6b7280')
+            .text(datetime, originX + columns.datetime.offset, originY, {
+                width: columns.datetime.width,
+                lineBreak: false,
+            });
+
+        doc.x = doc.page.margins.left;
+        doc.y = originY + 13;
+    }
+
+    /** Hairline between learner blocks; never used before the first learner. */
+    private writePdfLearnerSeparator(doc: PDFKit.PDFDocument): void {
+        doc.moveDown(0.4);
+        const y = doc.y;
+        doc.save();
+        doc.strokeColor(PDF_BREAKDOWN_SEPARATOR_COLOR)
+            .lineWidth(0.6)
+            .moveTo(doc.page.margins.left, y)
+            .lineTo(doc.page.width - doc.page.margins.right, y)
+            .stroke();
+        doc.restore();
+        doc.moveDown(0.7);
+    }
+
+    private ensurePdfBreakdownSpace(
+        doc: PDFKit.PDFDocument,
+        minHeight: number,
+    ): void {
+        if (doc.y + minHeight > PDF_CONTENT_BOTTOM_Y) {
+            doc.addPage();
+        }
+    }
+
+    private pdfContentWidth(doc: PDFKit.PDFDocument): number {
+        return doc.page.width - doc.page.margins.left - doc.page.margins.right;
     }
 
     private writePdfNeedsSupportSection(

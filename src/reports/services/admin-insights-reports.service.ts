@@ -127,6 +127,7 @@ interface BreakdownResultRow {
     readonly firstName: string;
     readonly lastName: string;
     readonly branchName: string | null;
+    readonly branchAlias: string | null;
     readonly testId: number;
     readonly testTitle: string;
     readonly courseTitle: string | null;
@@ -145,6 +146,7 @@ interface BreakdownAttemptRow {
     readonly firstName: string;
     readonly lastName: string;
     readonly branchName: string | null;
+    readonly branchAlias: string | null;
     readonly testId: number;
     readonly testTitle: string;
     readonly courseTitle: string | null;
@@ -171,6 +173,7 @@ interface BreakdownLearnerBucket {
         firstName: string;
         lastName: string;
         branchName: string | null;
+        branchAlias: string | null;
     };
     tests: Map<number, BreakdownTestBucket>;
 }
@@ -1959,6 +1962,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('userBranch.name', 'branchName')
+            .addSelect('userBranch.alias', 'branchAlias')
             .addSelect('result.testId', 'testId')
             .addSelect('test.title', 'testTitle')
             .addSelect('course.title', 'courseTitle')
@@ -1980,6 +1984,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
             testId: number | string;
             testTitle: string | null;
             courseTitle: string | null;
@@ -1998,6 +2003,7 @@ export class AdminInsightsReportsService {
             firstName: row.firstName,
             lastName: row.lastName,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
             testId: Number(row.testId),
             testTitle: row.testTitle ?? 'Untitled test',
             courseTitle: row.courseTitle ?? null,
@@ -2047,6 +2053,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('userBranch.name', 'branchName')
+            .addSelect('userBranch.alias', 'branchAlias')
             .addSelect('attempt.testId', 'testId')
             .addSelect('test.title', 'testTitle')
             .addSelect('course.title', 'courseTitle')
@@ -2068,6 +2075,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
             testId: number | string;
             testTitle: string | null;
             courseTitle: string | null;
@@ -2084,6 +2092,7 @@ export class AdminInsightsReportsService {
             firstName: row.firstName,
             lastName: row.lastName,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
             testId: Number(row.testId),
             testTitle: row.testTitle ?? 'Untitled test',
             courseTitle: row.courseTitle ?? null,
@@ -2116,13 +2125,20 @@ export class AdminInsightsReportsService {
             firstName: string,
             lastName: string,
             branchName: string | null,
+            branchAlias: string | null,
         ): BreakdownLearnerBucket => {
             const existing = learners.get(userId);
             if (existing) {
                 return existing;
             }
             const created: BreakdownLearnerBucket = {
-                profile: { userId, firstName, lastName, branchName },
+                profile: {
+                    userId,
+                    firstName,
+                    lastName,
+                    branchName,
+                    branchAlias,
+                },
                 tests: new Map<number, BreakdownTestBucket>(),
             };
             learners.set(userId, created);
@@ -2157,6 +2173,7 @@ export class AdminInsightsReportsService {
                 row.firstName,
                 row.lastName,
                 row.branchName,
+                row.branchAlias,
             );
             const test = ensureTest(
                 learner,
@@ -2187,6 +2204,7 @@ export class AdminInsightsReportsService {
                 row.firstName,
                 row.lastName,
                 row.branchName,
+                row.branchAlias,
             );
             const test = ensureTest(
                 learner,
@@ -2268,6 +2286,7 @@ export class AdminInsightsReportsService {
             firstName: learner.profile.firstName,
             lastName: learner.profile.lastName,
             branchName: learner.profile.branchName,
+            branchAlias: learner.profile.branchAlias,
             testsParticipated: tests.length,
             totalAttempts,
             totalResults,

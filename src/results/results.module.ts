@@ -15,6 +15,8 @@ import { TrainingProgressModule } from '../training_progress/training_progress.m
 import { AuthModule } from '../auth/auth.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { TrainingHoursModule } from '../training-hours/training-hours.module';
+import { AnswersModule } from '../answers/answers.module';
+import { PendingResultsService } from './pending-results.service';
 
 @Module({
     imports: [
@@ -34,9 +36,10 @@ import { TrainingHoursModule } from '../training-hours/training-hours.module';
         AuthModule,
         RewardsModule,
         TrainingHoursModule,
+        AnswersModule,
     ],
     controllers: [ResultsController],
-    providers: [ResultsService],
+    providers: [ResultsService, PendingResultsService],
     exports: [ResultsService],
 })
 export class ResultsModule {}
