@@ -8,7 +8,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { Repository, SelectQueryBuilder, IsNull } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Result } from './entities/result.entity';
@@ -172,9 +172,9 @@ export class ResultsService {
                 hasCourse: !!attempt.test?.course,
             });
 
-            // Check if result already exists
+            // Ignore voided rows so a reset cannot block a new live result.
             const existingResult = await this.resultRepository.findOne({
-                where: { attemptId },
+                where: { attemptId, voidedByResetId: IsNull() },
             });
 
             if (existingResult) {
@@ -197,9 +197,12 @@ export class ResultsService {
 
             // IN_PROGRESS is allowed so submit can persist the result before
             // flipping the attempt to submitted (avoids a success with no row).
+            // EXPIRED is allowed for admin recovery of timed-out attempts that
+            // still have stored answers but never received a result.
             if (
                 attempt.status !== AttemptStatus.SUBMITTED &&
-                attempt.status !== AttemptStatus.IN_PROGRESS
+                attempt.status !== AttemptStatus.IN_PROGRESS &&
+                attempt.status !== AttemptStatus.EXPIRED
             ) {
                 this.logger.warn(
                     `Attempt ${attemptId} status is ${attempt.status}, cannot create result`,

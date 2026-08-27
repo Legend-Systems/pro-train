@@ -553,6 +553,14 @@ export class AdminLearnerAttemptsBreakdownDto {
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description:
+            'Short branch code used in the PDF breakdown instead of the full legal name',
+        example: 'BitTzaneen',
+    })
+    branchAlias: string | null;
+
     @ApiProperty({ description: 'Distinct tests with an attempt or result' })
     testsParticipated: number;
 

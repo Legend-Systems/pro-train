@@ -4,10 +4,12 @@ import {
     Post,
     Param,
     Query,
+    Body,
     UseGuards,
     ParseIntPipe,
     BadRequestException,
     HttpStatus,
+    HttpCode,
     Logger,
 } from '@nestjs/common';
 import {
@@ -40,6 +42,17 @@ import { AdminEmployeeMetricsFilterDto } from './dto/admin-employee-metrics-filt
 import { AdminEmployeeMetricsDto } from './dto/admin-employee-metrics.dto';
 import { AdminEmployeePerformanceFilterDto } from './dto/admin-employee-performance-filter.dto';
 import { AdminEmployeePerformanceDto } from './dto/admin-employee-performance.dto';
+import { PendingResultsService } from './pending-results.service';
+import { PendingResultFilterDto } from './dto/pending-result-filter.dto';
+import {
+    GradeStoredAttemptResultDto,
+    GradeStoredAttemptsResponseDto,
+    PendingResultListDto,
+} from './dto/pending-result.dto';
+import {
+    GradeStoredAttemptDto,
+    GradeStoredAttemptsDto,
+} from './dto/grade-attempts.dto';
 
 @ApiTags('📊 Results & Performance Analytics')
 @Controller('results')
@@ -55,7 +68,10 @@ import { AdminEmployeePerformanceDto } from './dto/admin-employee-performance.dt
 export class ResultsController {
     private readonly logger = new Logger(ResultsController.name);
 
-    constructor(private readonly resultsService: ResultsService) {}
+    constructor(
+        private readonly resultsService: ResultsService,
+        private readonly pendingResultsService: PendingResultsService,
+    ) {}
 
     @Post('create-from-attempt/:attemptId')
     @ApiOperation({
@@ -683,6 +699,120 @@ export class ResultsController {
         return this.resultsService.getAdminEmployeePerformance(
             scope,
             filterDto,
+        );
+    }
+
+    /**
+     * Pending Results tab — submitted (and similar stuck) attempts that have
+     * stored answers but no live `results` row. Attempt 668 is the canonical
+     * case: auto-mark finished, result insert timed out, learner had no recovery UI.
+     */
+    @Get('admin/pending-attempts')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @ApiOperation({
+        summary: 'Pending attempts without a result (Admin)',
+        description:
+            'Lists live attempts that look complete (submitted, 100% in-progress, or expired with answers) but have no non-voided result. Used by the Pending Results admin tab to recover failed grading.',
+        operationId: 'getAdminPendingResultAttempts',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Pending attempts retrieved successfully',
+        type: PendingResultListDto,
+    })
+    @ApiForbiddenResponse({
+        description: 'Forbidden - admin, owner, or master_admin role required',
+    })
+    async getAdminPendingAttempts(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Query() filterDto: PendingResultFilterDto,
+    ): Promise<PendingResultListDto> {
+        this.logger.log(
+            `Listing pending result attempts for org: ${scope.orgId}, branch: ${scope.branchId}`,
+        );
+        return this.pendingResultsService.listPendingAttempts(scope, filterDto);
+    }
+
+    /**
+     * Grade one attempt from answers already on the row. Creates the missing
+     * result, or re-grades when `regrade` is true. Idempotent if a result exists.
+     */
+    @Post('admin/grade-attempt/:attemptId')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Grade stored answers for an attempt (Admin)',
+        description:
+            'Auto-marks existing answers, inserts a result if missing, optionally re-grades, and marks the attempt submitted. Safe to retry.',
+        operationId: 'gradeStoredAttempt',
+    })
+    @ApiParam({
+        name: 'attemptId',
+        type: Number,
+        description: 'Attempt to grade from stored answers',
+        example: 668,
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Attempt graded successfully',
+        type: GradeStoredAttemptResultDto,
+    })
+    @ApiBadRequestResponse({
+        description: 'Attempt has no answers, is voided, or cannot be graded',
+    })
+    @ApiForbiddenResponse({
+        description: 'Forbidden - admin, owner, or master_admin role required',
+    })
+    async gradeStoredAttempt(
+        @Param('attemptId', ParseIntPipe) attemptId: number,
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Body() body?: GradeStoredAttemptDto,
+    ): Promise<GradeStoredAttemptResultDto> {
+        this.logger.log(
+            `Admin ${scope.userId} grading stored attempt ${attemptId} (regrade=${body?.regrade === true})`,
+        );
+        return this.pendingResultsService.gradeStoredAttempt(
+            attemptId,
+            scope,
+            body?.regrade === true,
+        );
+    }
+
+    /**
+     * Sequential bulk grade for the Pending Results tab. Failures are returned
+     * per attempt so one timeout does not abort the rest of the batch.
+     */
+    @Post('admin/grade-attempts')
+    @UseGuards(RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.OWNER, UserRole.MASTER_ADMIN)
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Bulk-grade stored attempts (Admin)',
+        description:
+            'Grades each attempt ID from stored answers. Processed sequentially to avoid pool exhaustion. Per-item errors are included in the response.',
+        operationId: 'gradeStoredAttempts',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Bulk grade completed (check per-item results)',
+        type: GradeStoredAttemptsResponseDto,
+    })
+    @ApiForbiddenResponse({
+        description: 'Forbidden - admin, owner, or master_admin role required',
+    })
+    async gradeStoredAttempts(
+        @OrgBranchScope() scope: OrgBranchScope,
+        @Body() body: GradeStoredAttemptsDto,
+    ): Promise<GradeStoredAttemptsResponseDto> {
+        this.logger.log(
+            `Admin ${scope.userId} bulk-grading ${body.attemptIds.length} stored attempts (regrade=${body.regrade === true})`,
+        );
+        return this.pendingResultsService.gradeStoredAttempts(
+            body.attemptIds,
+            scope,
+            body.regrade === true,
         );
     }
 
