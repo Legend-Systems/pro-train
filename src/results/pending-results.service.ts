@@ -18,10 +18,6 @@ import { AnswersService } from '../answers/answers.service';
 import { ResultsService } from './results.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { UserRole } from '../user/entities/user.entity';
-import {
-    applyBranchVisibilityToQuery,
-    canAccessBranchScopedContent,
-} from '../auth/utils/branch-visibility.util';
 import { PendingResultFilterDto } from './dto/pending-result-filter.dto';
 import {
     GradeStoredAttemptFailureDto,
@@ -86,29 +82,18 @@ export class PendingResultsService {
         const page = filterDto.page ?? DEFAULT_PENDING_RESULTS_PAGE;
         const limit = filterDto.limit ?? DEFAULT_PENDING_RESULTS_LIMIT;
 
-        if (!scope.orgId) {
-            return {
-                summary: {
-                    totalPending: 0,
-                    submittedWithoutResult: 0,
-                    inProgressCompleteWithoutResult: 0,
-                    expiredWithoutResult: 0,
-                },
-                attempts: [],
-                total: 0,
-                page,
-                limit,
-            };
-        }
-
         const listQuery = this.buildPendingAttemptsQuery(scope, filterDto, true);
-        listQuery
+        const total = await listQuery.clone().getCount();
+        const attempts = await listQuery
             .orderBy('attempt.submitTime', 'DESC')
             .addOrderBy('attempt.updatedAt', 'DESC')
             .skip((page - 1) * limit)
-            .take(limit);
+            .take(limit)
+            .getMany();
 
-        const [attempts, total] = await listQuery.getManyAndCount();
+        this.logger.debug(
+            `Pending results list: org=${scope.orgId ?? 'none'} branch=${scope.branchId ?? 'none'} total=${total} page=${page}`,
+        );
         const answerStats = await this.loadAnswerStats(
             attempts.map(attempt => attempt.attemptId),
         );
@@ -299,6 +284,13 @@ export class PendingResultsService {
         };
     }
 
+    /**
+     * Stuck attempts: live (not voided), have stored answers, and no live result.
+     *
+     * Uses NOT EXISTS instead of `LEFT JOIN results … WHERE resultId IS NULL`.
+     * TypeORM can turn that left join into an inner join once other result rows
+     * exist, which hides every pending attempt (including 668).
+     */
     private buildPendingAttemptsQuery(
         scope: OrgBranchScope,
         filterDto: PendingResultFilterDto,
@@ -318,26 +310,37 @@ export class PendingResultsService {
         }
 
         query
-            .leftJoin(
-                Result,
-                'liveResult',
-                'liveResult.attemptId = attempt.attemptId AND liveResult.voidedByResetId IS NULL',
-            )
+            .leftJoin('attempt.orgId', 'org')
             .where('attempt.voidedByResetId IS NULL')
-            .andWhere('liveResult.resultId IS NULL')
-            .andWhere('attempt.orgId = :orgId', { orgId: scope.orgId })
-            .andWhere(qb => {
-                const existsAnswers = qb
-                    .subQuery()
-                    .select('1')
-                    .from(Answer, 'pendingAnswer')
-                    .where('pendingAnswer.attemptId = attempt.attemptId')
-                    .getQuery();
-                return `EXISTS ${existsAnswers}`;
-            });
+            .andWhere(
+                `NOT EXISTS (
+                    SELECT 1 FROM results pendingLiveResult
+                    WHERE pendingLiveResult.attemptId = attempt.attemptId
+                      AND pendingLiveResult.voidedByResetId IS NULL
+                )`,
+            )
+            .andWhere(
+                `EXISTS (
+                    SELECT 1 FROM answers pendingAnswer
+                    WHERE pendingAnswer.attemptId = attempt.attemptId
+                )`,
+            );
 
-        applyBranchVisibilityToQuery(query, 'attempt', scope.branchId);
-        this.applyPendingStatusFilter(query, filterDto.status as AttemptStatus | undefined);
+        // Same org join as the admin dashboard (`org.id`). Skip when the JWT
+        // has no org (master_admin) rather than returning an empty list.
+        if (scope.orgId) {
+            query.andWhere('org.id = :orgId', { orgId: scope.orgId });
+        }
+
+        // Do not apply content-style branch visibility here. That helper keeps
+        // `branchId = JWT branch OR NULL`, but learner attempts store a real
+        // branch UUID. This admin JWT is `branch: 2` while attempt 668 is
+        // `68b3ac03-6906-4466-97fa-9c9c92ff0957`, so the filter hid every
+        // pending row. Org scope is the correct isolation for recovery.
+        this.applyPendingStatusFilter(
+            query,
+            filterDto.status as AttemptStatus | undefined,
+        );
 
         if (filterDto.testId) {
             query.andWhere('attempt.testId = :testId', {
@@ -564,14 +567,6 @@ export class PendingResultsService {
     ): void {
         const attemptOrgId = attempt.orgId?.id;
         if (scope.orgId && attemptOrgId && attemptOrgId !== scope.orgId) {
-            throw new ForbiddenException(
-                'Not authorized to grade this attempt',
-            );
-        }
-
-        if (
-            !canAccessBranchScopedContent(attempt.branchId?.id, scope.branchId)
-        ) {
             throw new ForbiddenException(
                 'Not authorized to grade this attempt',
             );
