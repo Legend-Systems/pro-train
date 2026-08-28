@@ -96,6 +96,12 @@ export class AdminPerformerDto {
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
+
     @ApiProperty()
     averageScore: number;
 
@@ -118,6 +124,12 @@ export class AdminTrainingHoursUserDto {
 
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
 
     @ApiProperty()
     totalMinutes: number;
@@ -190,6 +202,12 @@ export class AdminKnowledgeImprovementDto {
 
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
 
     @ApiProperty()
     previousAverage: number;
@@ -377,6 +395,12 @@ export class AdminTestsNotCompletedUserDto {
 
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
 
     @ApiProperty()
     missedTestCount: number;
@@ -640,6 +664,12 @@ export class AdminBranchComparisonDto {
     @ApiProperty()
     branchName: string;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
+
     @ApiProperty()
     averageScore: number;
 
@@ -669,6 +699,12 @@ export class AdminAtRiskUserDto {
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
 
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
+
     @ApiProperty()
     averageScore: number;
 
@@ -694,6 +730,12 @@ export class AdminHighPotentialUserDto {
 
     @ApiPropertyOptional({ nullable: true })
     branchName: string | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description: 'Short branch code used in PDF exports',
+    })
+    branchAlias: string | null;
 
     @ApiProperty()
     averageScore: number;
@@ -851,6 +893,14 @@ export class AdminOverviewReportDto {
 
     @ApiProperty({ type: [AdminEffectivenessTrendPointDto] })
     effectivenessTrends: AdminEffectivenessTrendPointDto[];
+
+    /**
+     * Per-learner training hours for the selected month.
+     * Already computed for the KPI total; included so the training-hours
+     * PDF/CSV section can list individuals without a second query.
+     */
+    @ApiProperty({ type: [AdminTrainingHoursUserDto] })
+    trainingHours: AdminTrainingHoursUserDto[];
 
     /**
      * Leaderboard datasets are resolved lazily — only reports that select a

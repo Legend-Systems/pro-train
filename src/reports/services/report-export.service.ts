@@ -3,10 +3,13 @@ import { Injectable } from '@nestjs/common';
 // without esModuleInterop — use `import = require` so `new PDFDocument()` works in Nest.
 import PDFDocument = require('pdfkit');
 import type {
+    AdminBranchComparisonDto,
     AdminLearnerAttemptsBreakdownDto,
     AdminLearnerTestBreakdownDto,
     AdminOverviewReportDto,
     AdminRankingEntryDto,
+    AdminTestPassFailDto,
+    AdminTestsNotCompletedUserDto,
 } from '../dto/admin-insights.dto';
 import {
     DEFAULT_REPORT_SECTIONS,
@@ -59,11 +62,12 @@ interface PersonRowStyle {
     rankByUserId: Map<string, AdminRankingEntryDto>;
 }
 
-/** Y position past which a new PDF page is started before writing. */
-const PDF_PAGE_BREAK_Y = 720;
-
-/** Y position past which a list row starts a new page. */
-const PDF_ROW_BREAK_Y = 740;
+/** Named block used by every person/test/branch list in the PDF. */
+interface PdfNamedBlock {
+    title: string;
+    subtitle?: string;
+    metrics?: string;
+}
 
 /** Rankings are chunked so a huge org does not produce an unreadable wall. */
 const PDF_RANKING_PAGE_BREAK_Y = 745;
@@ -141,6 +145,9 @@ export class ReportExportService {
         this.appendAttemptsResultsBreakdownCsv(lines, overview, selected);
         this.appendKeyAreaCsv(lines, overview, selected);
         this.appendBranchComparisonCsv(lines, overview, selected);
+        this.appendTrainingHoursCsv(lines, overview, selected);
+        this.appendEffectivenessTrendsCsv(lines, overview, selected);
+        this.appendPassFailRatesCsv(lines, overview, selected);
 
         const content = lines.join('\n');
         const rowCount = lines.filter(
@@ -200,7 +207,10 @@ export class ReportExportService {
         this.writePdfTopPerformersSection(doc, overview, selected, style);
         this.writePdfHighPotentialSection(doc, overview, selected, style);
         this.writePdfBranchComparisonSection(doc, overview, selected);
+        this.writePdfTrainingHoursSection(doc, overview, selected);
+        this.writePdfEffectivenessTrendsSection(doc, overview, selected);
         this.writePdfTestSections(doc, overview, selected);
+        this.writePdfPassFailRatesSection(doc, overview, selected);
         this.writePdfTestsNotCompletedSection(doc, overview, selected);
         this.writePdfAttemptsResultsBreakdownSection(doc, overview, selected);
         this.writePdfNeedsSupportSection(doc, overview, selected);
@@ -518,7 +528,7 @@ export class ReportExportService {
                     this.row(
                         'Top performers',
                         `${p.firstName} ${p.lastName}`,
-                        p.branchName ?? '',
+                        this.branchLabel(p),
                         p.averageScore,
                         p.passRate,
                         p.resultsCount,
@@ -532,7 +542,7 @@ export class ReportExportService {
                     this.row(
                         'High potential',
                         `${p.firstName} ${p.lastName}`,
-                        p.branchName ?? '',
+                        this.branchLabel(p),
                         p.averageScore,
                         p.improvementDelta,
                         p.resultsCount,
@@ -546,7 +556,7 @@ export class ReportExportService {
                     this.row(
                         'Needs support',
                         `${p.firstName} ${p.lastName}`,
-                        p.branchName ?? '',
+                        this.branchLabel(p),
                         p.averageScore,
                         p.passRate,
                         p.resultsCount,
@@ -560,7 +570,7 @@ export class ReportExportService {
                     this.row(
                         'At risk',
                         `${p.firstName} ${p.lastName}`,
-                        p.branchName ?? '',
+                        this.branchLabel(p),
                         p.averageScore,
                         p.improvementDelta,
                         p.resultsCount,
@@ -701,6 +711,7 @@ export class ReportExportService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias?: string | null;
             missedTestCount: number;
             missedTests: ReadonlyArray<{
                 testTitle: string;
@@ -731,7 +742,7 @@ export class ReportExportService {
                         monthLabel,
                         user.firstName,
                         user.lastName,
-                        user.branchName ?? '',
+                        this.branchLabel(user),
                         test.testTitle,
                         test.courseTitle ?? '',
                         this.formatOptionalDate(test.examStartDate),
@@ -966,19 +977,151 @@ export class ReportExportService {
             return;
         }
 
-        lines.push('Section,Branch,AverageScore,PassRate,Hours,Learners');
+        lines.push(
+            'Section,Branch,Alias,AverageScore,PassRate,Results,Hours,Learners,HoursPerLearner,ScoreVsOrgAverage',
+        );
+        const orgAverage = overview.kpis.averageKnowledgeScore;
         overview.branchComparison.forEach(b => {
             lines.push(
                 this.row(
                     'Branch comparison',
                     b.branchName,
+                    b.branchAlias ?? '',
                     b.averageScore,
                     b.passRate,
+                    b.resultsCount,
                     b.totalHours,
                     b.activeLearners,
+                    this.hoursPerLearner(b),
+                    this.roundExport(b.averageScore - orgAverage),
                 ),
             );
         });
+        lines.push('');
+    }
+
+    private appendTrainingHoursCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TRAINING_HOURS)) {
+            return;
+        }
+
+        const rows = overview.trainingHours ?? [];
+        lines.push(
+            'Section,Name,Surname,Branch,Hours,Minutes,Sessions,HoursPerSession',
+        );
+        if (rows.length === 0) {
+            lines.push(
+                this.row('Training hours', '', '', '', 0, 0, 0, 0),
+            );
+        } else {
+            rows.forEach(row => {
+                lines.push(
+                    this.row(
+                        'Training hours',
+                        row.firstName,
+                        row.lastName,
+                        this.branchLabel(row),
+                        row.totalHours,
+                        row.totalMinutes,
+                        row.sessionCount,
+                        this.hoursPerSession(row.totalHours, row.sessionCount),
+                    ),
+                );
+            });
+        }
+        lines.push('');
+    }
+
+    private appendEffectivenessTrendsCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.EFFECTIVENESS_TRENDS)) {
+            return;
+        }
+
+        const points = overview.effectivenessTrends ?? [];
+        lines.push(
+            'Section,Period,AverageScore,PassRate,Results,ActiveLearners,ScoreDelta,PassRateDelta',
+        );
+        if (points.length === 0) {
+            lines.push(
+                this.row('Effectiveness trends', '', 0, 0, 0, 0, '', ''),
+            );
+        } else {
+            points.forEach((point, index) => {
+                const previous = index > 0 ? points[index - 1] : undefined;
+                lines.push(
+                    this.row(
+                        'Effectiveness trends',
+                        point.period,
+                        point.averageScore,
+                        point.passRate,
+                        point.resultsCount,
+                        point.activeLearners,
+                        previous
+                            ? this.roundExport(
+                                  point.averageScore - previous.averageScore,
+                              )
+                            : '',
+                        previous
+                            ? this.roundExport(point.passRate - previous.passRate)
+                            : '',
+                    ),
+                );
+            });
+        }
+        lines.push('');
+    }
+
+    private appendPassFailRatesCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.PASS_FAIL_RATES)) {
+            return;
+        }
+
+        const tests = this.uniqueTestsByPassRate(overview);
+        lines.push(
+            'Section,Test,Course,Attempts,Passed,Failed,PassRate,AverageScore,ShareOfOrgFailures',
+        );
+        if (tests.length === 0) {
+            lines.push(
+                this.row('Pass / fail rates', '', '', 0, 0, 0, 0, 0, ''),
+            );
+        } else {
+            const orgFailures = tests.reduce(
+                (sum, test) => sum + test.failedCount,
+                0,
+            );
+            tests.forEach(test => {
+                lines.push(
+                    this.row(
+                        'Pass / fail rates',
+                        test.testTitle,
+                        test.courseTitle ?? '',
+                        test.totalAttempts,
+                        test.passedCount,
+                        test.failedCount,
+                        test.passRate,
+                        test.averageScore,
+                        orgFailures > 0
+                            ? this.roundExport(
+                                  (test.failedCount / orgFailures) * 100,
+                              )
+                            : 0,
+                    ),
+                );
+            });
+        }
+        lines.push('');
     }
 
     // ─── PDF sections ──────────────────────────────────────────────────
@@ -988,17 +1131,28 @@ export class ReportExportService {
         reportTitle: string,
         overview: AdminOverviewReportDto,
     ): void {
-        doc.fillColor('#413DFB').fontSize(20).text(reportTitle, { align: 'left' });
-        doc.moveDown(0.4);
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
         const monthSuffix = overview.testsNotCompleted?.monthLabel
-            ? `  ·  Month: ${overview.testsNotCompleted.monthLabel}`
+            ? `   ·   Month ${overview.testsNotCompleted.monthLabel}`
             : '';
-        doc.fillColor('#6b7280')
-            .fontSize(10)
+
+        doc.font('Helvetica-Bold')
+            .fontSize(18)
+            .fillColor('#413DFB')
+            .text(reportTitle, left, doc.y, { width, lineGap: 1 });
+        doc.moveDown(0.35);
+        doc.font('Helvetica')
+            .fontSize(9)
+            .fillColor('#6b7280')
             .text(
-                `Timeframe: ${overview.timeframe}${monthSuffix}  ·  Generated: ${overview.generatedAt.toISOString()}`,
+                `Timeframe ${overview.timeframe}${monthSuffix}   ·   Generated ${this.formatDateTimeUtc(overview.generatedAt)} UTC`,
+                left,
+                doc.y,
+                { width, lineGap: 1 },
             );
-        doc.moveDown(1);
+        doc.moveDown(0.85);
+        doc.font('Helvetica');
     }
 
     private writePdfKpiSection(
@@ -1108,8 +1262,14 @@ export class ReportExportService {
         this.writePdfPeopleList(
             doc,
             (overview.topScorers ?? []).map(scorer => ({
-                name: `${scorer.firstName} ${scorer.lastName} — ${scorer.scorePercentage}%`,
-                detail: `${scorer.testTitle}${scorer.courseTitle ? ` · ${scorer.courseTitle}` : ''} · ${this.branchLabel(scorer)}`,
+                title: `${scorer.firstName} ${scorer.lastName}`,
+                subtitle: this.branchLabel(scorer),
+                metrics: this.joinPdfMetrics([
+                    `${scorer.scorePercentage}%`,
+                    scorer.testTitle,
+                    scorer.courseTitle,
+                    this.formatDateTimeUtc(scorer.achievedAt),
+                ]),
             })),
             'No test scores recorded for this period yet.',
         );
@@ -1128,36 +1288,82 @@ export class ReportExportService {
         this.writePdfHeading(doc, 'Top 3 per branch');
 
         if (branches.length === 0) {
-            doc.fontSize(10)
-                .fillColor('#6b7280')
-                .text('No branch rankings available yet.');
+            this.writePdfEmptyState(doc, 'No branch rankings available yet.');
             return;
         }
 
-        branches.forEach(branch => {
-            if (doc.y > PDF_ROW_BREAK_Y) {
-                doc.addPage();
-            }
-            doc.fontSize(11)
-                .fillColor('#413DFB')
-                .text(this.branchLabel(branch));
-            branch.topPerformers.forEach(person => {
-                if (doc.y > PDF_ROW_BREAK_Y) {
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+
+        branches.forEach((branch, branchIndex) => {
+            if (branchIndex > 0) {
+                const separatorAndHeader = 28 + 52;
+                if (doc.y + separatorAndHeader > PDF_CONTENT_BOTTOM_Y) {
                     doc.addPage();
+                } else {
+                    this.writePdfHairlineSeparator(doc);
                 }
-                doc.fontSize(10)
-                    .fillColor('#111827')
+            } else {
+                this.ensurePdfBreakdownSpace(doc, 52);
+            }
+
+            doc.font('Helvetica-Bold')
+                .fontSize(11)
+                .fillColor('#111827')
+                .text(this.branchLabel(branch), left, doc.y, {
+                    width,
+                    lineGap: 1,
+                });
+            doc.moveDown(0.28);
+
+            if (branch.topPerformers.length === 0) {
+                doc.font('Helvetica')
+                    .fontSize(8.5)
+                    .fillColor('#6b7280')
+                    .text('No ranked learners in this branch.', left, doc.y, {
+                        width,
+                    });
+                doc.moveDown(0.2);
+                return;
+            }
+
+            branch.topPerformers.forEach(person => {
+                this.ensurePdfBreakdownSpace(doc, 28);
+                doc.font('Helvetica-Bold')
+                    .fontSize(10)
+                    .fillColor('#413DFB')
                     .text(
-                        `  #${person.branchRank}  ${person.firstName} ${person.lastName}`,
+                        `#${person.branchRank}  ${person.firstName} ${person.lastName}`,
+                        left + PDF_BREAKDOWN_TEST_INSET,
+                        doc.y,
+                        {
+                            width: width - PDF_BREAKDOWN_TEST_INSET,
+                            lineGap: 1,
+                        },
                     );
-                doc.fontSize(9)
+                doc.moveDown(0.1);
+                doc.font('Helvetica')
+                    .fontSize(8)
                     .fillColor('#6b7280')
                     .text(
-                        `      ${person.testsCompleted} tests completed · ${person.testsPassed} passed`,
+                        this.joinPdfMetrics([
+                            `Tests ${person.testsCompleted}`,
+                            `Passed ${person.testsPassed}`,
+                            `Points ${person.totalPoints}`,
+                        ]),
+                        left + PDF_BREAKDOWN_TEST_INSET,
+                        doc.y,
+                        {
+                            width: width - PDF_BREAKDOWN_TEST_INSET,
+                            lineGap: 2,
+                        },
                     );
+                doc.moveDown(0.32);
             });
-            doc.moveDown(0.4);
         });
+
+        doc.font('Helvetica').fillColor('#111827');
+        doc.moveDown(0.2);
     }
 
     private writePdfRankingsSection(
@@ -1173,9 +1379,7 @@ export class ReportExportService {
         this.writePdfHeading(doc, 'Full rankings');
 
         if (rankings.length === 0) {
-            doc.fontSize(10)
-                .fillColor('#6b7280')
-                .text('No learners are ranked yet.');
+            this.writePdfEmptyState(doc, 'No learners are ranked yet.');
             return;
         }
 
@@ -1202,11 +1406,18 @@ export class ReportExportService {
         this.writePdfHeading(doc, 'Top performers');
         this.writePdfPeopleList(
             doc,
-            overview.topPerformers.slice(0, 10).map(p => ({
-                name: `${p.firstName} ${p.lastName}`,
-                detail: style.isMotivational
-                    ? this.motivationalDetail(p, style)
-                    : `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
+            overview.topPerformers.slice(0, 10).map(person => ({
+                title: `${person.firstName} ${person.lastName}`,
+                subtitle: style.isMotivational
+                    ? undefined
+                    : this.branchLabel(person),
+                metrics: style.isMotivational
+                    ? this.motivationalDetail(person, style)
+                    : this.joinPdfMetrics([
+                          `Avg ${person.averageScore}%`,
+                          `Pass rate ${person.passRate}%`,
+                          `Results ${person.resultsCount}`,
+                      ]),
             })),
         );
     }
@@ -1224,11 +1435,18 @@ export class ReportExportService {
         this.writePdfHeading(doc, 'High-potential shout-outs');
         this.writePdfPeopleList(
             doc,
-            overview.highPotentialUsers.slice(0, 8).map(p => ({
-                name: `${p.firstName} ${p.lastName}`,
-                detail: style.isMotivational
-                    ? this.motivationalDetail(p, style)
-                    : `${p.branchName ?? 'No branch'} · improvement ${p.improvementDelta >= 0 ? '+' : ''}${p.improvementDelta}`,
+            overview.highPotentialUsers.slice(0, 8).map(person => ({
+                title: `${person.firstName} ${person.lastName}`,
+                subtitle: style.isMotivational
+                    ? undefined
+                    : this.branchLabel(person),
+                metrics: style.isMotivational
+                    ? this.motivationalDetail(person, style)
+                    : this.joinPdfMetrics([
+                          `Avg ${person.averageScore}%`,
+                          `Delta ${this.formatSignedPoints(person.improvementDelta)}`,
+                          `Results ${person.resultsCount}`,
+                      ]),
             })),
         );
     }
@@ -1243,11 +1461,29 @@ export class ReportExportService {
         }
 
         this.writePdfHeading(doc, 'Branch comparison');
+
+        const branches = overview.branchComparison.slice(0, 12);
+        if (branches.length >= 2) {
+            this.writePdfInsightLine(
+                doc,
+                this.buildBranchComparisonInsight(overview, branches),
+            );
+        }
+
+        const orgAverage = overview.kpis.averageKnowledgeScore;
         this.writePdfPeopleList(
             doc,
-            overview.branchComparison.slice(0, 12).map(b => ({
-                name: b.branchName,
-                detail: `avg ${b.averageScore}% · pass ${b.passRate}% · ${b.totalHours}h · ${b.activeLearners} learners`,
+            branches.map(branch => ({
+                title: this.branchLabel(branch),
+                metrics: this.joinPdfMetrics([
+                    `Avg ${branch.averageScore}%`,
+                    `Vs org ${this.formatSignedPoints(branch.averageScore - orgAverage)}`,
+                    `Pass rate ${branch.passRate}%`,
+                    `Results ${branch.resultsCount}`,
+                    `${branch.totalHours}h`,
+                    `${this.hoursPerLearner(branch)}h / learner`,
+                    `Learners ${branch.activeLearners}`,
+                ]),
             })),
         );
     }
@@ -1261,9 +1497,16 @@ export class ReportExportService {
             this.writePdfHeading(doc, 'Most passed tests');
             this.writePdfPeopleList(
                 doc,
-                overview.mostPassedTests.slice(0, 10).map(t => ({
-                    name: t.testTitle,
-                    detail: `${t.courseTitle ?? 'Unassigned course'} · ${t.passedCount} passed · pass ${t.passRate}%`,
+                overview.mostPassedTests.slice(0, 10).map(test => ({
+                    title: test.testTitle,
+                    subtitle: test.courseTitle ?? 'Unassigned course',
+                    metrics: this.joinPdfMetrics([
+                        `Passed ${test.passedCount}`,
+                        `Failed ${test.failedCount}`,
+                        `Pass rate ${test.passRate}%`,
+                        `Avg ${test.averageScore}%`,
+                        `Attempts ${test.totalAttempts}`,
+                    ]),
                 })),
             );
         }
@@ -1272,9 +1515,16 @@ export class ReportExportService {
             this.writePdfHeading(doc, 'Most failed tests');
             this.writePdfPeopleList(
                 doc,
-                overview.mostFailedTests.slice(0, 10).map(t => ({
-                    name: t.testTitle,
-                    detail: `${t.courseTitle ?? 'Unassigned course'} · ${t.failedCount} failed · pass ${t.passRate}%`,
+                overview.mostFailedTests.slice(0, 10).map(test => ({
+                    title: test.testTitle,
+                    subtitle: test.courseTitle ?? 'Unassigned course',
+                    metrics: this.joinPdfMetrics([
+                        `Failed ${test.failedCount}`,
+                        `Passed ${test.passedCount}`,
+                        `Pass rate ${test.passRate}%`,
+                        `Avg ${test.averageScore}%`,
+                        `Attempts ${test.totalAttempts}`,
+                    ]),
                 })),
             );
         }
@@ -1315,46 +1565,252 @@ export class ReportExportService {
     private writePdfTestsNotCompletedGroup(
         doc: PDFKit.PDFDocument,
         heading: string,
-        users: ReadonlyArray<{
-            firstName: string;
-            lastName: string;
-            branchName: string | null;
-            missedTests: ReadonlyArray<{ testTitle: string }>;
-        }>,
+        users: readonly AdminTestsNotCompletedUserDto[],
     ): void {
-        if (doc.y > PDF_PAGE_BREAK_Y) {
-            doc.addPage();
-        }
-        doc.fillColor('#413DFB').fontSize(11).text(heading);
-        doc.moveDown(0.35);
+        this.writePdfSubheading(doc, heading);
 
         if (users.length === 0) {
-            doc.fontSize(10)
-                .fillColor('#6b7280')
-                .text('No learners in this group for the selected month.');
-            doc.moveDown(0.6);
+            this.writePdfEmptyState(
+                doc,
+                'No learners in this group for the selected month.',
+            );
             return;
         }
 
-        users.forEach(user => {
-            if (doc.y > PDF_ROW_BREAK_Y) {
-                doc.addPage();
-            }
-            const branch = user.branchName ?? 'No branch';
-            doc.fontSize(10)
-                .fillColor('#111827')
-                .text(`${user.firstName} ${user.lastName} | ${branch}`);
-            user.missedTests.forEach(test => {
-                if (doc.y > PDF_ROW_BREAK_Y) {
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+
+        users.forEach((user, index) => {
+            if (index > 0) {
+                const separatorAndHeader = 22 + 48;
+                if (doc.y + separatorAndHeader > PDF_CONTENT_BOTTOM_Y) {
                     doc.addPage();
+                } else {
+                    this.writePdfHairlineSeparator(doc);
                 }
-                doc.fontSize(9)
-                    .fillColor('#6b7280')
-                    .text(`  ${test.testTitle}`);
+            } else {
+                this.ensurePdfBreakdownSpace(doc, 48);
+            }
+
+            doc.font('Helvetica-Bold')
+                .fontSize(11)
+                .fillColor('#111827')
+                .text(`${user.firstName} ${user.lastName}`, left, doc.y, {
+                    width,
+                    lineGap: 1,
+                });
+            doc.moveDown(0.1);
+            doc.font('Helvetica-Oblique')
+                .fontSize(9)
+                .fillColor('#6b7280')
+                .text(this.branchLabel(user), left, doc.y, {
+                    width,
+                    lineGap: 1,
+                });
+            doc.moveDown(0.28);
+            doc.font('Helvetica')
+                .fontSize(8.5)
+                .fillColor('#4b5563')
+                .text(
+                    `Tests still owed ${user.missedTestCount}`,
+                    left,
+                    doc.y,
+                    { width, lineGap: 2 },
+                );
+            doc.moveDown(0.22);
+
+            user.missedTests.forEach(test => {
+                this.ensurePdfBreakdownSpace(doc, 16);
+                doc.font('Helvetica-Bold')
+                    .fontSize(9)
+                    .fillColor('#413DFB')
+                    .text(test.testTitle, left + PDF_BREAKDOWN_TEST_INSET, doc.y, {
+                        width: width - PDF_BREAKDOWN_TEST_INSET,
+                        lineGap: 1,
+                    });
+                const examWindow = [
+                    test.courseTitle,
+                    test.examStartDate || test.examEndDate
+                        ? `${this.formatOptionalDate(test.examStartDate)} – ${this.formatOptionalDate(test.examEndDate)}`
+                        : null,
+                ];
+                const examLine = this.joinPdfMetrics(examWindow);
+                if (examLine) {
+                    doc.moveDown(0.06);
+                    doc.font('Helvetica')
+                        .fontSize(8)
+                        .fillColor('#6b7280')
+                        .text(
+                            examLine,
+                            left + PDF_BREAKDOWN_TEST_INSET,
+                            doc.y,
+                            { width: width - PDF_BREAKDOWN_TEST_INSET },
+                        );
+                }
+                doc.moveDown(0.22);
             });
-            doc.moveDown(0.35);
         });
-        doc.moveDown(0.3);
+
+        doc.font('Helvetica').fillColor('#111827');
+        doc.moveDown(0.25);
+    }
+
+    private writePdfTrainingHoursSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.TRAINING_HOURS)) {
+            return;
+        }
+
+        const rows = overview.trainingHours ?? [];
+        this.writePdfHeading(doc, 'Training hours by learner');
+
+        if (rows.length > 0) {
+            const totalHours = this.roundExport(
+                rows.reduce((sum, row) => sum + row.totalHours, 0),
+            );
+            const totalSessions = rows.reduce(
+                (sum, row) => sum + row.sessionCount,
+                0,
+            );
+            this.writePdfInsightLine(
+                doc,
+                this.joinPdfMetrics([
+                    `Learners ${rows.length}`,
+                    `${totalHours}h total`,
+                    `${totalSessions} sessions`,
+                    `${this.hoursPerSession(totalHours, totalSessions)}h / session`,
+                ]),
+            );
+        }
+
+        this.writePdfPeopleList(
+            doc,
+            rows.map(row => ({
+                title: `${row.firstName} ${row.lastName}`,
+                subtitle: this.branchLabel(row),
+                metrics: this.joinPdfMetrics([
+                    `${row.totalHours}h`,
+                    `${row.totalMinutes} min`,
+                    `Sessions ${row.sessionCount}`,
+                    `${this.hoursPerSession(row.totalHours, row.sessionCount)}h / session`,
+                ]),
+            })),
+            'No training sessions recorded for this period.',
+        );
+    }
+
+    private writePdfEffectivenessTrendsSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.EFFECTIVENESS_TRENDS)) {
+            return;
+        }
+
+        const points = overview.effectivenessTrends ?? [];
+        this.writePdfHeading(doc, 'Effectiveness trends');
+
+        if (points.length === 0) {
+            this.writePdfEmptyState(
+                doc,
+                'No effectiveness trend data for this period.',
+            );
+            return;
+        }
+
+        const latest = points[points.length - 1];
+        const earliest = points[0];
+        if (points.length >= 2) {
+            this.writePdfInsightLine(
+                doc,
+                this.joinPdfMetrics([
+                    `Score ${this.formatSignedPoints(latest.averageScore - earliest.averageScore)} over window`,
+                    `Pass rate ${this.formatSignedPoints(latest.passRate - earliest.passRate)} over window`,
+                    `Periods ${points.length}`,
+                ]),
+            );
+        }
+
+        this.writePdfPeopleList(
+            doc,
+            points.map((point, index) => {
+                const previous = index > 0 ? points[index - 1] : undefined;
+                return {
+                    title: point.period,
+                    metrics: this.joinPdfMetrics([
+                        `Avg ${point.averageScore}%`,
+                        previous
+                            ? `Delta ${this.formatSignedPoints(point.averageScore - previous.averageScore)}`
+                            : null,
+                        `Pass rate ${point.passRate}%`,
+                        previous
+                            ? `Pass ${this.formatSignedPoints(point.passRate - previous.passRate)}`
+                            : null,
+                        `Results ${point.resultsCount}`,
+                        `Learners ${point.activeLearners}`,
+                    ]),
+                };
+            }),
+        );
+    }
+
+    private writePdfPassFailRatesSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.PASS_FAIL_RATES)) {
+            return;
+        }
+
+        const tests = this.uniqueTestsByPassRate(overview);
+        this.writePdfHeading(doc, 'Pass / fail rates');
+
+        if (tests.length === 0) {
+            this.writePdfEmptyState(
+                doc,
+                'No pass or fail rates recorded for this period.',
+            );
+            return;
+        }
+
+        const orgFailures = tests.reduce(
+            (sum, test) => sum + test.failedCount,
+            0,
+        );
+        const weakest = tests[0];
+        this.writePdfInsightLine(
+            doc,
+            this.joinPdfMetrics([
+                `Tests ${tests.length}`,
+                `Org failures ${orgFailures}`,
+                weakest
+                    ? `Weakest ${weakest.testTitle} (${weakest.passRate}%)`
+                    : null,
+            ]),
+        );
+
+        this.writePdfPeopleList(
+            doc,
+            tests.slice(0, 12).map(test => ({
+                title: test.testTitle,
+                subtitle: test.courseTitle ?? 'Unassigned course',
+                metrics: this.joinPdfMetrics([
+                    `Pass rate ${test.passRate}%`,
+                    `Avg ${test.averageScore}%`,
+                    `Passed ${test.passedCount}`,
+                    `Failed ${test.failedCount}`,
+                    `Attempts ${test.totalAttempts}`,
+                    orgFailures > 0
+                        ? `${this.roundExport((test.failedCount / orgFailures) * 100)}% of org failures`
+                        : null,
+                ]),
+            })),
+        );
     }
 
     /**
@@ -1374,13 +1830,10 @@ export class ReportExportService {
         const learners = overview.attemptsResultsBreakdown?.learners ?? [];
 
         if (learners.length === 0) {
-            doc.font('Helvetica')
-                .fontSize(10)
-                .fillColor('#6b7280')
-                .text(
-                    'No learners with attempts or results in the selected window.',
-                );
-            doc.moveDown(0.6);
+            this.writePdfEmptyState(
+                doc,
+                'No learners with attempts or results in the selected window.',
+            );
             return;
         }
 
@@ -1619,16 +2072,7 @@ export class ReportExportService {
 
     /** Hairline between learner blocks; never used before the first learner. */
     private writePdfLearnerSeparator(doc: PDFKit.PDFDocument): void {
-        doc.moveDown(0.4);
-        const y = doc.y;
-        doc.save();
-        doc.strokeColor(PDF_BREAKDOWN_SEPARATOR_COLOR)
-            .lineWidth(0.6)
-            .moveTo(doc.page.margins.left, y)
-            .lineTo(doc.page.width - doc.page.margins.right, y)
-            .stroke();
-        doc.restore();
-        doc.moveDown(0.7);
+        this.writePdfHairlineSeparator(doc);
     }
 
     private ensurePdfBreakdownSpace(
@@ -1653,9 +2097,14 @@ export class ReportExportService {
             this.writePdfHeading(doc, 'Needs support');
             this.writePdfPeopleList(
                 doc,
-                overview.worstPerformers.slice(0, 8).map(p => ({
-                    name: `${p.firstName} ${p.lastName}`,
-                    detail: `${p.branchName ?? 'No branch'} · ${p.averageScore}% · pass ${p.passRate}%`,
+                overview.worstPerformers.slice(0, 8).map(person => ({
+                    title: `${person.firstName} ${person.lastName}`,
+                    subtitle: this.branchLabel(person),
+                    metrics: this.joinPdfMetrics([
+                        `Avg ${person.averageScore}%`,
+                        `Pass rate ${person.passRate}%`,
+                        `Results ${person.resultsCount}`,
+                    ]),
                 })),
             );
         }
@@ -1664,9 +2113,15 @@ export class ReportExportService {
             this.writePdfHeading(doc, 'At-risk learners');
             this.writePdfPeopleList(
                 doc,
-                overview.atRiskUsers.slice(0, 8).map(p => ({
-                    name: `${p.firstName} ${p.lastName}`,
-                    detail: `${p.branchName ?? 'No branch'} · ${p.riskReasons.join(' · ')}`,
+                overview.atRiskUsers.slice(0, 8).map(person => ({
+                    title: `${person.firstName} ${person.lastName}`,
+                    subtitle: this.branchLabel(person),
+                    metrics: this.joinPdfMetrics([
+                        `Avg ${person.averageScore}%`,
+                        `Delta ${this.formatSignedPoints(person.improvementDelta)}`,
+                        `Results ${person.resultsCount}`,
+                        person.riskReasons.join(' · ') || null,
+                    ]),
                 })),
             );
         }
@@ -1685,8 +2140,14 @@ export class ReportExportService {
         this.writePdfPeopleList(
             doc,
             overview.keyAreas.slice(0, 10).map(area => ({
-                name: area.title,
-                detail: `${area.areaType} · failure ${area.failureRate}% · avg ${area.averageScore}%`,
+                title: area.title,
+                subtitle: area.areaType,
+                metrics: this.joinPdfMetrics([
+                    `Failure ${area.failureRate}%`,
+                    `Avg ${area.averageScore}%`,
+                    `Priority ${area.priorityScore}`,
+                    area.signals.join(' · ') || null,
+                ]),
             })),
         );
     }
@@ -1695,18 +2156,22 @@ export class ReportExportService {
 
     private writeRankingTableHeader(doc: PDFKit.PDFDocument): void {
         const y = doc.y;
-        doc.fontSize(9).fillColor('#6b7280');
+        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#6b7280');
         this.writeRankingCell(doc, '#', RANKING_COLUMNS.rank, y);
         this.writeRankingCell(doc, 'Name', RANKING_COLUMNS.firstName, y);
         this.writeRankingCell(doc, 'Surname', RANKING_COLUMNS.lastName, y);
         this.writeRankingCell(doc, 'Branch', RANKING_COLUMNS.branch, y);
         this.writeRankingCell(doc, 'Tests', RANKING_COLUMNS.tests, y, 'right');
-        doc.moveDown(0.4);
+        doc.moveDown(0.45);
+        doc.save();
         doc.strokeColor('#ede9fe')
+            .lineWidth(0.8)
             .moveTo(doc.page.margins.left, doc.y)
             .lineTo(doc.page.width - doc.page.margins.right, doc.y)
             .stroke();
-        doc.moveDown(0.3);
+        doc.restore();
+        doc.moveDown(0.4);
+        doc.font('Helvetica');
     }
 
     private writeRankingRow(
@@ -1714,11 +2179,11 @@ export class ReportExportService {
         entry: AdminRankingEntryDto,
     ): void {
         const y = doc.y;
-        doc.fontSize(9.5).fillColor('#111827');
+        doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#111827');
         this.writeRankingCell(doc, `#${entry.rank}`, RANKING_COLUMNS.rank, y);
         this.writeRankingCell(doc, entry.firstName, RANKING_COLUMNS.firstName, y);
         this.writeRankingCell(doc, entry.lastName, RANKING_COLUMNS.lastName, y);
-        doc.fillColor('#6b7280');
+        doc.font('Helvetica').fillColor('#6b7280');
         this.writeRankingCell(
             doc,
             this.branchLabel(entry),
@@ -1733,7 +2198,8 @@ export class ReportExportService {
             y,
             'right',
         );
-        doc.moveDown(0.35);
+        doc.moveDown(0.48);
+        doc.font('Helvetica');
     }
 
     /**
@@ -1810,62 +2276,238 @@ export class ReportExportService {
 
     /** Rank + branch + tests, with no score that could embarrass a learner. */
     private motivationalDetail(
-        person: { userId: string; branchName?: string | null },
+        person: {
+            userId: string;
+            branchName?: string | null;
+            branchAlias?: string | null;
+        },
         style: PersonRowStyle,
     ): string {
         const ranking = style.rankByUserId.get(person.userId);
         if (!ranking) {
             return this.branchLabel(person);
         }
-        return `Rank #${ranking.rank} · ${this.branchLabel(ranking)} · ${ranking.testsPassed}/${ranking.testsCompleted} tests passed`;
+        return this.joinPdfMetrics([
+            `Rank #${ranking.rank}`,
+            this.branchLabel(ranking),
+            `${ranking.testsPassed}/${ranking.testsCompleted} tests passed`,
+        ]);
     }
 
     private writePdfHeading(doc: PDFKit.PDFDocument, title: string): void {
-        doc.moveDown(0.6);
-        if (doc.y > PDF_PAGE_BREAK_Y) {
-            doc.addPage();
-        }
-        doc.fillColor('#111827').fontSize(13).text(title, doc.page.margins.left);
-        doc.moveDown(0.3);
+        doc.moveDown(0.7);
+        this.ensurePdfBreakdownSpace(doc, 36);
+        const left = doc.page.margins.left;
+        doc.font('Helvetica-Bold')
+            .fontSize(13)
+            .fillColor('#111827')
+            .text(title, left, doc.y, {
+                width: this.pdfContentWidth(doc),
+                lineGap: 1,
+            });
+        doc.moveDown(0.28);
+        doc.save();
         doc.strokeColor('#ede9fe')
-            .moveTo(doc.page.margins.left, doc.y)
+            .lineWidth(0.8)
+            .moveTo(left, doc.y)
             .lineTo(doc.page.width - doc.page.margins.right, doc.y)
             .stroke();
+        doc.restore();
         doc.moveDown(0.5);
+        doc.font('Helvetica');
+    }
+
+    private writePdfSubheading(doc: PDFKit.PDFDocument, title: string): void {
+        this.ensurePdfBreakdownSpace(doc, 28);
+        doc.font('Helvetica-Bold')
+            .fontSize(10)
+            .fillColor('#413DFB')
+            .text(title, doc.page.margins.left, doc.y, {
+                width: this.pdfContentWidth(doc),
+                lineGap: 1,
+            });
+        doc.moveDown(0.4);
+        doc.font('Helvetica');
+    }
+
+    private writePdfInsightLine(doc: PDFKit.PDFDocument, text: string): void {
+        if (!text) {
+            return;
+        }
+        this.ensurePdfBreakdownSpace(doc, 18);
+        doc.font('Helvetica')
+            .fontSize(8.5)
+            .fillColor('#4b5563')
+            .text(text, doc.page.margins.left, doc.y, {
+                width: this.pdfContentWidth(doc),
+                lineGap: 2,
+            });
+        doc.moveDown(0.45);
+        doc.font('Helvetica');
+    }
+
+    private writePdfEmptyState(doc: PDFKit.PDFDocument, message: string): void {
+        doc.font('Helvetica')
+            .fontSize(9)
+            .fillColor('#6b7280')
+            .text(message, doc.page.margins.left, doc.y, {
+                width: this.pdfContentWidth(doc),
+            });
+        doc.moveDown(0.55);
+    }
+
+    private writePdfHairlineSeparator(doc: PDFKit.PDFDocument): void {
+        doc.moveDown(0.4);
+        const y = doc.y;
+        doc.save();
+        doc.strokeColor(PDF_BREAKDOWN_SEPARATOR_COLOR)
+            .lineWidth(0.6)
+            .moveTo(doc.page.margins.left, y)
+            .lineTo(doc.page.width - doc.page.margins.right, y)
+            .stroke();
+        doc.restore();
+        doc.moveDown(0.7);
     }
 
     private writePdfKpiGrid(
         doc: PDFKit.PDFDocument,
         items: Array<[string, string]>,
     ): void {
-        doc.fontSize(10).fillColor('#374151');
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+        const valueWidth = 88;
+
         items.forEach(([label, value]) => {
-            doc.text(`${label}: `, { continued: true, width: 480 })
+            this.ensurePdfBreakdownSpace(doc, 18);
+            const y = doc.y;
+            doc.font('Helvetica')
+                .fontSize(9)
+                .fillColor('#6b7280')
+                .text(label, left, y, {
+                    width: width - valueWidth - 8,
+                    lineBreak: false,
+                });
+            doc.font('Helvetica-Bold')
+                .fontSize(11)
                 .fillColor('#111827')
-                .text(value);
-            doc.fillColor('#374151');
+                .text(value, left + width - valueWidth, y, {
+                    width: valueWidth,
+                    align: 'right',
+                    lineBreak: false,
+                });
+            doc.x = left;
+            doc.y = y + 16;
         });
+        doc.moveDown(0.25);
+        doc.font('Helvetica');
     }
 
     private writePdfPeopleList(
         doc: PDFKit.PDFDocument,
-        rows: Array<{ name: string; detail: string }>,
+        rows: PdfNamedBlock[],
         emptyMessage = 'No data for this period.',
     ): void {
         if (rows.length === 0) {
-            doc.fontSize(10).fillColor('#6b7280').text(emptyMessage);
+            this.writePdfEmptyState(doc, emptyMessage);
             return;
         }
-        rows.forEach(row => {
-            if (doc.y > PDF_ROW_BREAK_Y) {
-                doc.addPage();
-            }
-            doc.fontSize(10)
+
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+
+        rows.forEach((row, index) => {
+            this.ensurePdfBreakdownSpace(doc, 42);
+            doc.font('Helvetica-Bold')
+                .fontSize(11)
                 .fillColor('#111827')
-                .text(row.name, { continued: false });
-            doc.fontSize(9).fillColor('#6b7280').text(row.detail);
-            doc.moveDown(0.25);
+                .text(row.title, left, doc.y, { width, lineGap: 1 });
+            if (row.subtitle) {
+                doc.moveDown(0.1);
+                doc.font('Helvetica-Oblique')
+                    .fontSize(9)
+                    .fillColor('#6b7280')
+                    .text(row.subtitle, left, doc.y, { width, lineGap: 1 });
+            }
+            if (row.metrics) {
+                doc.moveDown(0.28);
+                doc.font('Helvetica')
+                    .fontSize(8.5)
+                    .fillColor('#4b5563')
+                    .text(row.metrics, left, doc.y, { width, lineGap: 2 });
+            }
+            doc.moveDown(index === rows.length - 1 ? 0.3 : 0.55);
         });
+        doc.font('Helvetica');
+    }
+
+    private joinPdfMetrics(
+        parts: Array<string | null | undefined>,
+    ): string {
+        return parts
+            .filter((part): part is string => Boolean(part && part.trim()))
+            .join('   ·   ');
+    }
+
+    private formatSignedPoints(value: number): string {
+        const rounded = this.roundExport(value);
+        return `${rounded > 0 ? '+' : ''}${rounded}pp`;
+    }
+
+    private roundExport(value: number): number {
+        return Math.round(value * 10) / 10;
+    }
+
+    private hoursPerSession(hours: number, sessions: number): number {
+        if (sessions <= 0) {
+            return 0;
+        }
+        return this.roundExport(hours / sessions);
+    }
+
+    private hoursPerLearner(branch: AdminBranchComparisonDto): number {
+        if (branch.activeLearners <= 0) {
+            return 0;
+        }
+        return this.roundExport(branch.totalHours / branch.activeLearners);
+    }
+
+    private uniqueTestsByPassRate(
+        overview: AdminOverviewReportDto,
+    ): AdminTestPassFailDto[] {
+        const byId = new Map<number, AdminTestPassFailDto>();
+        [...overview.mostFailedTests, ...overview.mostPassedTests].forEach(
+            test => {
+                if (!byId.has(test.testId)) {
+                    byId.set(test.testId, test);
+                }
+            },
+        );
+        return [...byId.values()].sort(
+            (left, right) =>
+                left.passRate - right.passRate ||
+                right.failedCount - left.failedCount,
+        );
+    }
+
+    private buildBranchComparisonInsight(
+        overview: AdminOverviewReportDto,
+        branches: readonly AdminBranchComparisonDto[],
+    ): string {
+        const strongest = [...branches].sort(
+            (left, right) => right.averageScore - left.averageScore,
+        )[0];
+        const weakest = [...branches].sort(
+            (left, right) => left.averageScore - right.averageScore,
+        )[0];
+        const spread = this.roundExport(
+            strongest.averageScore - weakest.averageScore,
+        );
+        return this.joinPdfMetrics([
+            `Score spread ${spread}pp`,
+            `Strongest ${this.branchLabel(strongest)} (${strongest.averageScore}%)`,
+            `Weakest ${this.branchLabel(weakest)} (${weakest.averageScore}%)`,
+            `Org avg ${overview.kpis.averageKnowledgeScore}%`,
+        ]);
     }
 
     // ─── Shared helpers ────────────────────────────────────────────────

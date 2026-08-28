@@ -294,6 +294,7 @@ export class AdminInsightsReportsService {
             effectivenessTrends,
             generatedAt: new Date(),
             timeframe,
+            trainingHours,
         };
     }
 
@@ -320,6 +321,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('MAX(userBranch.name)', 'branchName')
+            .addSelect('MAX(userBranch.alias)', 'branchAlias')
             .addSelect('AVG(result.percentage)', 'averageScore')
             .addSelect('COUNT(result.resultId)', 'resultsCount')
             .addSelect(
@@ -340,6 +342,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
             averageScore: string;
             resultsCount: string;
             passedCount: string;
@@ -375,6 +378,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('MAX(userBranch.name)', 'branchName')
+            .addSelect('MAX(userBranch.alias)', 'branchAlias')
             .addSelect('SUM(session.durationMinutes)', 'totalMinutes')
             .addSelect('COUNT(session.id)', 'sessionCount')
             .groupBy('session.userId')
@@ -394,6 +398,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
             totalMinutes: string;
             sessionCount: string;
         }>();
@@ -405,6 +410,7 @@ export class AdminInsightsReportsService {
                 firstName: row.firstName,
                 lastName: row.lastName,
                 branchName: row.branchName ?? null,
+                branchAlias: row.branchAlias ?? null,
                 totalMinutes,
                 totalHours: this.minutesToHours(totalMinutes),
                 sessionCount: Number(row.sessionCount) || 0,
@@ -837,6 +843,7 @@ export class AdminInsightsReportsService {
             .andWhere('branch.id IS NOT NULL')
             .select('branch.id', 'branchId')
             .addSelect('branch.name', 'branchName')
+            .addSelect('branch.alias', 'branchAlias')
             .addSelect('AVG(result.percentage)', 'averageScore')
             .addSelect('COUNT(result.resultId)', 'resultsCount')
             .addSelect(
@@ -846,9 +853,11 @@ export class AdminInsightsReportsService {
             .addSelect('COUNT(DISTINCT result.userId)', 'activeLearners')
             .groupBy('branch.id')
             .addGroupBy('branch.name')
+            .addGroupBy('branch.alias')
             .getRawMany<{
                 branchId: string;
                 branchName: string;
+                branchAlias: string | null;
                 averageScore: string;
                 resultsCount: string;
                 passedCount: string;
@@ -897,6 +906,7 @@ export class AdminInsightsReportsService {
                 return {
                     branchId: row.branchId,
                     branchName: row.branchName,
+                    branchAlias: row.branchAlias ?? null,
                     averageScore: this.round(Number(row.averageScore) || 0),
                     passRate:
                         resultsCount > 0
@@ -935,6 +945,7 @@ export class AdminInsightsReportsService {
                     firstName: row.firstName,
                     lastName: row.lastName,
                     branchName: row.branchName,
+                    branchAlias: row.branchAlias,
                     averageScore: row.currentAverage,
                     improvementDelta: row.improvementDelta,
                     resultsCount: row.currentResultsCount,
@@ -975,6 +986,7 @@ export class AdminInsightsReportsService {
                 firstName: row.firstName,
                 lastName: row.lastName,
                 branchName: row.branchName,
+                branchAlias: row.branchAlias,
                 averageScore: row.currentAverage,
                 improvementDelta: row.improvementDelta,
                 resultsCount: row.currentResultsCount,
@@ -1471,6 +1483,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
         },
         tests: readonly RelevantReportTest[],
     ): AdminTestsNotCompletedUserDto {
@@ -1479,6 +1492,7 @@ export class AdminInsightsReportsService {
             firstName: learner.firstName,
             lastName: learner.lastName,
             branchName: learner.branchName,
+            branchAlias: learner.branchAlias,
             missedTestCount: tests.length,
             missedTests: tests.map(test => ({
                 testId: test.testId,
@@ -1872,6 +1886,7 @@ export class AdminInsightsReportsService {
                 firstName: current.firstName,
                 lastName: current.lastName,
                 branchName: current.branchName,
+                branchAlias: current.branchAlias,
                 previousAverage: this.round(previousAverage),
                 currentAverage: this.round(current.averageScore),
                 improvementDelta: this.round(
@@ -1894,6 +1909,7 @@ export class AdminInsightsReportsService {
             firstName: string;
             lastName: string;
             branchName: string | null;
+            branchAlias: string | null;
             averageScore: number;
             resultsCount: number;
         }>
@@ -1910,6 +1926,7 @@ export class AdminInsightsReportsService {
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('MAX(userBranch.name)', 'branchName')
+            .addSelect('MAX(userBranch.alias)', 'branchAlias')
             .addSelect('AVG(result.percentage)', 'averageScore')
             .addSelect('COUNT(result.resultId)', 'resultsCount')
             .groupBy('user.id')
@@ -1920,6 +1937,7 @@ export class AdminInsightsReportsService {
                 firstName: string;
                 lastName: string;
                 branchName: string | null;
+                branchAlias: string | null;
                 averageScore: string;
                 resultsCount: string;
             }>();
@@ -1929,6 +1947,7 @@ export class AdminInsightsReportsService {
             firstName: row.firstName,
             lastName: row.lastName,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
             averageScore: Number(row.averageScore) || 0,
             resultsCount: Number(row.resultsCount) || 0,
         }));
@@ -2411,6 +2430,7 @@ export class AdminInsightsReportsService {
         firstName: string;
         lastName: string;
         branchName: string | null;
+        branchAlias: string | null;
         averageScore: string;
         resultsCount: string;
         passedCount: string;
@@ -2422,6 +2442,7 @@ export class AdminInsightsReportsService {
             firstName: row.firstName,
             lastName: row.lastName,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
             averageScore: this.round(Number(row.averageScore) || 0),
             passRate:
                 resultsCount > 0
