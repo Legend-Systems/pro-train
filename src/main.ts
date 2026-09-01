@@ -21,7 +21,7 @@ async function bootstrap() {
             'https://pro-train.vercel.app',
             'https://protrain-client.onrender.com',
             'http://localhost:8081', 
-            'http://192.168.0.11: 8081',
+            'http://192.168.0.8: 8081',
             'exp://192.168.0.11:8081' // Expo development server
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
