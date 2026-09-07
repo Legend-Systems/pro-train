@@ -355,7 +355,10 @@ export class AdminTopScorerDto {
     achievedAt: Date;
 }
 
-/** A test the learner still needs to finish in the selected month. */
+/**
+ * A test the learner still needs to finish in the selected month.
+ * Only included when the exam window has fully passed (not pending or open).
+ */
 export class AdminMissedTestDto {
     @ApiProperty()
     testId: number;
@@ -413,7 +416,8 @@ export class AdminTestsNotCompletedUserDto {
  * Month-scoped “who still needs to complete tests” payload.
  *
  * Two groups are kept separate so admins can tell “never started” apart from
- * “started but abandoned” (`in_progress` / `expired`).
+ * “started but abandoned” (`in_progress` / `expired`). Both groups only list
+ * tests whose exam window has fully passed as of today.
  */
 export class AdminTestsNotCompletedReportDto {
     @ApiProperty({ example: '2026-08', description: 'Calendar month (YYYY-MM)' })

@@ -260,7 +260,7 @@ export class AdminReportsController {
     @ApiOperation({
         summary: 'Tests not completed for a calendar month',
         description:
-            'Two groups for the selected yearMonth: learners with no attempts, and learners whose attempts are still in_progress or expired. Each row includes name, surname, branch, and the missed test titles.',
+            'Two groups for the selected yearMonth: learners with no attempts, and learners whose attempts are still in_progress or expired. Only tests whose exam window has fully passed (examStartDate and examEndDate on or before today, with the end day already over) are included. Each row includes name, surname, branch, and the missed test titles.',
     })
     @ApiOkResponse({ type: AdminTestsNotCompletedReportDto })
     @ApiQuery({ name: 'branchId', required: false })

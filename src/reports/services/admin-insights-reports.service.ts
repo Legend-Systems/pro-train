@@ -13,6 +13,10 @@ import { Result } from '../../results/entities/result.entity';
 import { TrainingSession } from '../../training-hours/entities/training-session.entity';
 import { Test } from '../../test/entities/test.entity';
 import {
+    isExamWindowClosed,
+    isExamWindowPending,
+} from '../../test/utils/exam-window.util';
+import {
     AttemptStatus,
     TestAttempt,
 } from '../../test_attempts/entities/test_attempt.entity';
@@ -709,6 +713,13 @@ export class AdminInsightsReportsService {
      * - Completion is evaluated as of month-end (a July submit still counts
      *   in August so people are not re-flagged after they finish).
      *
+     * Exam-window filter (applied to both groups below):
+     * - A test is only “not completed” after its window has fully passed.
+     * - `examStartDate` and `examEndDate` must both be on or before today, and
+     *   the inclusive end day must already be over (`isExamWindowClosed`).
+     * - Future windows and currently-open windows are excluded — learners
+     *   cannot sit a test before it opens, and still have time while it is open.
+     *
      * Two groups:
      * 1. No attempts — never started the test before month-end.
      * 2. Incomplete — only `in_progress` or `expired` attempts (started, never submitted).
@@ -723,8 +734,9 @@ export class AdminInsightsReportsService {
             this.getMonthDateStrings(yearMonth);
         const monthStart = new Date(`${monthStartDate}T00:00:00.000Z`);
         const monthEnd = new Date(`${monthEndDate}T00:00:00.000Z`);
+        const now = new Date();
 
-        const [roster, tests] = await Promise.all([
+        const [roster, monthTests] = await Promise.all([
             this.getLearnerRoster(orgId, filters.branchId),
             this.getTestsAvailableInMonth(
                 orgId,
@@ -733,6 +745,12 @@ export class AdminInsightsReportsService {
                 monthEnd,
             ),
         ]);
+
+        // Both PDF sections share this list: drop any test whose exam window
+        // has not fully elapsed as of today (pending start or still open).
+        const tests = monthTests.filter(test =>
+            this.hasExamWindowFullyPassed(test, now),
+        );
 
         if (roster.length === 0 || tests.length === 0) {
             return {
@@ -1355,6 +1373,10 @@ export class AdminInsightsReportsService {
      * Active tests whose availability overlapped the selected month.
      * Scheduled exams must overlap [monthStart, monthEnd); unscheduled tests
      * are included if they already existed by month-end.
+     *
+     * Month overlap is not enough for the “not completed” metric: the caller
+     * still drops tests whose exam window has not fully passed (see
+     * `hasExamWindowFullyPassed`).
      */
     private async getTestsAvailableInMonth(
         orgId: string,
@@ -1463,6 +1485,27 @@ export class AdminInsightsReportsService {
         }
 
         return outcomes;
+    }
+
+    /**
+     * True when learners already had a full chance to sit the exam.
+     *
+     * Uses the shared UTC calendar-day window helpers:
+     * - Pending (`examStartDate` still in the future) → exclude.
+     * - Open (today is on or before the inclusive `examEndDate` day) → exclude.
+     * - Closed (`examEndDate` is before the start of today) → include.
+     *
+     * Unscheduled tests (no `examEndDate`) never close, so they are excluded.
+     */
+    private hasExamWindowFullyPassed(
+        test: RelevantReportTest,
+        reference: Date,
+    ): boolean {
+        if (isExamWindowPending(test, reference)) {
+            return false;
+        }
+
+        return isExamWindowClosed(test, reference);
     }
 
     /** Branch-scoped tests only apply to learners in that branch. */
