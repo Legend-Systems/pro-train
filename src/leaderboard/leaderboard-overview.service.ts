@@ -53,9 +53,10 @@ interface AggregatedUserStats {
 }
 
 /**
- * Org/course leaderboard rankings with period filters, summary insights,
- * and month-over-month improvers. Month views aggregate from results;
- * all-time views aggregate from the leaderboards table.
+ * Org-wide leaderboard rankings with period filters, summary insights,
+ * and month-over-month improvers. Rankings include every branch unless an
+ * admin passes `branchId`. Month views aggregate from results; all-time
+ * views aggregate from the leaderboards table.
  */
 @Injectable()
 export class LeaderboardOverviewService {
@@ -82,7 +83,11 @@ export class LeaderboardOverviewService {
                 period === LeaderboardOverviewPeriod.MONTH
                     ? query.month || this.currentYearMonthUtc()
                     : undefined;
-            const branchId = query.branchId || scope.branchId;
+            // Org-wide by default so Top Performers / Complete Rankings include
+            // every branch. Do not fall back to scope.branchId — that silently
+            // hid other offices from learners (often leaving only themselves).
+            // An explicit query.branchId still narrows the list (admin filters).
+            const branchId = query.branchId;
 
             const currentStats = await this.loadAggregatedStats({
                 orgId: scope.orgId,
@@ -366,23 +371,34 @@ export class LeaderboardOverviewService {
         return query;
     }
 
+    /**
+     * Sort comparator shared by current and previous-month rankings.
+     * Knowledge score (average %) wins; tests completed breaks ties; points last.
+     */
+    private compareLeaderboardStats(
+        left: AggregatedUserStats,
+        right: AggregatedUserStats,
+    ): number {
+        if (right.averageScore !== left.averageScore) {
+            return right.averageScore - left.averageScore;
+        }
+        if (right.testsCompleted !== left.testsCompleted) {
+            return right.testsCompleted - left.testsCompleted;
+        }
+        return right.totalPoints - left.totalPoints;
+    }
+
     private rankUsers(
         current: AggregatedUserStats[],
         previousByUser: Map<string, AggregatedUserStats>,
     ): LeaderboardOverviewEntryDto[] {
-        const sorted = [...current].sort((a, b) => {
-            if (b.totalPoints !== a.totalPoints) {
-                return b.totalPoints - a.totalPoints;
-            }
-            return b.averageScore - a.averageScore;
-        });
+        const sorted = [...current].sort((a, b) =>
+            this.compareLeaderboardStats(a, b),
+        );
 
-        const previousRanked = [...previousByUser.values()].sort((a, b) => {
-            if (b.totalPoints !== a.totalPoints) {
-                return b.totalPoints - a.totalPoints;
-            }
-            return b.averageScore - a.averageScore;
-        });
+        const previousRanked = [...previousByUser.values()].sort((a, b) =>
+            this.compareLeaderboardStats(a, b),
+        );
         const previousRankMap = new Map(
             previousRanked.map((entry, index) => [entry.userId, index + 1]),
         );

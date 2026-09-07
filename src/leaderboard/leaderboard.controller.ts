@@ -62,9 +62,9 @@ export class LeaderboardController {
     @ApiOperation({
         summary: 'Org course-points leaderboard with filters and insights',
         description:
-            'Returns paginated course-score rankings for the organization. ' +
+            'Returns paginated org-wide rankings (all branches) by knowledge score. ' +
             'Supports all-time (leaderboards table) or monthly (results by createdAt), ' +
-            'optional course/branch/search filters, summary cards, and improvers.',
+            'optional course/branch/search filters (admin-only branch filter), summary cards, and improvers.',
         operationId: 'getOrgLeaderboard',
     })
     @ApiOkResponse({ type: LeaderboardOverviewResponseDto })
