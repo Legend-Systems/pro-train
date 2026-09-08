@@ -291,7 +291,7 @@ export class ResultsReportsService {
         } = filters;
 
         // Build cache key based on all filters
-        const cacheKey = `enhanced_trends_${JSON.stringify(filters)}`;
+        const cacheKey = `enhanced_trends_v2_${JSON.stringify(filters)}`;
         
         // Try to get from cache first
         const cachedData = await this.cacheManager.get<EnhancedPerformanceTrendReportDto[]>(cacheKey);
@@ -305,20 +305,21 @@ export class ResultsReportsService {
             ? new Date(startDate) 
             : new Date(defaultEndDate.getTime() - (365 * 24 * 60 * 60 * 1000)); // 1 year ago
 
-        // Build the main query with proper joins and scoping
+        // submitTime is nullable; calculatedAt is always set on graded results.
+        const occurredAt = 'COALESCE(ta.submitTime, r.calculatedAt)';
+
+        // Avoid leftJoinAndSelect here — extra relation columns break MySQL GROUP BY.
         let query = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
-            .leftJoinAndSelect('r.orgId', 'orgId')
-            .leftJoinAndSelect('r.branchId', 'branchId')
-            .leftJoinAndSelect('r.test', 'test')
-            .leftJoinAndSelect('test.course', 'course')
-            .where('ta.submitTime >= :startDate', { startDate: defaultStartDate })
-            .andWhere('ta.submitTime <= :endDate', { endDate: defaultEndDate });
+            .where(`${occurredAt} >= :startDate`, { startDate: defaultStartDate })
+            .andWhere(`${occurredAt} <= :endDate`, { endDate: defaultEndDate })
+            .andWhere('r.voidedByResetId IS NULL');
 
-        // Apply dimensional filters
         if (branchId) {
-            query = query.andWhere('branchId.id = :branchId', { branchId });
+            query = query
+                .leftJoin('r.branchId', 'branch')
+                .andWhere('branch.id = :branchId', { branchId });
         }
         if (userId) {
             query = query.andWhere('r.userId = :userId', { userId });
@@ -330,27 +331,25 @@ export class ResultsReportsService {
             query = query.andWhere('r.courseId = :courseId', { courseId });
         }
 
-        // Determine grouping format based on aggregation type
         let dateFormat: string;
         let orderByFormat: string;
-        
+
         switch (groupBy) {
             case 'daily':
-                dateFormat = 'DATE(ta.submitTime)';
-                orderByFormat = 'DATE(ta.submitTime)';
+                dateFormat = `DATE(${occurredAt})`;
+                orderByFormat = `DATE(${occurredAt})`;
                 break;
             case 'weekly':
-                dateFormat = 'YEARWEEK(ta.submitTime, 1)';
-                orderByFormat = 'YEARWEEK(ta.submitTime, 1)';
+                dateFormat = `YEARWEEK(${occurredAt}, 1)`;
+                orderByFormat = `YEARWEEK(${occurredAt}, 1)`;
                 break;
             case 'monthly':
             default:
-                dateFormat = 'DATE_FORMAT(ta.submitTime, "%Y-%m")';
-                orderByFormat = 'DATE_FORMAT(ta.submitTime, "%Y-%m")';
+                dateFormat = `DATE_FORMAT(${occurredAt}, "%Y-%m")`;
+                orderByFormat = `DATE_FORMAT(${occurredAt}, "%Y-%m")`;
                 break;
         }
 
-        // Build select clauses
         const selectClauses = [
             `${dateFormat} as period`,
             'AVG(r.score) as averageScore',
@@ -360,21 +359,21 @@ export class ResultsReportsService {
             'COUNT(DISTINCT r.userId) as uniqueUsers',
         ];
 
-        // Add timing metrics if requested
         if (includeTimingMetrics) {
             selectClauses.push(
-                'AVG(TIMESTAMPDIFF(MINUTE, ta.startTime, ta.submitTime)) as averageCompletionTime'
+                `AVG(TIMESTAMPDIFF(MINUTE, ta.startTime, COALESCE(ta.submitTime, r.calculatedAt))) as averageCompletionTime`,
             );
         }
 
-        // Add branch/test/course context info
         if (branchId) {
-            selectClauses.push('branchId.id as branchId', 'branchId.name as branchName');
+            selectClauses.push('branch.id as branchId', 'branch.name as branchName');
         }
         if (testId) {
+            query = query.leftJoin('r.test', 'test');
             selectClauses.push('test.testId as testId', 'test.title as testTitle');
         }
         if (courseId) {
+            query = query.leftJoin('r.course', 'course');
             selectClauses.push('course.courseId as courseId', 'course.title as courseTitle');
         }
 
@@ -385,7 +384,7 @@ export class ResultsReportsService {
 
         // Add additional grouping for context
         if (branchId) {
-            query = query.addGroupBy('branchId.id, branchId.name');
+            query = query.addGroupBy('branch.id, branch.name');
         }
         if (testId) {
             query = query.addGroupBy('test.testId, test.title');
@@ -427,7 +426,7 @@ export class ResultsReportsService {
             }
 
             const trendItem: EnhancedPerformanceTrendReportDto = {
-                period: current.period,
+                period: String(current.period ?? ''),
                 aggregationType: groupBy,
                 averageScore,
                 medianScore: averageScore, // For now, using avg as median approximation
