@@ -788,18 +788,25 @@ export class ResultsService {
             await this.invalidateCachesAfterAttemptReset();
         }
 
-        const { page = 1, limit = 20, ...filters } = filterDto;
+        const { page = 1, limit = 20, branchId: requestedBranchId, ...filters } =
+            filterDto;
         const skip = (page - 1) * limit;
         // Read only after the role assertion above: learner-facing endpoints
         // share this DTO and must never be able to opt into voided rows.
         const includeVoided = filterDto.includeVoided === true;
+        // JWT branch wins so a branch admin cannot query another office.
+        // Org-wide owners/admins may pass branchId to narrow the dashboard.
+        const dashboardScope: OrgBranchScope = {
+            ...scope,
+            branchId: scope.branchId ?? requestedBranchId,
+        };
 
         const summaryQuery = this.applyAdminScopeFilters(
             this.resultRepository
                 .createQueryBuilder('result')
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
-            scope,
+            dashboardScope,
             includeVoided,
         );
 
@@ -845,7 +852,11 @@ export class ResultsService {
         const passRate =
             totalResults > 0 ? (passedCount / totalResults) * 100 : 0;
 
-        const listQuery = this.buildFilterQuery(filters, scope, includeVoided);
+        const listQuery = this.buildFilterQuery(
+            filters,
+            dashboardScope,
+            includeVoided,
+        );
         listQuery.orderBy('result.calculatedAt', 'DESC');
 
         const [resultEntities, total] = await listQuery
@@ -863,7 +874,7 @@ export class ResultsService {
                 .leftJoin('result.test', 'test')
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
-            scope,
+            dashboardScope,
             includeVoided,
         )
             .select('test.testId', 'testId')
@@ -893,7 +904,7 @@ export class ResultsService {
                 .leftJoin('user.branchId', 'userBranch')
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
-            scope,
+            dashboardScope,
             includeVoided,
         )
             .select('user.id', 'userId')
@@ -924,7 +935,7 @@ export class ResultsService {
 
         const topPerformers = await this.enrichTopPerformers(
             topPerformerRows,
-            scope,
+            dashboardScope,
         );
 
         const needsAttentionRows = await this.applyAdminScopeFilters(
@@ -934,7 +945,7 @@ export class ResultsService {
                 .leftJoin('result.test', 'test')
                 .leftJoin('result.orgId', 'orgId')
                 .leftJoin('result.branchId', 'branchId'),
-            scope,
+            dashboardScope,
             includeVoided,
         )
             .select('user.id', 'userId')

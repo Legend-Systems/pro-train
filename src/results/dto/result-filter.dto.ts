@@ -37,6 +37,15 @@ export class ResultFilterDto {
     courseId?: number;
 
     @ApiPropertyOptional({
+        description:
+            'Filter by branch ID. Ignored when the caller is already branch-scoped in their JWT.',
+        example: '123e4567-e89b-12d3-a456-426614174000',
+    })
+    @IsOptional()
+    @IsUUID()
+    branchId?: string;
+
+    @ApiPropertyOptional({
         description: 'Filter by pass status',
         example: true,
     })

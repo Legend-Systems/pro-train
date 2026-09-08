@@ -623,7 +623,7 @@ export class ResultsController {
     @ApiOperation({
         summary: 'Org-wide results dashboard (Admin)',
         description:
-            'Returns organization-wide test results, summary metrics, and employee performance insights for leadership review.',
+            'Returns organization-wide test results, summary metrics, and employee performance insights for leadership review. Supports pagination (`page`, `limit`) and optional `branchId` for owners/admins who are not already branch-scoped.',
         operationId: 'getAdminResultsDashboard',
     })
     @ApiResponse({
