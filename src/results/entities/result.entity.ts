@@ -170,11 +170,15 @@ export class Result {
     })
     branchId?: Branch;
 
-    // Relations
+    // Join on the scalar FKs (attemptId / userId). Without this, TypeORM uses
+    // attemptAttemptId / a disconnected user join, so lists omit the employee name
+    // and left-joined attempt rows stay null even when attemptId is populated.
     @ManyToOne(() => TestAttempt, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'attemptId', referencedColumnName: 'attemptId' })
     attempt: TestAttempt;
 
     @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+    @JoinColumn({ name: 'userId' })
     user: User;
 
     @ManyToOne(() => Test, { onDelete: 'RESTRICT' })
