@@ -719,6 +719,29 @@ export class ResultsService {
     }
 
     /**
+     * Keep the newest live result per employee + test (highest resultId).
+     * PastResults and Admin "All Employee Results" should not hide a retake
+     * behind older attempts, and should not list every historical attempt.
+     */
+    private applyLatestResultPerUserTest(
+        queryBuilder: SelectQueryBuilder<Result>,
+        orgId?: string,
+    ): SelectQueryBuilder<Result> {
+        const orgClause = orgId
+            ? 'AND latest.orgIdId = :orgId'
+            : '';
+        return queryBuilder.andWhere(
+            `result.resultId IN (
+                SELECT MAX(latest.resultId)
+                FROM results latest
+                WHERE latest.voidedByResetId IS NULL
+                ${orgClause}
+                GROUP BY latest.userId, latest.testId
+            )`,
+        );
+    }
+
+    /**
      * Drop cached result payloads after an administrator reset an attempt.
      *
      * Test and course result caches are keyed by an opaque filter blob, so
@@ -794,11 +817,13 @@ export class ResultsService {
         // Read only after the role assertion above: learner-facing endpoints
         // share this DTO and must never be able to opt into voided rows.
         const includeVoided = filterDto.includeVoided === true;
-        // JWT branch wins so a branch admin cannot query another office.
-        // Org-wide owners/admins may pass branchId to narrow the dashboard.
+        // The Admin Results UI has an explicit "All branches" control. Do not
+        // overlay the caller's home-branch JWT on top of that — owners/admins
+        // still have a branch on the user row, which previously hid results
+        // saved under the learner's attempt branch (Kitchen Wall / result 569).
         const dashboardScope: OrgBranchScope = {
             ...scope,
-            branchId: scope.branchId ?? requestedBranchId,
+            branchId: requestedBranchId,
         };
 
         const summaryQuery = this.applyAdminScopeFilters(
@@ -853,10 +878,16 @@ export class ResultsService {
             totalResults > 0 ? (passedCount / totalResults) * 100 : 0;
 
         const listQuery = this.buildFilterQuery(
-            filters,
+            {
+                ...filters,
+                sortBy: filters.sortBy || 'calculatedAt',
+                sortOrder: filters.sortOrder || 'DESC',
+            },
             dashboardScope,
             includeVoided,
         );
+        // One row per employee + test (newest live result, pass or fail).
+        this.applyLatestResultPerUserTest(listQuery, dashboardScope.orgId);
         listQuery.orderBy('result.calculatedAt', 'DESC');
 
         const [resultEntities, total] = await listQuery
@@ -2169,13 +2200,26 @@ export class ResultsService {
         limit: number;
     }> {
         try {
-            const { page = 1, limit = 10, ...filters } = filterDto;
+            // Learners must see every live result they earned. Filtering by JWT
+            // branch hid rows (e.g. KITCHEN WALL) whose attempt was stored with a
+            // different branch FK than users.branchId.
+            const ownResultsScope: OrgBranchScope = {
+                ...scope,
+                branchId: undefined,
+            };
+            const { page = 1, limit = 100, ...filters } = filterDto;
             const skip = (page - 1) * limit;
 
             const queryBuilder = this.buildFilterQuery(
-                { ...filters, userId },
-                scope,
+                {
+                    ...filters,
+                    userId,
+                    sortBy: filters.sortBy || 'calculatedAt',
+                    sortOrder: filters.sortOrder || 'DESC',
+                },
+                ownResultsScope,
             );
+            this.applyLatestResultPerUserTest(queryBuilder, ownResultsScope.orgId);
 
             const [results, total] = await queryBuilder
                 .skip(skip)
@@ -2188,7 +2232,7 @@ export class ResultsService {
 
             const counts = await this.getUserResultCounts(userId, {
                 testId: filters.testId,
-                scope,
+                scope: ownResultsScope,
                 includeVoided: false,
             });
 
@@ -2791,9 +2835,18 @@ export class ResultsService {
             queryBuilder.andWhere('orgId.id = :orgId', { orgId: scope.orgId });
         }
         if (scope.branchId) {
-            queryBuilder.andWhere('branchId.id = :branchId', {
-                branchId: scope.branchId,
-            });
+            // Compare scalar FKs as well as joined ids. Kitchen Wall (result 569)
+            // stored attempt.branchId as a UUID while users.branchIdId can be a
+            // different value; joining only Branch.id dropped that row.
+            queryBuilder.andWhere(
+                `(
+                    result.branchIdId = :scopeBranchId
+                    OR user.branchIdId = :scopeBranchId
+                    OR branchId.id = :scopeBranchId
+                    OR userBranch.id = :scopeBranchId
+                )`,
+                { scopeBranchId: scope.branchId },
+            );
         }
 
         // Learners must never receive results voided by an admin attempt reset

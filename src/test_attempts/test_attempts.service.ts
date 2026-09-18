@@ -777,6 +777,27 @@ export class TestAttemptsService {
                 );
             }
 
+            // Duplicate submit (client timeout/retry): answers and the result row
+            // were already saved; bulk-create then fails with "status: submitted"
+            // and the learner sees a hard failure even though the result exists.
+            if (attempt.status === AttemptStatus.SUBMITTED) {
+                const existingResult =
+                    await this.resultsService.createFromAttempt(attemptId);
+                if (!existingResult?.resultId) {
+                    throw new InternalServerErrorException(
+                        'Failed to save the test result. Please try submitting again.',
+                    );
+                }
+
+                return {
+                    ...this.mapToResponseDto(attempt),
+                    resultId: existingResult.resultId,
+                    score: existingResult.score,
+                    percentage: existingResult.percentage,
+                    passed: existingResult.passed,
+                };
+            }
+
             // Submissions are bound to the exam window too. An attempt that
             // legitimately started while the window was open is still allowed
             // through, so work in progress at the exact moment the window
@@ -912,11 +933,10 @@ export class TestAttemptsService {
                 `Result created for attempt ${attemptId}: ${createdResult.resultId}`,
             );
 
-            if (attempt.status !== AttemptStatus.SUBMITTED) {
-                attempt.status = AttemptStatus.SUBMITTED;
-                attempt.submitTime = new Date();
-                attempt.progressPercentage = 100;
-            }
+            // This path is IN_PROGRESS only — SUBMITTED attempts return above.
+            attempt.status = AttemptStatus.SUBMITTED;
+            attempt.submitTime = new Date();
+            attempt.progressPercentage = 100;
 
             const savedAttempt =
                 await this.testAttemptRepository.save(attempt);
