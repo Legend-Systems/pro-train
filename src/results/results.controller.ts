@@ -663,7 +663,7 @@ export class ResultsController {
         @Query() filterDto: AdminEmployeeMetricsFilterDto,
     ): Promise<AdminEmployeeMetricsDto> {
         this.logger.log(
-            `Getting admin employee metrics for org: ${scope.orgId}, user: ${filterDto.userId ?? 'default'}`,
+            `Getting admin employee metrics for org: ${scope.orgId}, user: ${filterDto.userId ?? 'org-wide'}`,
         );
         return this.resultsService.getAdminEmployeeMetrics(scope, filterDto);
     }

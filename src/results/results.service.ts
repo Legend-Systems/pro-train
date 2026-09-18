@@ -1180,8 +1180,10 @@ export class ResultsService {
             totalResults: Number(row.totalResults) || 0,
         }));
 
-        const selectedUserId =
-            filterDto.userId ?? employees[0]?.userId ?? undefined;
+        // Omit userId for organisation-wide charts (all branches in admin scope).
+        // Previously we defaulted to employees[0], so Monthly Pass vs Fail and
+        // Employee Pass Rate were often empty when that person had no results this year.
+        const selectedUserId = filterDto.userId;
 
         const emptyResponse: AdminEmployeeMetricsDto = {
             year,
@@ -1218,7 +1220,7 @@ export class ResultsService {
             })),
         };
 
-        if (!selectedUserId) {
+        if (employees.length === 0) {
             return emptyResponse;
         }
 
@@ -1230,11 +1232,13 @@ export class ResultsService {
                     .leftJoin('result.branchId', 'branchId'),
                 scope,
                 includeVoided,
-            )
-                .andWhere('result.userId = :selectedUserId', {
+            ).andWhere('YEAR(result.calculatedAt) = :year', { year });
+
+            if (selectedUserId) {
+                query = query.andWhere('result.userId = :selectedUserId', {
                     selectedUserId,
-                })
-                .andWhere('YEAR(result.calculatedAt) = :year', { year });
+                });
+            }
 
             if (month) {
                 query = query.andWhere(
@@ -1487,7 +1491,7 @@ export class ResultsService {
         let monthlyTrainingHours = 0;
         const hoursByMonth = new Map<number, number>();
 
-        if (scope.orgId) {
+        if (scope.orgId && selectedUserId) {
             try {
                 const userHoursSummary =
                     await this.trainingHoursService.getUserSummary(
