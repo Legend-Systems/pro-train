@@ -22,7 +22,8 @@ async function bootstrap() {
             'https://protrain-client.onrender.com',
             'http://localhost:8081', 
             'http://192.168.0.6: 8081',
-            'exp://192.168.0.18:8081' // Expo development server
+            'exp://192.168.0.163:8081', // Expo development server
+            'exp://192.168.0.10:8081'
         ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: [
