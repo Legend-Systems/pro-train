@@ -5,6 +5,7 @@ import {
     CreateDateColumn,
     UpdateDateColumn,
     ManyToOne,
+    JoinColumn,
     Index,
     Unique,
 } from 'typeorm';
@@ -31,7 +32,7 @@ export enum InvitationStatus {
 }
 
 @Entity('test_invitations')
-@Unique(['testId', 'userId'])
+@Unique('UQ_test_invitations_test_user', ['testId', 'userId'])
 @Index('IDX_TEST_INVITATION_STATUS', ['status'])
 @Index('IDX_TEST_INVITATION_EXPIRES', ['expiresAt'])
 export class TestInvitation {
@@ -43,7 +44,7 @@ export class TestInvitation {
     @IsUUID()
     invitationId: string;
 
-    @Column()
+    @Column({ type: 'int' })
     @Index()
     @ApiProperty({
         description: 'Test ID that user is invited to',
@@ -51,7 +52,7 @@ export class TestInvitation {
     })
     testId: number;
 
-    @Column()
+    @Column({ type: 'uuid' })
     @Index()
     @ApiProperty({
         description: 'User ID who is invited',
@@ -61,7 +62,7 @@ export class TestInvitation {
     @IsNotEmpty()
     userId: string;
 
-    @Column()
+    @Column({ type: 'uuid' })
     @Index()
     @ApiProperty({
         description: 'User ID who sent the invitation',
@@ -140,7 +141,7 @@ export class TestInvitation {
     updatedAt: Date;
 
     // Organization and Branch for scoping
-    @Column()
+    @Column({ type: 'uuid' })
     @Index()
     @ApiProperty({
         description: 'Organization ID for scoping',
@@ -150,7 +151,7 @@ export class TestInvitation {
     @IsNotEmpty()
     orgId: string;
 
-    @Column({ nullable: true })
+    @Column({ type: 'uuid', nullable: true })
     @Index()
     @ApiProperty({
         description: 'Branch ID for scoping',
@@ -161,20 +162,25 @@ export class TestInvitation {
     @IsOptional()
     branchId?: string;
 
-    // Relations
+    // Relations share the scalar foreign-key columns above.
     @ManyToOne(() => Test, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'testId', referencedColumnName: 'testId' })
     test: Test;
 
     @ManyToOne(() => User, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'userId' })
     user: User;
 
     @ManyToOne(() => User, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'invitedBy' })
     inviter: User;
 
     @ManyToOne(() => Organization, { nullable: false })
+    @JoinColumn({ name: 'orgId' })
     organization: Organization;
 
-    @ManyToOne(() => Branch, { nullable: true })
+    @ManyToOne(() => Branch, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'branchId' })
     branch?: Branch;
 
     constructor(partial: Partial<TestInvitation>) {
