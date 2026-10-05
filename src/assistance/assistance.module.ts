@@ -10,6 +10,7 @@ import { AssistanceController } from './assistance.controller';
 import { AssistanceService } from './assistance.service';
 import { AssistanceRequest } from './entities/assistance-request.entity';
 import { AssistanceThrottlerGuard } from './guards/assistance-throttler.guard';
+import { WatiAssistanceClient } from './wati-assistance.client';
 
 @Module({
     imports: [
@@ -24,6 +25,6 @@ import { AssistanceThrottlerGuard } from './guards/assistance-throttler.guard';
         CommunicationsModule,
     ],
     controllers: [AssistanceController],
-    providers: [AssistanceService, AssistanceThrottlerGuard],
+    providers: [AssistanceService, AssistanceThrottlerGuard, WatiAssistanceClient],
 })
 export class AssistanceModule {}

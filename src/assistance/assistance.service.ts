@@ -25,6 +25,7 @@ import {
     AssistanceRequest,
     AssistanceWhatsappStatus,
 } from './entities/assistance-request.entity';
+import { WatiAssistanceClient } from './wati-assistance.client';
 
 interface ResolvedTrainingContext {
     readonly courseId: number | null;
@@ -40,8 +41,8 @@ interface AssistanceRequestResult {
 }
 
 /**
- * Records a learner help request and emails the address in ASSISTANCE_EMAIL_NOTIFY.
- * WhatsApp is not sent in this release; the audit row is marked skipped.
+ * Records a learner help request, emails ASSISTANCE_EMAIL_NOTIFY, then sends
+ * the approved Wati template when that integration is configured.
  */
 @Injectable()
 export class AssistanceService {
@@ -62,6 +63,7 @@ export class AssistanceService {
         private readonly branchRepository: Repository<Branch>,
         private readonly communicationsService: CommunicationsService,
         private readonly configService: ConfigService,
+        private readonly watiAssistanceClient: WatiAssistanceClient,
     ) {}
 
     /**
@@ -130,8 +132,13 @@ export class AssistanceService {
                 });
 
             request.emailStatus = AssistanceEmailStatus.SENT;
-            request.whatsappStatus = AssistanceWhatsappStatus.SKIPPED;
             request.communicationId = communicationId;
+            request.whatsappStatus = await this.sendWhatsapp(
+                caller,
+                context,
+                dto.message,
+                requestedAt,
+            );
             await this.assistanceRepository.save(request);
             this.logDelivery(request);
 
@@ -150,6 +157,49 @@ export class AssistanceService {
                 'We could not send your help request. Please try again.',
             );
         }
+    }
+
+    /**
+     * WhatsApp is best-effort. A Wati failure still leaves the email request successful.
+     */
+    private async sendWhatsapp(
+        caller: AuthenticatedUser,
+        context: ResolvedTrainingContext,
+        message: string | undefined,
+        requestedAt: Date,
+    ): Promise<AssistanceWhatsappStatus> {
+        const learnerName = `${caller.firstName} ${caller.lastName}`.trim();
+        try {
+            return await this.watiAssistanceClient.send({
+                learnerLabel: `${learnerName} (${caller.email})`,
+                courseTitle: context.courseTitle || 'Unknown course',
+                contextSummary: this.buildContextSummary(context),
+                requestedAt: this.formatWhatsappDate(requestedAt),
+                message: message?.trim() || 'No message',
+            });
+        } catch (error) {
+            this.logger.error(
+                `Wati send threw request user=${caller.id}`,
+                error instanceof Error ? error.message : 'unknown error',
+            );
+            return AssistanceWhatsappStatus.FAILED;
+        }
+    }
+
+    /** Calendar date in UTC, for example `2026-10-05`. */
+    private formatWhatsappDate(requestedAt: Date): string {
+        const [date] = requestedAt.toISOString().split('T');
+        return date;
+    }
+
+    private buildContextSummary(context: ResolvedTrainingContext): string {
+        if (context.testTitle) {
+            return `Test: ${context.testTitle}`;
+        }
+        if (context.materialTitle) {
+            return `Material: ${context.materialTitle}`;
+        }
+        return 'Course';
     }
 
     private assertLearner(caller: AuthenticatedUser): void {
