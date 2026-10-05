@@ -22,6 +22,7 @@ import { EmailType } from './entities/communication.entity';
 import { EmailStatus } from './entities/communication.entity';
 import { PASSING_SCORE_PERCENTAGE } from '../results/constants/passing-score.constants';
 import { formatExamWindowRange } from '../test/utils/exam-window.util';
+import { AssistanceRequestEmailData } from './interfaces/assistance-request-email.interface';
 
 @Injectable()
 export class CommunicationsService {
@@ -1576,6 +1577,93 @@ export class CommunicationsService {
         );
         console.log('Update data:', updateCommunicationDto);
         return `This action updates a #${id} communication`;
+    }
+
+    /**
+     * Queues the learner assistance email and stores it on communications.
+     * Returns the communication id once the queue accepts the message.
+     */
+    async sendAssistanceRequestEmail(
+        data: AssistanceRequestEmailData,
+    ): Promise<string> {
+        const learnerName = `${data.firstName} ${data.lastName}`.trim();
+        const contextSummary = this.buildAssistanceContextSummary(data);
+        const branchLabel = data.branchName
+            ? `${data.branchName}${data.branchId ? ` (${data.branchId})` : ''}`
+            : 'None';
+        const baseData = this.getBaseTemplateData(
+            data.recipientEmail,
+            'Training support',
+        );
+        const orgData = await this.getOrganizationDataForEmail(
+            data.organizationId,
+        );
+        const templateData = {
+            ...baseData,
+            learnerName,
+            learnerEmail: data.learnerEmail,
+            learnerUserId: data.learnerUserId,
+            organizationId: data.organizationId,
+            organizationName: data.organizationName,
+            branchLabel,
+            courseTitle: data.courseTitle,
+            contextSummary,
+            source: data.source,
+            requestedAt: data.requestedAt,
+            learnerMessage: data.message?.trim() || 'No message',
+            contextUrl: data.contextUrl,
+        };
+
+        const rendered = await this.emailTemplateService.renderByType(
+            EmailType.ASSISTANCE_REQUEST,
+            templateData,
+        );
+
+        const communication = this.communicationRepository.create({
+            recipientEmail: data.recipientEmail,
+            recipientName: 'Training support',
+            senderEmail: orgData.sender.email,
+            senderName: orgData.sender.name,
+            subject: rendered.subject,
+            body: rendered.html || '',
+            plainTextBody: rendered.text,
+            emailType: EmailType.ASSISTANCE_REQUEST,
+            templateUsed: 'assistance-request',
+            status: EmailStatus.PENDING,
+            metadata: {
+                learnerUserId: data.learnerUserId,
+                organizationId: data.organizationId,
+                contextType: data.contextType,
+                courseId: data.courseId,
+                testId: data.testId,
+                source: data.source,
+            },
+        });
+
+        const saved = await this.communicationRepository.save(communication);
+        await this.emailQueueService.queueEmail({
+            to: data.recipientEmail,
+            subject: rendered.subject,
+            html: rendered.html,
+            text: rendered.text,
+        });
+
+        this.logger.log(
+            `Assistance email queued communication=${saved.id} user=${data.learnerUserId}`,
+        );
+        return saved.id;
+    }
+
+    private buildAssistanceContextSummary(
+        data: AssistanceRequestEmailData,
+    ): string {
+        if (data.testTitle) {
+            return `Test: ${data.testTitle}`;
+        }
+        if (data.materialTitle) {
+            return `Material: ${data.materialTitle}`;
+        }
+        return 'Course';
     }
 
     remove(id: number, scope: OrgBranchScope, userId: string) {

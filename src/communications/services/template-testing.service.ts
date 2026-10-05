@@ -115,6 +115,22 @@ export class TemplateTestingService {
                     timestamp: new Date().toISOString(),
                 } as SystemAlertTemplateData;
 
+            case EmailType.ASSISTANCE_REQUEST:
+                return {
+                    ...baseData,
+                    learnerName: 'Jane Doe',
+                    learnerEmail: 'jane@example.com',
+                    learnerUserId: 'user-123',
+                    organizationId: 'org-123',
+                    organizationName: 'Acme',
+                    branchLabel: 'None',
+                    courseTitle: 'Food safety',
+                    contextSummary: 'Course',
+                    source: 'web',
+                    requestedAt: new Date().toISOString(),
+                    learnerMessage: 'I cannot open the PDF.',
+                };
+
             case EmailType.CUSTOM:
             default:
                 return {

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistance requested</title>
+</head>
+<body style="margin:0;padding:24px;background:#f4f4f5;font-family:Arial,sans-serif;color:#18181b;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e4e4e7;border-radius:8px;">
+        <tr>
+            <td style="padding:24px;">
+                <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#71717a;">ProTrain</p>
+                <h1 style="margin:0 0 16px;font-size:22px;">Assistance requested</h1>
+                <p style="margin:0 0 16px;font-size:16px;"><strong>{{learnerName}}</strong> needs help.</p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:14px;line-height:1.5;">
+                    <tr><td style="padding:4px 0;color:#71717a;width:140px;">Email</td><td>{{learnerEmail}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">User ID</td><td>{{learnerUserId}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Organization</td><td>{{organizationName}} ({{organizationId}})</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Branch</td><td>{{branchLabel}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Course</td><td>{{courseTitle}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Context</td><td>{{contextSummary}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Source</td><td>{{source}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">When (UTC)</td><td>{{requestedAt}}</td></tr>
+                    <tr><td style="padding:4px 0;color:#71717a;">Message</td><td>{{learnerMessage}}</td></tr>
+                </table>
+                {{#if contextUrl}}
+                <p style="margin:20px 0 0;">
+                    <a href="{{contextUrl}}" style="color:#7c3aed;">Open this training</a>
+                </p>
+                {{/if}}
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
