@@ -25,6 +25,7 @@ import { Course, CourseStatus } from './entities/course.entity';
 import { Organization } from '../org/entities/org.entity';
 import { Branch } from '../branch/entities/branch.entity';
 import { Test, TestType } from '../test/entities/test.entity';
+import { TrainingProgress } from '../training_progress/entities/training_progress.entity';
 import { TestAttempt } from '../test_attempts/entities/test_attempt.entity';
 import { Result } from '../results/entities/result.entity';
 import { isPassingPercentage } from '../results/constants/passing-score.constants';
@@ -894,16 +895,14 @@ export class CourseService {
                 'courseMaterials.creator',
                 'materialCreator',
             );
-            // Enhanced relations for comprehensive course details
+            // One course detail must not join several OneToMany collections
+            // together. Results, leaderboards, and progress rows multiply with
+            // materials and questions (a cartesian product) and exhaust the
+            // process heap on courses that already have learner history.
+            // Stats come from getStats(); this viewer's progress is one row.
             query.leftJoinAndSelect('courseMaterials.updater', 'materialUpdater');
             query.leftJoinAndSelect('course.tests', 'tests');
             query.leftJoinAndSelect('tests.questions', 'testQuestions');
-            query.leftJoinAndSelect('course.results', 'results');
-            query.leftJoinAndSelect('results.user', 'resultUser');
-            query.leftJoinAndSelect('course.leaderboards', 'leaderboards');
-            query.leftJoinAndSelect('leaderboards.user', 'leaderboardUser');
-            query.leftJoinAndSelect('course.trainingProgress', 'trainingProgress');
-            query.leftJoinAndSelect('trainingProgress.user', 'progressUser');
             query.where('course.courseId = :id', { id });
 
             // Learners may only open active courses; admins can open inactive
@@ -953,7 +952,7 @@ export class CourseService {
             // inactive/draft courses are not 404'd by the learner-only ACTIVE gate.
             const stats = await this.getStats(id, scope);
 
-            // Calculate user-specific progress if userId is provided
+            // One progress row for the viewer. Do not load every learner's history.
             let userProgress: {
                 completionPercentage: number;
                 timeSpentMinutes: number;
@@ -961,13 +960,18 @@ export class CourseService {
                 totalQuestions: number;
                 lastUpdated: Date;
             } | null = null;
-            if (scope?.userId && course.trainingProgress) {
-                const userProgressData = course.trainingProgress.find(
-                    progress => progress.userId === scope.userId && progress.courseId === id
-                );
+            if (scope?.userId) {
+                const userProgressData = await this.courseRepository.manager
+                    .getRepository(TrainingProgress)
+                    .findOne({
+                        where: { userId: scope.userId, courseId: id },
+                        order: { lastUpdated: 'DESC' },
+                    });
                 if (userProgressData) {
                     userProgress = {
-                        completionPercentage: Number(userProgressData.completionPercentage),
+                        completionPercentage: Number(
+                            userProgressData.completionPercentage,
+                        ),
                         timeSpentMinutes: userProgressData.timeSpentMinutes,
                         questionsCompleted: userProgressData.questionsCompleted,
                         totalQuestions: userProgressData.totalQuestions,
@@ -989,18 +993,31 @@ export class CourseService {
                 // so they can review materials and start verification attempts.
                 tests: (course.tests || [])
                     .filter(test => this.isAdminScope(scope) || test.isActive)
-                    .map(test => ({
-                        ...test,
-                        questionCount: test.questions?.length || 0,
-                        questions: test.questions?.map(q => ({
-                            questionId: q.questionId,
-                            questionText: q.questionText,
-                            questionType: q.questionType,
-                            points: q.points,
-                            orderIndex: q.orderIndex,
-                            difficulty: q.difficulty,
-                        })) || [],
-                    })),
+                    .map(test => {
+                        const {
+                            course: _parentCourse,
+                            orgId: _org,
+                            branchId: _branch,
+                            questions: loadedQuestions,
+                            testAttempts: _attempts,
+                            results: _results,
+                            trainingProgress: _progress,
+                            ...testFields
+                        } = test;
+                        return {
+                            ...testFields,
+                            questionCount: loadedQuestions?.length || 0,
+                            questions:
+                                loadedQuestions?.map(question => ({
+                                    questionId: question.questionId,
+                                    questionText: question.questionText,
+                                    questionType: question.questionType,
+                                    points: question.points,
+                                    orderIndex: question.orderIndex,
+                                    difficulty: question.difficulty,
+                                })) || [],
+                        };
+                    }),
 
                 testCount: stats.totalTests,
                 studentCount: stats.uniqueStudents,
