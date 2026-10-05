@@ -564,6 +564,30 @@ export class EmailTemplateService {
                     },
                 },
                 {
+                    name: 'assistance-request',
+                    type: EmailType.ASSISTANCE_REQUEST,
+                    htmlFile: 'assistance-request.hbs',
+                    textFile: 'assistance-request.txt.hbs',
+                    metadata: {
+                        name: 'Assistance Request',
+                        type: EmailType.ASSISTANCE_REQUEST,
+                        version: '1.0.0',
+                        description:
+                            'Notifies support that a learner requested help during training',
+                        requiredData: [
+                            'learnerName',
+                            'contextSummary',
+                            'requestedAt',
+                        ],
+                        optionalData: [
+                            'learnerMessage',
+                            'contextUrl',
+                            'courseTitle',
+                            'branchLabel',
+                        ],
+                    },
+                },
+                {
                     name: 'custom',
                     type: EmailType.CUSTOM,
                     htmlFile: 'custom.hbs',
@@ -764,6 +788,8 @@ export class EmailTemplateService {
                 'Upcoming in 3 days: {{testTitle}}',
             'test-exam-reminder-dayof':
                 'Today: Take {{testTitle}}',
+            'assistance-request':
+                'Assistance requested — {{learnerName}}',
             custom: '{{title}}',
         };
 

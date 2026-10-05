@@ -42,6 +42,7 @@ export enum EmailType {
     ADMIN_REPORT = 'admin_report',
     TEST_EXAM_REMINDER_3DAY = 'test_exam_reminder_3day',
     TEST_EXAM_REMINDER_DAYOF = 'test_exam_reminder_dayof',
+    ASSISTANCE_REQUEST = 'assistance_request',
 }
 
 export enum EmailStatus {
