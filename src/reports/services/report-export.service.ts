@@ -9,6 +9,7 @@ import type {
     AdminOverviewReportDto,
     AdminRankingEntryDto,
     AdminTestPassFailDto,
+    AdminMaterialEngagementUserDto,
     AdminTestsNotCompletedUserDto,
 } from '../dto/admin-insights.dto';
 import {
@@ -142,6 +143,7 @@ export class ReportExportService {
         this.appendPerformerCsv(lines, overview, selected, style);
         this.appendTestCsv(lines, overview, selected);
         this.appendTestsNotCompletedCsv(lines, overview, selected);
+        this.appendMaterialEngagementCsv(lines, overview, selected);
         this.appendAttemptsResultsBreakdownCsv(lines, overview, selected);
         this.appendKeyAreaCsv(lines, overview, selected);
         this.appendBranchComparisonCsv(lines, overview, selected);
@@ -212,6 +214,7 @@ export class ReportExportService {
         this.writePdfTestSections(doc, overview, selected);
         this.writePdfPassFailRatesSection(doc, overview, selected);
         this.writePdfTestsNotCompletedSection(doc, overview, selected);
+        this.writePdfMaterialEngagementSection(doc, overview, selected);
         this.writePdfAttemptsResultsBreakdownSection(doc, overview, selected);
         this.writePdfNeedsSupportSection(doc, overview, selected);
         this.writePdfKeyAreasSection(doc, overview, selected);
@@ -753,6 +756,92 @@ export class ReportExportService {
             });
         });
         lines.push('');
+    }
+
+    /**
+     * Material Engagement CSV. Added so a checked report section can list
+     * downloads from the same overview the Material Engagement page uses.
+     * Section 1 is one row per downloaded material. Section 2 lists learners
+     * whose download count is zero.
+     */
+    private appendMaterialEngagementCsv(
+        lines: string[],
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.MATERIAL_ENGAGEMENT)) {
+            return;
+        }
+
+        const report = overview.materialEngagement;
+        lines.push(
+            'Section,Name,Surname,Email,MaterialsDownloaded,MaterialName',
+        );
+        this.appendMaterialEngagementDownloadedRows(
+            lines,
+            report?.usersWhoDownloaded ?? [],
+        );
+        this.appendMaterialEngagementNotDownloadedRows(
+            lines,
+            report?.usersWhoDidNotDownload ?? [],
+        );
+        lines.push('');
+    }
+
+    /** One CSV row per downloaded material name, with the learner's total count. */
+    private appendMaterialEngagementDownloadedRows(
+        lines: string[],
+        users: readonly AdminMaterialEngagementUserDto[],
+    ): void {
+        const sectionName = 'Users who have downloaded materials';
+        if (users.length === 0) {
+            lines.push(this.row(sectionName, '', '', '', 0, ''));
+            return;
+        }
+
+        users.forEach(user => {
+            const titles =
+                user.downloadedMaterialTitles.length > 0
+                    ? user.downloadedMaterialTitles
+                    : [''];
+            titles.forEach(title => {
+                lines.push(
+                    this.row(
+                        sectionName,
+                        user.firstName,
+                        user.lastName,
+                        user.email,
+                        user.materialsDownloaded,
+                        title,
+                    ),
+                );
+            });
+        });
+    }
+
+    /** One CSV row per learner who has not downloaded any course material. */
+    private appendMaterialEngagementNotDownloadedRows(
+        lines: string[],
+        users: readonly AdminMaterialEngagementUserDto[],
+    ): void {
+        const sectionName = 'Users who have not downloaded any materials';
+        if (users.length === 0) {
+            lines.push(this.row(sectionName, '', '', '', 0, ''));
+            return;
+        }
+
+        users.forEach(user => {
+            lines.push(
+                this.row(
+                    sectionName,
+                    user.firstName,
+                    user.lastName,
+                    user.email,
+                    user.materialsDownloaded,
+                    '',
+                ),
+            );
+        });
     }
 
     /**
@@ -1653,6 +1742,124 @@ export class ReportExportService {
 
         doc.font('Helvetica').fillColor('#111827');
         doc.moveDown(0.25);
+    }
+
+    /**
+     * Material Engagement PDF. Same two groups as the CSV: learners who
+     * downloaded course materials (with each title), then learners who did not.
+     * Data is the Material Engagement overview, loaded only when this section
+     * is checked.
+     */
+    private writePdfMaterialEngagementSection(
+        doc: PDFKit.PDFDocument,
+        overview: AdminOverviewReportDto,
+        selected: Set<ReportSection>,
+    ): void {
+        if (!selected.has(ReportSection.MATERIAL_ENGAGEMENT)) {
+            return;
+        }
+
+        const report = overview.materialEngagement;
+        this.writePdfHeading(doc, 'Material Engagement');
+        this.writePdfMaterialEngagementDownloadedGroup(
+            doc,
+            report?.usersWhoDownloaded ?? [],
+        );
+        this.writePdfMaterialEngagementNotDownloadedGroup(
+            doc,
+            report?.usersWhoDidNotDownload ?? [],
+        );
+    }
+
+    /** Section 1: user, download count, and each downloaded material name. */
+    private writePdfMaterialEngagementDownloadedGroup(
+        doc: PDFKit.PDFDocument,
+        users: readonly AdminMaterialEngagementUserDto[],
+    ): void {
+        this.writePdfSubheading(doc, 'Users who have downloaded materials');
+        if (users.length === 0) {
+            this.writePdfEmptyState(doc, 'No learners have downloaded materials.');
+            return;
+        }
+
+        users.forEach((user, index) => {
+            this.writePdfMaterialEngagementUserHeader(doc, user, index > 0);
+            doc.font('Helvetica')
+                .fontSize(8.5)
+                .fillColor('#4b5563')
+                .text(
+                    `Materials downloaded ${user.materialsDownloaded}`,
+                    doc.page.margins.left,
+                    doc.y,
+                    { width: this.pdfContentWidth(doc) },
+                );
+            doc.moveDown(0.2);
+            const titles =
+                user.downloadedMaterialTitles.length > 0
+                    ? user.downloadedMaterialTitles
+                    : ['Untitled material'];
+            titles.forEach(title => {
+                this.ensurePdfBreakdownSpace(doc, 14);
+                doc.font('Helvetica')
+                    .fontSize(9)
+                    .fillColor('#111827')
+                    .text(`• ${title}`, doc.page.margins.left + 12, doc.y, {
+                        width: this.pdfContentWidth(doc) - 12,
+                    });
+                doc.moveDown(0.15);
+            });
+        });
+        doc.moveDown(0.25);
+    }
+
+    /** Section 2: learners with a download count of zero. */
+    private writePdfMaterialEngagementNotDownloadedGroup(
+        doc: PDFKit.PDFDocument,
+        users: readonly AdminMaterialEngagementUserDto[],
+    ): void {
+        this.writePdfSubheading(doc, 'Users who have not downloaded any materials');
+        if (users.length === 0) {
+            this.writePdfEmptyState(
+                doc,
+                'Every learner has downloaded at least one material.',
+            );
+            return;
+        }
+
+        users.forEach((user, index) => {
+            this.writePdfMaterialEngagementUserHeader(doc, user, index > 0);
+        });
+        doc.moveDown(0.25);
+    }
+
+    /** Shared name and email line for a Material Engagement learner. */
+    private writePdfMaterialEngagementUserHeader(
+        doc: PDFKit.PDFDocument,
+        user: AdminMaterialEngagementUserDto,
+        separateFromPrevious: boolean,
+    ): void {
+        if (separateFromPrevious) {
+            if (doc.y + 36 > PDF_CONTENT_BOTTOM_Y) {
+                doc.addPage();
+            } else {
+                this.writePdfHairlineSeparator(doc);
+            }
+        } else {
+            this.ensurePdfBreakdownSpace(doc, 36);
+        }
+
+        const left = doc.page.margins.left;
+        const width = this.pdfContentWidth(doc);
+        doc.font('Helvetica-Bold')
+            .fontSize(11)
+            .fillColor('#111827')
+            .text(`${user.firstName} ${user.lastName}`, left, doc.y, { width });
+        doc.moveDown(0.1);
+        doc.font('Helvetica')
+            .fontSize(9)
+            .fillColor('#6b7280')
+            .text(user.email, left, doc.y, { width });
+        doc.moveDown(0.2);
     }
 
     private writePdfTrainingHoursSection(

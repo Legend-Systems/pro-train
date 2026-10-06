@@ -58,6 +58,11 @@ export enum ReportSection {
      * incomplete attempt. Surfaces retries that a high-score-only view hides.
      */
     TEST_ATTEMPTS_RESULTS_BREAKDOWN = 'test-attempts-results-breakdown',
+    /**
+     * Download roster from the Material Engagement page.
+     * One checkbox; the report then lists who downloaded materials and who did not.
+     */
+    MATERIAL_ENGAGEMENT = 'material-engagement',
 }
 
 /** Every selectable section, in presentation order. */
@@ -79,6 +84,7 @@ export const SENSITIVE_REPORT_SECTIONS: readonly ReportSection[] = [
     ReportSection.KPI_KEY_AREAS,
     ReportSection.TESTS_NOT_COMPLETED,
     ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN,
+    ReportSection.MATERIAL_ENGAGEMENT,
 ];
 
 /** Default content for the leaderboard preset (celebratory sections only). */
@@ -212,4 +218,14 @@ export function requiresAttemptsResultsBreakdown(
     sections: readonly ReportSection[],
 ): boolean {
     return sections.includes(ReportSection.TEST_ATTEMPTS_RESULTS_BREAKDOWN);
+}
+
+/**
+ * True when the Material Engagement download roster must be loaded.
+ * The roster is the same learner list the Material Engagement page shows.
+ */
+export function requiresMaterialEngagement(
+    sections: readonly ReportSection[],
+): boolean {
+    return sections.includes(ReportSection.MATERIAL_ENGAGEMENT);
 }
