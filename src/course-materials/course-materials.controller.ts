@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { CourseMaterialsService } from './course-materials.service';
 import { CreateCourseMaterialDto } from './dto/create-course-material.dto';
+import { RecordMaterialInteractionDto } from './dto/record-material-interaction.dto';
 import { UpdateCourseMaterialDto } from './dto/update-course-material.dto';
 import {
     CourseMaterialResponseDto,
@@ -414,11 +415,13 @@ export class CourseMaterialsController {
     async recordMaterialView(
         @Param('id', ParseIntPipe) id: number,
         @OrgBranchScope() scope: OrgBranchScope,
+        @Body() body: RecordMaterialInteractionDto,
     ): Promise<StandardOperationResponse> {
         return this.courseMaterialsService.recordMaterialView(
             id,
             scope,
             scope.userId,
+            body?.interaction,
         );
     }
 

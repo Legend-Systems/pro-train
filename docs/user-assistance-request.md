@@ -1,6 +1,6 @@
 # Request Assistance
 
-**Status:** Phases 1–3 are implemented. Phases 4–5 are not started. WhatsApp is not sent; a successful request stores `whatsappStatus = skipped`.
+**Status:** Phases 1–3 and 4.3 are implemented. Sections 4.1 and 4.2 are Wati dashboard steps. Phase 5 is not started. After email is accepted, the API calls Wati when `WATI_API_ENDPOINT` and `WATI_ACCESS_TOKEN` are set. Empty Wati config stores `whatsappStatus = skipped` and does not call Wati.
 
 Learners with role `user` can ask for help from inside a course or an active test. One action notifies the address in `ASSISTANCE_EMAIL_NOTIFY` and, when Wati is configured, sends a WhatsApp template to the support number.
 
@@ -16,7 +16,7 @@ Admins, owners, and master admins do not see the control. The server rejects the
 | Mobile test | `protrain-mobile/src/app/test/[testId].tsx` |
 | API | New Nest module under `pro-train/src/assistance/` |
 
-Email uses the existing communications pipeline (Nodemailer, `communications` table, `EmailType`). WhatsApp is a new outbound call to Wati. There is no Wati integration in the repo today.
+Email uses the existing communications pipeline (Nodemailer, `communications` table, `EmailType`). WhatsApp is an outbound call from `WatiAssistanceClient` after the email is accepted. Web and mobile do not call Wati.
 
 ## Payload
 
@@ -164,7 +164,13 @@ Message: {{5}}
 
 ### 4.3 Application call
 
-After the email is accepted, `AssistanceService` calls Wati with the shared Axios client (timeout 10 seconds). Do not call Wati from the web or mobile apps.
+**Status:** Complete.
+
+- [x] After the email is accepted, `AssistanceService` calls `WatiAssistanceClient` (Axios, timeout 10 seconds). Web and mobile do not call Wati.
+- [x] Empty `WATI_API_ENDPOINT`, `WATI_ACCESS_TOKEN`, or `ASSISTANCE_WHATSAPP_NUMBER` sets `whatsappStatus = skipped` and makes no HTTP call.
+- [x] HTTP 200 with `result: true` sets `whatsappStatus = sent`. 400 and 401 set `failed` and log Wati `info` with the bearer token redacted.
+- [x] Timeout or 5xx retries once after 2 seconds, then sets `failed`.
+- [x] A WhatsApp failure does not change the learner success response when the email was accepted.
 
 ```http
 POST {WATI_API_ENDPOINT}/api/v1/sendTemplateMessage?whatsappNumber={ASSISTANCE_WHATSAPP_NUMBER}
