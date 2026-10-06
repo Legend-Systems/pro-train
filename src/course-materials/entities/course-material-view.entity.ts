@@ -13,8 +13,8 @@ import { CourseMaterial } from '../../course-materials/entities/course-material.
 import { Course } from '../../course/entities/course.entity';
 
 /**
- * Tracks first-time material views per user — one row per (userId, materialId).
- * Used for VIEW_COURSE_MATERIAL and COMPLETE_ALL_MATERIALS XP awards.
+ * One row per learner and material.
+ * The first insert awards XP. Later opens and downloads update the counters.
  */
 @Entity('course_material_view')
 @Unique('UQ_material_view_user_material', ['userId', 'materialId'])
@@ -35,6 +35,15 @@ export class CourseMaterialView {
 
     @CreateDateColumn()
     viewedAt: Date;
+
+    @Column({ type: 'datetime', nullable: true })
+    lastViewedAt: Date | null;
+
+    @Column({ type: 'int', default: 0 })
+    openCount: number;
+
+    @Column({ type: 'int', default: 0 })
+    downloadCount: number;
 
     @ManyToOne(() => User)
     @JoinColumn({ name: 'userId' })

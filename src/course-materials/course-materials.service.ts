@@ -24,10 +24,12 @@ import {
 import {
     CourseMaterial,
     MaterialStatus,
+    MaterialType,
 } from './entities/course-material.entity';
+import { MaterialInteraction } from './dto/record-material-interaction.dto';
 import { CourseMaterialView } from './entities/course-material-view.entity';
 import { Course } from '../course/entities/course.entity';
-import { User } from '../user/entities/user.entity';
+import { User, UserRole } from '../user/entities/user.entity';
 import {
     MediaFile,
     ImageVariant,
@@ -36,6 +38,8 @@ import {
 export interface OrgBranchScope {
     orgId?: string;
     branchId?: string;
+    userId?: string;
+    userRole?: string;
 }
 
 @Injectable()
@@ -1089,15 +1093,38 @@ export class CourseMaterialsService {
     }
 
     /**
-     * Phase 4 — records first view of a material and emits XP event.
-     * Idempotent: duplicate views for same user/material are ignored.
+     * File materials count as downloads. Links and videos count only when the
+     * client explicitly sends a download.
+     */
+    private countsAsDownload(
+        type: MaterialType,
+        interaction: MaterialInteraction,
+    ): boolean {
+        if (interaction === MaterialInteraction.DOWNLOAD) {
+            return true;
+        }
+        return type !== MaterialType.LINK && type !== MaterialType.VIDEO;
+    }
+
+    /**
+     * Records an open or download. The first insert awards material-view XP.
+     * Later events only update the open and download counters.
      */
     async recordMaterialView(
         materialId: number,
         scope: OrgBranchScope,
         userId: string,
+        interaction: MaterialInteraction = MaterialInteraction.OPEN,
     ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
+            if (scope.userRole && scope.userRole !== UserRole.USER) {
+                return {
+                    message: 'Material view skipped',
+                    status: 'success',
+                    code: 200,
+                };
+            }
+
             const material = await this.courseMaterialRepository.findOne({
                 where: { materialId },
                 relations: ['course', 'course.orgId', 'course.branchId'],
@@ -1129,10 +1156,14 @@ export class CourseMaterialsService {
             );
 
             if (!existingView) {
+                const downloaded = this.countsAsDownload(material.type, interaction);
                 const view = this.courseMaterialViewRepository.create({
                     userId,
                     materialId,
                     courseId: material.courseId,
+                    lastViewedAt: new Date(),
+                    openCount: 1,
+                    downloadCount: downloaded ? 1 : 0,
                 });
                 await this.courseMaterialViewRepository.save(view);
 
@@ -1146,6 +1177,13 @@ export class CourseMaterialsService {
                         material.course?.branchId?.id ?? scope.branchId,
                     ),
                 );
+            } else {
+                const downloaded = this.countsAsDownload(material.type, interaction);
+                existingView.openCount = Number(existingView.openCount) + 1;
+                existingView.downloadCount =
+                    Number(existingView.downloadCount) + (downloaded ? 1 : 0);
+                existingView.lastViewedAt = new Date();
+                await this.courseMaterialViewRepository.save(existingView);
             }
 
             return {
