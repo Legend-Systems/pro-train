@@ -22,5 +22,6 @@ import { TrainingManualDownload } from './entities/training-manual-download.enti
     ],
     controllers: [EngagementController],
     providers: [EngagementService],
+    exports: [EngagementService],
 })
 export class EngagementModule {}

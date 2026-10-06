@@ -866,6 +866,42 @@ export class AdminOverviewKpisDto {
     keyAreaCount: number;
 }
 
+/**
+ * One learner on the Material Engagement download roster.
+ * Same identity and download fields the Material Engagement page shows per row.
+ */
+export class AdminMaterialEngagementUserDto {
+    @ApiProperty()
+    userId: string;
+
+    @ApiProperty()
+    firstName: string;
+
+    @ApiProperty()
+    lastName: string;
+
+    @ApiProperty()
+    email: string;
+
+    @ApiProperty({ description: 'Count of course materials this learner downloaded' })
+    materialsDownloaded: number;
+
+    @ApiProperty({ type: [String] })
+    downloadedMaterialTitles: string[];
+}
+
+/**
+ * Material Engagement report body.
+ * Two groups so downloaded and not-downloaded learners are never mixed.
+ */
+export class AdminMaterialEngagementReportDto {
+    @ApiProperty({ type: [AdminMaterialEngagementUserDto] })
+    usersWhoDownloaded: AdminMaterialEngagementUserDto[];
+
+    @ApiProperty({ type: [AdminMaterialEngagementUserDto] })
+    usersWhoDidNotDownload: AdminMaterialEngagementUserDto[];
+}
+
 /** Hub payload: overview KPIs plus the most actionable report slices. */
 export class AdminOverviewReportDto {
     @ApiProperty({ type: AdminOverviewKpisDto })
@@ -936,6 +972,13 @@ export class AdminOverviewReportDto {
      */
     @ApiPropertyOptional({ type: AdminAttemptsResultsBreakdownReportDto })
     attemptsResultsBreakdown?: AdminAttemptsResultsBreakdownReportDto;
+
+    /**
+     * Present when the Material Engagement section is selected.
+     * Built from the same overview the Material Engagement page loads.
+     */
+    @ApiPropertyOptional({ type: AdminMaterialEngagementReportDto })
+    materialEngagement?: AdminMaterialEngagementReportDto;
 
     @ApiProperty()
     generatedAt: Date;

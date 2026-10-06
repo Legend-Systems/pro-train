@@ -9,6 +9,8 @@ import { LessThanOrEqual, Repository } from 'typeorm';
 
 import { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
 import { CommunicationsService } from '../../communications/communications.service';
+import { EngagementService } from '../../engagement/engagement.service';
+import { LearnerEngagementRow } from '../../engagement/dto/engagement-overview.types';
 import { User } from '../../user/entities/user.entity';
 import {
     CreateReportScheduleDto,
@@ -20,6 +22,8 @@ import {
     UpdateReportScheduleDto,
 } from '../dto/report-schedule.dto';
 import {
+    AdminMaterialEngagementReportDto,
+    AdminMaterialEngagementUserDto,
     AdminOverviewReportDto,
     AdminReportFiltersDto,
 } from '../dto/admin-insights.dto';
@@ -28,6 +32,7 @@ import {
     ReportSection,
     requiresAttemptsResultsBreakdown,
     requiresLeaderboardInsights,
+    requiresMaterialEngagement,
     requiresTestsNotCompleted,
     resolveReportSections,
 } from '../constants/report-sections.constant';
@@ -41,6 +46,12 @@ import { ReportExportService } from './report-export.service';
 
 /** Minutes between cron ticks — used when aligning nextRunAt. */
 const CRON_LOOKAHEAD_MS = 15 * 60 * 1000;
+
+/**
+ * Largest page the Material Engagement overview accepts.
+ * The report walks every page so the roster is not cut off at one screen.
+ */
+const MATERIAL_ENGAGEMENT_PAGE_SIZE = 100;
 
 /**
  * CRUD + execution for admin report schedules.
@@ -60,6 +71,7 @@ export class ReportScheduleService {
         private readonly adminInsightsReportsService: AdminInsightsReportsService,
         private readonly reportExportService: ReportExportService,
         private readonly communicationsService: CommunicationsService,
+        private readonly engagementService: EngagementService,
     ) {}
 
     async create(
@@ -319,7 +331,7 @@ export class ReportScheduleService {
 
     /**
      * Loads the overview and, only when requested, the heavier extra datasets
-     * (leaderboard rankings / tests-not-completed).
+     * (leaderboard rankings / tests-not-completed / material engagement).
      */
     private async buildReportPayload(
         scope: OrgBranchScope,
@@ -364,7 +376,74 @@ export class ReportScheduleService {
             };
         }
 
+        if (requiresMaterialEngagement(sections)) {
+            payload = {
+                ...payload,
+                materialEngagement: await this.loadMaterialEngagementReport(scope),
+            };
+        }
+
         return payload;
+    }
+
+    /**
+     * Material Engagement was added so a scheduled report can list downloads
+     * without a separate screen. Rows come from EngagementService.getOverview,
+     * the same query the Material Engagement page loads through
+     * GET /engagement/overview. Learners with materialsDownloaded > 0 go in
+     * the downloaded section; everyone else goes in the not-downloaded section.
+     */
+    private async loadMaterialEngagementReport(
+        scope: OrgBranchScope,
+    ): Promise<AdminMaterialEngagementReportDto> {
+        const learners = await this.loadAllEngagementLearners(scope);
+        return {
+            usersWhoDownloaded: learners
+                .filter(learner => learner.materialsDownloaded > 0)
+                .map(learner => this.toMaterialEngagementUser(learner)),
+            usersWhoDidNotDownload: learners
+                .filter(learner => learner.materialsDownloaded === 0)
+                .map(learner => this.toMaterialEngagementUser(learner)),
+        };
+    }
+
+    /** Walks every page of the Material Engagement overview. */
+    private async loadAllEngagementLearners(
+        scope: OrgBranchScope,
+    ): Promise<LearnerEngagementRow[]> {
+        const first = await this.engagementService.getOverview(scope, {
+            page: 1,
+            limit: MATERIAL_ENGAGEMENT_PAGE_SIZE,
+        });
+        const firstPage = first.data;
+        if (!firstPage) {
+            return [];
+        }
+
+        const learners = [...firstPage.learners];
+        const pageCount = Math.ceil(firstPage.total / firstPage.limit);
+        for (let page = 2; page <= pageCount; page += 1) {
+            const next = await this.engagementService.getOverview(scope, {
+                page,
+                limit: MATERIAL_ENGAGEMENT_PAGE_SIZE,
+            });
+            learners.push(...(next.data?.learners ?? []));
+        }
+        return learners;
+    }
+
+    /** Copies the page row into the report user shape. */
+    private toMaterialEngagementUser(
+        learner: LearnerEngagementRow,
+    ): AdminMaterialEngagementUserDto {
+        return {
+            userId: learner.userId,
+            firstName: learner.firstName,
+            lastName: learner.lastName,
+            email: learner.email,
+            materialsDownloaded: learner.materialsDownloaded,
+            downloadedMaterialTitles: [...learner.downloadedMaterialTitles],
+        };
     }
 
     /** Cron entry: process due active schedules only. */

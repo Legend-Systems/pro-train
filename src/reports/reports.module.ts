@@ -28,6 +28,7 @@ import { ReportRun } from './entities/report-run.entity';
 import { TrainingHoursModule } from '../training-hours/training-hours.module';
 import { CommunicationsModule } from '../communications/communications.module';
 import { CommonModule } from '../common/common.module';
+import { EngagementModule } from '../engagement/engagement.module';
 
 @Module({
     imports: [
@@ -52,6 +53,7 @@ import { CommonModule } from '../common/common.module';
         TrainingHoursModule,
         CommunicationsModule,
         CommonModule,
+        EngagementModule,
     ],
     controllers: [ReportsController, AdminReportsController],
     providers: [
