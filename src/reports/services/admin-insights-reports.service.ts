@@ -20,7 +20,11 @@ import {
     AttemptStatus,
     TestAttempt,
 } from '../../test_attempts/entities/test_attempt.entity';
-import { User, UserRole, UserStatus } from '../../user/entities/user.entity';
+import {
+    LEARNER_USER_ROLES,
+    User,
+    UserStatus,
+} from '../../user/entities/user.entity';
 import {
     AdminAtRiskUserDto,
     AdminBranchComparisonDto,
@@ -318,8 +322,8 @@ export class AdminInsightsReportsService {
             .leftJoin('user.branchId', 'userBranch')
             .andWhere('result.calculatedAt >= :start', { start: window.start })
             .andWhere('result.calculatedAt < :end', { end: window.end })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -375,8 +379,8 @@ export class AdminInsightsReportsService {
                 monthStartDate,
             })
             .andWhere('session.activityDate < :monthEndDate', { monthEndDate })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('session.userId', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -550,8 +554,8 @@ export class AdminInsightsReportsService {
             .leftJoin('l.course', 'course')
             .leftJoin('l.orgId', 'org')
             .where('org.id = :orgId', { orgId })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -592,8 +596,8 @@ export class AdminInsightsReportsService {
             .leftJoin('l.orgId', 'org')
             .leftJoin('l.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -1329,8 +1333,8 @@ export class AdminInsightsReportsService {
             .leftJoin('user.orgId', 'org')
             .leftJoin('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .andWhere('user.status = :activeStatus', {
                 activeStatus: UserStatus.ACTIVE,
@@ -1595,8 +1599,8 @@ export class AdminInsightsReportsService {
     ): Promise<Map<string, { testsCompleted: number; testsPassed: number }>> {
         const query = this.buildScopedResultsQuery(orgId, branchId)
             .innerJoin('result.user', 'user')
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('COUNT(result.resultId)', 'testsCompleted')
@@ -1646,8 +1650,8 @@ export class AdminInsightsReportsService {
             .leftJoin('user.branchId', 'userBranch')
             .andWhere('result.calculatedAt >= :start', { start })
             .andWhere('result.calculatedAt < :end', { end })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -1962,8 +1966,8 @@ export class AdminInsightsReportsService {
             .leftJoin('user.branchId', 'userBranch')
             .andWhere('result.calculatedAt >= :start', { start })
             .andWhere('result.calculatedAt < :end', { end })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -2014,8 +2018,8 @@ export class AdminInsightsReportsService {
             .andWhere('result.voidedByResetId IS NULL')
             .andWhere('result.calculatedAt >= :start', { start: window.start })
             .andWhere('result.calculatedAt < :end', { end: window.end })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('result.resultId', 'resultId')
             .addSelect('result.attemptId', 'attemptId')
@@ -2106,8 +2110,8 @@ export class AdminInsightsReportsService {
                 '((attempt.startTime >= :start AND attempt.startTime < :end) OR (attempt.submitTime IS NOT NULL AND attempt.submitTime >= :start AND attempt.submitTime < :end))',
                 { start: window.start, end: window.end },
             )
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('attempt.attemptId', 'attemptId')
             .addSelect('attempt.attemptNumber', 'attemptNumber')

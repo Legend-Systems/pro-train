@@ -26,7 +26,12 @@ import { LeaderboardService } from '../leaderboard/leaderboard.service';
 import { CommunicationsService } from '../communications/communications.service';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { TrainingProgressService } from '../training_progress/training_progress.service';
-import { User, UserRole, UserStatus } from '../user/entities/user.entity';
+import {
+    LEARNER_USER_ROLES,
+    User,
+    UserRole,
+    UserStatus,
+} from '../user/entities/user.entity';
 import { RewardsService } from '../rewards/rewards.service';
 import {
     PASSING_SCORE_PERCENTAGE,
@@ -1785,7 +1790,9 @@ export class ResultsService {
             .leftJoinAndSelect('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
-            .andWhere('user.role = :role', { role: UserRole.USER })
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
+            })
             .orderBy('user.firstName', 'ASC')
             .addOrderBy('user.lastName', 'ASC');
 

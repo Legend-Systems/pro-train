@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Leaderboard } from './entities/leaderboard.entity';
 import { Result } from '../results/entities/result.entity';
-import { UserRole } from '../user/entities/user.entity';
+import { LEARNER_USER_ROLES, UserRole } from '../user/entities/user.entity';
 import type { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import {
     LeaderboardImproverDto,
@@ -187,8 +187,8 @@ export class LeaderboardOverviewService {
             .leftJoin('l.course', 'course')
             .leftJoin('l.orgId', 'org')
             .where('org.id = :orgId', { orgId: options.orgId })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -285,8 +285,8 @@ export class LeaderboardOverviewService {
             .leftJoin('result.course', 'course')
             .andWhere('result.createdAt >= :start', { start })
             .andWhere('result.createdAt < :end', { end })
-            .andWhere('user.role = :learnerRole', {
-                learnerRole: UserRole.USER,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')

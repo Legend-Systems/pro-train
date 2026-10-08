@@ -24,6 +24,10 @@ export const AnyRole = () =>
     OrgRoles({
         roles: [
             UserRole.USER,
+            UserRole.ADMINISTRATIVE_STAFF,
+            UserRole.SENIOR_MANAGERS,
+            UserRole.WAREHOUSE_STAFF,
+            UserRole.DRIVERS,
             UserRole.ADMIN,
             UserRole.OWNER,
             UserRole.MASTER_ADMIN,

@@ -13,7 +13,12 @@ import {
     MaterialStatus,
 } from '../course-materials/entities/course-material.entity';
 import { Course, CourseStatus } from '../course/entities/course.entity';
-import { User, UserRole, UserStatus } from '../user/entities/user.entity';
+import {
+    isLearnerRole,
+    LEARNER_USER_ROLES,
+    User,
+    UserStatus,
+} from '../user/entities/user.entity';
 import { trainingManualTitle } from './constants/training-manuals';
 import { EngagementOverviewQueryDto } from './dto/engagement-overview-query.dto';
 import {
@@ -68,7 +73,7 @@ export class EngagementService {
         scope: OrgBranchScope,
         courseId: number,
     ): Promise<StandardResponse<{ recorded: boolean }>> {
-        if (scope.userRole !== UserRole.USER) {
+        if (!isLearnerRole(scope.userRole)) {
             return this.skipped('Course view skipped');
         }
 
@@ -109,7 +114,7 @@ export class EngagementService {
         if (!trainingManualTitle(manualKey)) {
             throw new BadRequestException('Unknown training manual');
         }
-        if (scope.userRole !== UserRole.USER) {
+        if (!isLearnerRole(scope.userRole)) {
             return this.skipped('Manual download skipped');
         }
 
@@ -194,7 +199,9 @@ export class EngagementService {
     private async loadLearners(orgId: string, search?: string): Promise<User[]> {
         const query = this.userRepository
             .createQueryBuilder('user')
-            .where('user.role = :role', { role: UserRole.USER })
+            .where('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
+            })
             .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
             .andWhere('user.orgId = :orgId', { orgId });
 

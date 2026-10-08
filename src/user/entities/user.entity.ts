@@ -28,6 +28,25 @@ export enum UserRole {
     OWNER = 'owner',
     ADMIN = 'admin',
     USER = 'user',
+    /** Job roles. They train like `user` and do not receive admin access. */
+    ADMINISTRATIVE_STAFF = 'administrative_staff',
+    SENIOR_MANAGERS = 'senior_managers',
+    WAREHOUSE_STAFF = 'warehouse_staff',
+    DRIVERS = 'drivers',
+}
+
+/** Roles that take training. Admin, owner, and master admin are excluded. */
+export const LEARNER_USER_ROLES: readonly UserRole[] = [
+    UserRole.USER,
+    UserRole.ADMINISTRATIVE_STAFF,
+    UserRole.SENIOR_MANAGERS,
+    UserRole.WAREHOUSE_STAFF,
+    UserRole.DRIVERS,
+];
+
+/** True when the role should follow learner rules rather than admin rules. */
+export function isLearnerRole(role?: string | null): boolean {
+    return LEARNER_USER_ROLES.some(learnerRole => learnerRole === role);
 }
 
 export enum UserStatus {
@@ -100,7 +119,12 @@ export class User {
     })
     avatar?: MediaFile;
 
-    @Column({ nullable: true, default: UserRole.USER })
+    @Column({
+        type: 'varchar',
+        length: 32,
+        nullable: true,
+        default: UserRole.USER,
+    })
     @ApiProperty({
         description: 'User role',
         example: 'admin',

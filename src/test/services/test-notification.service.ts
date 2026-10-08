@@ -5,8 +5,8 @@ import { In, Repository } from 'typeorm';
 import { CommunicationsService } from '../../communications/communications.service';
 import { Result } from '../../results/entities/result.entity';
 import {
+    LEARNER_USER_ROLES,
     User,
-    UserRole,
     UserStatus,
 } from '../../user/entities/user.entity';
 import { TestInvitation, InvitationStatus } from '../entities/test-invitation.entity';
@@ -363,7 +363,9 @@ export class TestNotificationService {
             .leftJoinAndSelect('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.status = :status', { status: UserStatus.ACTIVE })
-            .andWhere('user.role = :role', { role: UserRole.USER });
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
+            });
 
         if (test.branchId?.id) {
             qb.andWhere('branch.id = :branchId', {
