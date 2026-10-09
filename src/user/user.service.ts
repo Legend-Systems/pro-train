@@ -1446,7 +1446,7 @@ export class UserService {
             userRole?: string;
         },
     ): Promise<StandardOperationResponse> {
-        const { avatar, branchId, password, status, ...updateData } =
+        const { avatar, branchId, password, status, orgId, ...updateData } =
             updateUserDto;
         const dataToUpdate: Partial<User> = { ...updateData };
 
@@ -1529,6 +1529,20 @@ export class UserService {
             } else {
                 // Clear branch assignment
                 dataToUpdate.branchId = undefined;
+            }
+        }
+
+        if (orgId !== undefined && orgId.length > 0) {
+            if (scope?.userRole !== UserRole.MASTER_ADMIN) {
+                throw new ForbiddenException(
+                    'Only Master Admin can change organization',
+                );
+            }
+            const branchOrganizationId = (
+                dataToUpdate.orgId as Organization | undefined
+            )?.id;
+            if (!branchOrganizationId || branchOrganizationId === orgId) {
+                dataToUpdate.orgId = { id: orgId } as Organization;
             }
         }
 
@@ -1689,8 +1703,14 @@ export class UserService {
         updateData: Partial<UpdateUserDto>,
     ): Promise<StandardOperationResponse> {
         return this.retryService.executeDatabase(async () => {
-            const { avatar, branchId, role, password, ...profileData } =
-                updateData;
+            const {
+                avatar,
+                branchId,
+                role,
+                password,
+                orgId: _orgId,
+                ...profileData
+            } = updateData;
 
             try {
                 // Profile updates: allow name, email, avatar, password (not role/branch)

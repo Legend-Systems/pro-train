@@ -150,4 +150,16 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
     @IsOptional()
     @IsEnum(UserStatus, { message: 'Status must be a valid user status' })
     status?: UserStatus;
+
+    @ApiProperty({
+        description:
+            'Organization to assign. Only Master Admin may change this directly.',
+        example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        required: false,
+        type: String,
+        title: 'Organization ID',
+    })
+    @IsOptional()
+    @IsString({ message: 'Organization ID must be a string' })
+    orgId?: string;
 }
