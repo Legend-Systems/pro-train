@@ -56,7 +56,7 @@ export class AnalyticsService {
             .createQueryBuilder('branch')
             .leftJoin('branch.organization', 'org')
             .where('org.id = :orgId', { orgId })
-            .select(['branch.id', 'branch.name']);
+            .select(['branch.id', 'branch.name', 'branch.alias']);
 
         if (branchId) {
             branchQuery.andWhere('branch.id = :branchId', { branchId });
@@ -69,6 +69,7 @@ export class AnalyticsService {
             summaries.set(branch.id, {
                 branchId: branch.id,
                 branchName: branch.name,
+                branchAlias: branch.alias?.trim() || null,
                 averageScore: 0,
                 passRate: 0,
                 resultsCount: 0,
@@ -98,6 +99,7 @@ export class AnalyticsService {
         const resultRows = await resultQuery
             .select('branch.id', 'branchId')
             .addSelect('branch.name', 'branchName')
+            .addSelect('branch.alias', 'branchAlias')
             .addSelect('AVG(result.percentage)', 'averageScore')
             .addSelect('COUNT(result.resultId)', 'resultsCount')
             .addSelect(
@@ -106,9 +108,11 @@ export class AnalyticsService {
             )
             .groupBy('branch.id')
             .addGroupBy('branch.name')
+            .addGroupBy('branch.alias')
             .getRawMany<{
                 branchId: string;
                 branchName: string;
+                branchAlias: string | null;
                 averageScore: string;
                 resultsCount: string;
                 passedCount: string;
@@ -121,6 +125,7 @@ export class AnalyticsService {
                 summaries,
                 row.branchId,
                 row.branchName,
+                row.branchAlias,
             );
             entry.averageScore = this.round(Number(row.averageScore) || 0);
             entry.resultsCount = resultsCount;
@@ -253,11 +258,16 @@ export class AnalyticsService {
         summaries: Map<string, BranchAnalyticsSummaryDto>,
         branchId: string,
         branchName?: string,
+        branchAlias?: string | null,
     ): BranchAnalyticsSummaryDto {
+        const alias = branchAlias?.trim() || null;
         const existing = summaries.get(branchId);
         if (existing) {
             if (branchName && !existing.branchName) {
                 existing.branchName = branchName;
+            }
+            if (alias && !existing.branchAlias) {
+                existing.branchAlias = alias;
             }
             return existing;
         }
@@ -265,6 +275,7 @@ export class AnalyticsService {
         const created: BranchAnalyticsSummaryDto = {
             branchId,
             branchName: branchName ?? 'Unknown branch',
+            branchAlias: alias,
             averageScore: 0,
             passRate: 0,
             resultsCount: 0,

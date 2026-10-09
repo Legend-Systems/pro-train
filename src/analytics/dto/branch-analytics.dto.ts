@@ -9,6 +9,13 @@ export class BranchAnalyticsSummaryDto {
     branchName: string;
 
     @ApiProperty({
+        description: 'Short branch code shown in compact chart legends',
+        example: 'Denver',
+        nullable: true,
+    })
+    branchAlias: string | null;
+
+    @ApiProperty({
         description: 'Average knowledge score (percentage) across all results',
         example: 82.4,
     })

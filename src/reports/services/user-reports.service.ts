@@ -220,7 +220,9 @@ export class UserReportsService {
                 status: AttemptStatus.SUBMITTED,
             })
             .orderBy('ta.submitTime', 'DESC')
-            .select(['ta.attemptId', 'r.passed'])
+            // submitTime must be selected: TypeORM wraps joined LIMIT queries in a
+            // DISTINCT subquery and MySQL rejects ORDER BY columns missing from it.
+            .select(['ta.attemptId', 'ta.submitTime', 'r.passed'])
             .limit(20)
             .getMany();
 

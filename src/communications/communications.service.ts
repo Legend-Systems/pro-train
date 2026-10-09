@@ -1395,6 +1395,14 @@ export class CommunicationsService {
                     ? 'test-exam-reminder-3day'
                     : 'test-exam-reminder-dayof';
 
+            const formattedExamWindow = formatExamWindowRange(
+                {
+                    examStartDate: templateData.examStartDate,
+                    examEndDate: templateData.examEndDate,
+                },
+                date => this.formatDate(date),
+            );
+
             const fullTemplateData = {
                 ...baseData,
                 testId: templateData.testId,
@@ -1407,13 +1415,9 @@ export class CommunicationsService {
                 formattedExamEndDate: templateData.examEndDate
                     ? this.formatDate(templateData.examEndDate)
                     : null,
-                formattedExamWindow: formatExamWindowRange(
-                    {
-                        examStartDate: templateData.examStartDate,
-                        examEndDate: templateData.examEndDate,
-                    },
-                    date => this.formatDate(date),
-                ),
+                formattedExamWindow,
+                // Templates and requiredData still key off a single exam-date field.
+                formattedExamDate: formattedExamWindow,
                 timeRemainingLabel:
                     templateData.timeRemainingLabel ?? 'About 3 days',
                 takeTestUrl,
