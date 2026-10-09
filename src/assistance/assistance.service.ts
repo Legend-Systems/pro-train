@@ -17,7 +17,7 @@ import { Course } from '../course/entities/course.entity';
 import { StandardResponse } from '../common/types/standard-response.type';
 import { Organization } from '../org/entities/org.entity';
 import { Test } from '../test/entities/test.entity';
-import { UserRole } from '../user/entities/user.entity';
+import { isLearnerRole } from '../user/entities/user.entity';
 import { CreateAssistanceRequestDto } from './dto/create-assistance-request.dto';
 import {
     AssistanceContextType,
@@ -203,7 +203,7 @@ export class AssistanceService {
     }
 
     private assertLearner(caller: AuthenticatedUser): void {
-        if (caller.role !== UserRole.USER) {
+        if (!isLearnerRole(caller.role)) {
             throw new ForbiddenException('Only learners can request assistance');
         }
     }

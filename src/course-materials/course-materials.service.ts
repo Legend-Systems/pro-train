@@ -29,7 +29,7 @@ import {
 import { MaterialInteraction } from './dto/record-material-interaction.dto';
 import { CourseMaterialView } from './entities/course-material-view.entity';
 import { Course } from '../course/entities/course.entity';
-import { User, UserRole } from '../user/entities/user.entity';
+import { isLearnerRole, User } from '../user/entities/user.entity';
 import {
     MediaFile,
     ImageVariant,
@@ -1117,7 +1117,7 @@ export class CourseMaterialsService {
         interaction: MaterialInteraction = MaterialInteraction.OPEN,
     ): Promise<StandardOperationResponse> {
         return this.retryOperation(async () => {
-            if (scope.userRole && scope.userRole !== UserRole.USER) {
+            if (scope.userRole && !isLearnerRole(scope.userRole)) {
                 return {
                     message: 'Material view skipped',
                     status: 'success',
