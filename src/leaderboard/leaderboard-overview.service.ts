@@ -4,11 +4,20 @@ import {
     InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
-import { Leaderboard } from './entities/leaderboard.entity';
+import { Repository } from 'typeorm';
 import { Result } from '../results/entities/result.entity';
-import { LEARNER_USER_ROLES, UserRole } from '../user/entities/user.entity';
+import {
+    LEARNER_USER_ROLES,
+    User,
+    UserRole,
+    UserStatus,
+} from '../user/entities/user.entity';
 import type { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { EligibleTestService } from '../ranking/services/eligible-test.service';
+import { LearnerRankingService } from '../ranking/services/learner-ranking.service';
+import { EligibleTest } from '../ranking/types/eligible-test.type';
+import { LearnerRankingStats } from '../ranking/types/learner-ranking-stats.type';
+import { compareLearnerRankingStats } from '../ranking/utils/ranking-comparator.util';
 import {
     LeaderboardImproverDto,
     LeaderboardOverviewEntryDto,
@@ -24,6 +33,9 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
+/** Hard ceiling on ranked learners so a large org cannot stall the request. */
+const MAX_RANKED_LEARNERS = 1000;
+
 /** Roles allowed to see underperforming "needs support" leaderboard data. */
 const LEADERBOARD_ADMIN_ROLES: UserRole[] = [
     UserRole.MASTER_ADMIN,
@@ -38,33 +50,61 @@ function canViewNeedsSupport(userRole?: string): boolean {
     );
 }
 
-interface AggregatedUserStats {
-    userId: string;
-    firstName: string;
-    lastName: string;
-    email?: string;
-    profilePicture?: string | null;
-    branchName?: string | null;
-    totalPoints: number;
-    averageScore: number;
-    testsCompleted: number;
-    courseId?: number | null;
-    courseTitle?: string | null;
+/** Learner identity plus the display fields the leaderboard renders. */
+interface LearnerRosterEntry {
+    readonly userId: string;
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly email?: string;
+    readonly profilePicture: string | null;
+    readonly branchId: string | null;
+    readonly branchName: string | null;
+}
+
+/** A roster row joined to its ranking metrics, ready to sort. */
+interface RankableLearner {
+    readonly profile: LearnerRosterEntry;
+    readonly stats: LearnerRankingStats;
+}
+
+/** Period bounds applied to `examEndDate` when selecting eligible tests. */
+interface EligibilityWindow {
+    readonly periodStart: Date | null;
+    readonly periodEnd: Date | null;
 }
 
 /**
- * Org-wide leaderboard rankings with period filters, summary insights,
- * and month-over-month improvers. Rankings include every branch unless an
- * admin passes `branchId`. Month views aggregate from results; all-time
- * views aggregate from the leaderboards table.
+ * Org-wide leaderboard rankings with period filters, summary insights, and
+ * month-over-month improvers. Rankings include every branch unless an admin
+ * passes `branchId`.
+ *
+ * ## Ranking model
+ * Learners are ranked on a weighted blend of knowledge and engagement rather
+ * than on the average of whatever tests they chose to sit:
+ *
+ *   `rankingScore = (averageScore × 0.6) + (participationRate × 100 × 0.4)`
+ *
+ * Only **eligible** tests count — active tests whose exam window has fully
+ * closed (see `EligibleTestService`). Open and future windows are excluded so
+ * nobody is scored on training they still have time to complete.
+ *
+ * ## Periods
+ * Both period modes run the same ranking pass; only the eligible-test set
+ * differs. `month` keeps tests whose `examEndDate` falls inside that calendar
+ * month, so the leaderboard reflects the exam cycles that closed in the month
+ * — not the dates learners happened to submit. `all-time` keeps every closed
+ * window. Previously `all-time` summed the `leaderboards` table and `month`
+ * counted raw result rows, which double-counted retries.
  */
 @Injectable()
 export class LeaderboardOverviewService {
     constructor(
-        @InjectRepository(Leaderboard)
-        private readonly leaderboardRepository: Repository<Leaderboard>,
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
+        private readonly eligibleTestService: EligibleTestService,
+        private readonly learnerRankingService: LearnerRankingService,
     ) {}
 
     async getOverview(
@@ -89,34 +129,39 @@ export class LeaderboardOverviewService {
             // An explicit query.branchId still narrows the list (admin filters).
             const branchId = query.branchId;
 
-            const currentStats = await this.loadAggregatedStats({
+            const roster = await this.loadRoster({
                 orgId: scope.orgId,
                 branchId,
-                courseId: query.courseId,
-                period,
-                month,
                 search: query.search,
                 activeOnly: query.activeOnly,
             });
 
-            let previousByUser = new Map<string, AggregatedUserStats>();
+            const current = await this.rankLearners({
+                orgId: scope.orgId,
+                branchId,
+                courseId: query.courseId,
+                roster,
+                window: this.resolveEligibilityWindow(period, month),
+            });
+
+            let previousByUser = new Map<string, RankableLearner>();
             if (period === LeaderboardOverviewPeriod.MONTH && month) {
-                const previousMonth = this.previousYearMonth(month);
-                const previousStats = await this.loadAggregatedStats({
+                const previous = await this.rankLearners({
                     orgId: scope.orgId,
                     branchId,
                     courseId: query.courseId,
-                    period: LeaderboardOverviewPeriod.MONTH,
-                    month: previousMonth,
-                    search: undefined,
-                    activeOnly: false,
+                    roster,
+                    window: this.resolveEligibilityWindow(
+                        LeaderboardOverviewPeriod.MONTH,
+                        this.previousYearMonth(month),
+                    ),
                 });
                 previousByUser = new Map(
-                    previousStats.map(entry => [entry.userId, entry]),
+                    previous.map(entry => [entry.profile.userId, entry]),
                 );
             }
 
-            const ranked = this.rankUsers(currentStats, previousByUser);
+            const ranked = this.buildEntries(current, previousByUser);
             const summary = this.buildSummary(ranked, scope.userId);
             const { topImprovers, needsSupport } =
                 period === LeaderboardOverviewPeriod.MONTH
@@ -156,263 +201,204 @@ export class LeaderboardOverviewService {
         }
     }
 
-    private async loadAggregatedStats(options: {
-        orgId: string;
-        branchId?: string;
-        courseId?: number;
-        period: LeaderboardOverviewPeriod;
-        month?: string;
-        search?: string;
-        activeOnly?: boolean;
-    }): Promise<AggregatedUserStats[]> {
-        if (options.period === LeaderboardOverviewPeriod.MONTH) {
-            return this.loadMonthlyFromResults(options);
+    /**
+     * `month` buckets by the month an exam window closed in; `all-time` leaves
+     * the window unbounded so every closed exam counts.
+     */
+    private resolveEligibilityWindow(
+        period: LeaderboardOverviewPeriod,
+        month?: string,
+    ): EligibilityWindow {
+        if (period !== LeaderboardOverviewPeriod.MONTH || !month) {
+            return { periodStart: null, periodEnd: null };
         }
-        return this.loadAllTimeFromLeaderboards(options);
+
+        const { start, end } = this.getMonthBounds(month);
+        return { periodStart: start, periodEnd: end };
     }
 
-    private async loadAllTimeFromLeaderboards(options: {
+    /**
+     * Every active learner in scope. The roster is the ranking denominator, so
+     * learners who sat nothing still appear (ranked last with a zero score)
+     * rather than vanishing from the board.
+     */
+    private async loadRoster(options: {
         orgId: string;
         branchId?: string;
-        courseId?: number;
         search?: string;
         activeOnly?: boolean;
-    }): Promise<AggregatedUserStats[]> {
-        const qb = this.leaderboardRepository
-            .createQueryBuilder('l')
-            .innerJoin('l.user', 'user')
+    }): Promise<LearnerRosterEntry[]> {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
             .leftJoin('user.avatar', 'avatar')
-            .leftJoin('user.branchId', 'userBranch')
-            .leftJoin('l.branchId', 'branch')
-            .leftJoin('l.course', 'course')
-            .leftJoin('l.orgId', 'org')
             .where('org.id = :orgId', { orgId: options.orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
                 learnerRoles: LEARNER_USER_ROLES,
             })
-            .select('user.id', 'userId')
-            .addSelect('user.firstName', 'firstName')
-            .addSelect('user.lastName', 'lastName')
-            .addSelect('user.email', 'email')
-            .addSelect('MAX(avatar.url)', 'profilePicture')
-            .addSelect(
-                'MAX(COALESCE(branch.name, userBranch.name))',
-                'branchName',
-            )
-            .addSelect('SUM(l.totalPoints)', 'totalPoints')
-            .addSelect('AVG(l.averageScore)', 'averageScore')
-            .addSelect('SUM(l.testsCompleted)', 'testsCompleted')
-            .addSelect('MAX(course.courseId)', 'courseId')
-            .addSelect('MAX(course.title)', 'courseTitle')
-            .groupBy('user.id')
-            .addGroupBy('user.firstName')
-            .addGroupBy('user.lastName')
-            .addGroupBy('user.email');
-
-        if (options.courseId) {
-            qb.andWhere('l.courseId = :courseId', {
-                courseId: options.courseId,
-            });
-        }
-
-        if (options.branchId) {
-            qb.andWhere(
-                '(branch.id = :branchId OR userBranch.id = :branchId)',
-                { branchId: options.branchId },
-            );
-        }
-
-        if (options.search?.trim()) {
-            const term = `%${options.search.trim().toLowerCase()}%`;
-            qb.andWhere(
-                '(LOWER(user.firstName) LIKE :term OR LOWER(user.lastName) LIKE :term)',
-                { term },
-            );
-        }
-
-        if (options.activeOnly) {
-            const cutoff = new Date();
-            cutoff.setUTCDate(cutoff.getUTCDate() - ACTIVE_DAYS);
-            qb.andWhere('l.lastUpdated >= :cutoff', { cutoff });
-        }
-
-        const rows = await qb.getRawMany<{
-            userId: string;
-            firstName: string;
-            lastName: string;
-            email: string;
-            profilePicture: string | null;
-            branchName: string | null;
-            totalPoints: string;
-            averageScore: string;
-            testsCompleted: string;
-            courseId: string | null;
-            courseTitle: string | null;
-        }>();
-
-        return rows.map(row => ({
-            userId: row.userId,
-            firstName: row.firstName ?? '',
-            lastName: row.lastName ?? '',
-            email: row.email,
-            profilePicture: row.profilePicture,
-            branchName: row.branchName,
-            totalPoints: this.round(Number(row.totalPoints) || 0),
-            averageScore: this.round(Number(row.averageScore) || 0),
-            testsCompleted: Number(row.testsCompleted) || 0,
-            courseId: row.courseId ? Number(row.courseId) : null,
-            courseTitle: row.courseTitle,
-        }));
-    }
-
-    private async loadMonthlyFromResults(options: {
-        orgId: string;
-        branchId?: string;
-        courseId?: number;
-        month?: string;
-        search?: string;
-        activeOnly?: boolean;
-    }): Promise<AggregatedUserStats[]> {
-        if (!options.month) {
-            throw new BadRequestException('month is required for period=month');
-        }
-
-        const { start, end } = this.getMonthBounds(options.month);
-        const qb = this.buildScopedResultsQuery(options.orgId, options.branchId)
-            .innerJoin('result.user', 'user')
-            .leftJoin('user.avatar', 'avatar')
-            .leftJoin('user.branchId', 'userBranch')
-            .leftJoin('result.course', 'course')
-            .andWhere('result.createdAt >= :start', { start })
-            .andWhere('result.createdAt < :end', { end })
-            .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+            .andWhere('user.status = :activeStatus', {
+                activeStatus: UserStatus.ACTIVE,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
             .addSelect('user.email', 'email')
-            .addSelect('MAX(avatar.url)', 'profilePicture')
-            .addSelect('MAX(userBranch.name)', 'branchName')
-            .addSelect('SUM(result.score)', 'totalPoints')
-            .addSelect('AVG(result.percentage)', 'averageScore')
-            .addSelect('COUNT(result.resultId)', 'testsCompleted')
-            .addSelect('MAX(course.courseId)', 'courseId')
-            .addSelect('MAX(course.title)', 'courseTitle')
-            .groupBy('user.id')
-            .addGroupBy('user.firstName')
-            .addGroupBy('user.lastName')
-            .addGroupBy('user.email');
+            .addSelect('avatar.url', 'profilePicture')
+            .addSelect('branch.id', 'branchId')
+            .addSelect('branch.name', 'branchName')
+            .orderBy('user.lastName', 'ASC')
+            .addOrderBy('user.firstName', 'ASC')
+            .limit(MAX_RANKED_LEARNERS);
 
-        if (options.courseId) {
-            qb.andWhere('result.courseId = :courseId', {
-                courseId: options.courseId,
+        if (options.branchId) {
+            query.andWhere('branch.id = :branchId', {
+                branchId: options.branchId,
             });
         }
 
         if (options.search?.trim()) {
             const term = `%${options.search.trim().toLowerCase()}%`;
-            qb.andWhere(
+            query.andWhere(
                 '(LOWER(user.firstName) LIKE :term OR LOWER(user.lastName) LIKE :term)',
                 { term },
             );
         }
 
-        if (options.activeOnly) {
-            const cutoff = new Date();
-            cutoff.setUTCDate(cutoff.getUTCDate() - ACTIVE_DAYS);
-            qb.andHaving('MAX(result.createdAt) >= :cutoff', { cutoff });
-        }
-
-        const rows = await qb.getRawMany<{
+        const rows = await query.getRawMany<{
             userId: string;
-            firstName: string;
-            lastName: string;
+            firstName: string | null;
+            lastName: string | null;
             email: string;
             profilePicture: string | null;
+            branchId: string | null;
             branchName: string | null;
-            totalPoints: string;
-            averageScore: string;
-            testsCompleted: string;
-            courseId: string | null;
-            courseTitle: string | null;
         }>();
 
-        return rows.map(row => ({
+        const roster: LearnerRosterEntry[] = rows.map(row => ({
             userId: row.userId,
             firstName: row.firstName ?? '',
             lastName: row.lastName ?? '',
             email: row.email,
-            profilePicture: row.profilePicture,
-            branchName: row.branchName,
-            totalPoints: this.round(Number(row.totalPoints) || 0),
-            averageScore: this.round(Number(row.averageScore) || 0),
-            testsCompleted: Number(row.testsCompleted) || 0,
-            courseId: row.courseId ? Number(row.courseId) : null,
-            courseTitle: row.courseTitle,
+            profilePicture: row.profilePicture ?? null,
+            branchId: row.branchId ?? null,
+            branchName: row.branchName ?? null,
         }));
+
+        if (!options.activeOnly) {
+            return roster;
+        }
+
+        const activeUserIds = await this.getRecentlyActiveUserIds(
+            options.orgId,
+        );
+        return roster.filter(learner => activeUserIds.has(learner.userId));
     }
 
-    private buildScopedResultsQuery(
+    /** Learners with at least one graded result in the last 30 days. */
+    private async getRecentlyActiveUserIds(
         orgId: string,
-        branchId?: string,
-    ): SelectQueryBuilder<Result> {
-        const query = this.resultRepository
+    ): Promise<Set<string>> {
+        const cutoff = new Date();
+        cutoff.setUTCDate(cutoff.getUTCDate() - ACTIVE_DAYS);
+
+        const rows = await this.resultRepository
             .createQueryBuilder('result')
             .leftJoin('result.orgId', 'org')
-            .where('org.id = :orgId', { orgId });
+            .where('org.id = :orgId', { orgId })
+            .andWhere('result.voidedByResetId IS NULL')
+            .andWhere('result.calculatedAt >= :cutoff', { cutoff })
+            .select('DISTINCT result.userId', 'userId')
+            .getRawMany<{ userId: string }>();
 
-        if (branchId) {
-            query
-                .leftJoin('result.branchId', 'filterBranch')
-                .andWhere('filterBranch.id = :branchId', { branchId });
-        }
-
-        return query;
+        return new Set(rows.map(row => row.userId));
     }
 
-    /**
-     * Sort comparator shared by current and previous-month rankings.
-     * Knowledge score (average %) wins; tests completed breaks ties; points last.
-     */
-    private compareLeaderboardStats(
-        left: AggregatedUserStats,
-        right: AggregatedUserStats,
-    ): number {
-        if (right.averageScore !== left.averageScore) {
-            return right.averageScore - left.averageScore;
-        }
-        if (right.testsCompleted !== left.testsCompleted) {
-            return right.testsCompleted - left.testsCompleted;
-        }
-        return right.totalPoints - left.totalPoints;
-    }
-
-    private rankUsers(
-        current: AggregatedUserStats[],
-        previousByUser: Map<string, AggregatedUserStats>,
-    ): LeaderboardOverviewEntryDto[] {
-        const sorted = [...current].sort((a, b) =>
-            this.compareLeaderboardStats(a, b),
+    /** Resolves eligible tests for the window, then ranks the roster on them. */
+    private async rankLearners(options: {
+        orgId: string;
+        branchId?: string;
+        courseId?: number;
+        roster: readonly LearnerRosterEntry[];
+        window: EligibilityWindow;
+    }): Promise<RankableLearner[]> {
+        const eligibleTests = this.filterByCourse(
+            await this.eligibleTestService.resolveEligibleTests({
+                orgId: options.orgId,
+                branchId: options.branchId,
+                periodStart: options.window.periodStart,
+                periodEnd: options.window.periodEnd,
+            }),
+            options.courseId,
         );
 
+        const statsByUser =
+            await this.learnerRankingService.buildLearnerRankingStats({
+                orgId: options.orgId,
+                branchId: options.branchId,
+                eligibleTests,
+                learners: options.roster,
+            });
+
+        return options.roster
+            .map(profile => ({
+                profile,
+                stats: statsByUser.get(profile.userId),
+            }))
+            .filter(
+                (entry): entry is RankableLearner => entry.stats !== undefined,
+            )
+            .sort((left, right) => this.compareRankable(left, right));
+    }
+
+    private filterByCourse(
+        tests: readonly EligibleTest[],
+        courseId?: number,
+    ): EligibleTest[] {
+        if (!courseId) {
+            return [...tests];
+        }
+        return tests.filter(test => test.courseId === courseId);
+    }
+
+    /** Shared order: ranking score, engagement, knowledge, then stable name. */
+    private compareRankable(
+        left: RankableLearner,
+        right: RankableLearner,
+    ): number {
+        return (
+            compareLearnerRankingStats(left.stats, right.stats) ||
+            `${left.profile.lastName} ${left.profile.firstName}`.localeCompare(
+                `${right.profile.lastName} ${right.profile.firstName}`,
+            )
+        );
+    }
+
+    private buildEntries(
+        current: readonly RankableLearner[],
+        previousByUser: Map<string, RankableLearner>,
+    ): LeaderboardOverviewEntryDto[] {
         const previousRanked = [...previousByUser.values()].sort((a, b) =>
-            this.compareLeaderboardStats(a, b),
+            this.compareRankable(a, b),
         );
         const previousRankMap = new Map(
-            previousRanked.map((entry, index) => [entry.userId, index + 1]),
+            previousRanked.map((entry, index) => [
+                entry.profile.userId,
+                index + 1,
+            ]),
         );
 
-        const total = sorted.length;
+        const total = current.length;
 
-        return sorted.map((entry, index) => {
+        return current.map((entry, index) => {
+            const { profile, stats } = entry;
             const rank = index + 1;
-            const previous = previousByUser.get(entry.userId);
-            const previousPoints = previous?.totalPoints ?? null;
-            const previousRank = previousRankMap.get(entry.userId) ?? null;
+            const previous = previousByUser.get(profile.userId);
+            const previousPoints = previous?.stats.totalPoints ?? null;
+            const previousRank = previousRankMap.get(profile.userId) ?? null;
             const pointsDelta =
                 previousPoints !== null
-                    ? this.round(entry.totalPoints - previousPoints)
+                    ? this.round(stats.totalPoints - previousPoints)
                     : null;
             const rankChange =
                 previousRank !== null ? previousRank - rank : null;
@@ -422,30 +408,34 @@ export class LeaderboardOverviewService {
                     : 0;
 
             return {
-                userId: entry.userId,
+                userId: profile.userId,
                 rank,
-                firstName: entry.firstName,
-                lastName: entry.lastName,
-                email: entry.email,
-                profilePicture: entry.profilePicture,
-                branchName: entry.branchName,
-                totalPoints: entry.totalPoints,
-                averageScore: entry.averageScore,
-                testsCompleted: entry.testsCompleted,
-                letterGrade: this.calculateLetterGrade(entry.averageScore),
-                achievementLevel: this.getAchievementLevel(entry.averageScore),
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                email: profile.email,
+                profilePicture: profile.profilePicture,
+                branchName: profile.branchName,
+                totalPoints: stats.totalPoints,
+                averageScore: stats.averageScore,
+                testsCompleted: stats.testsCompleted,
+                testsPassed: stats.testsPassed,
+                totalEligibleTests: stats.totalEligibleTests,
+                participationRate: stats.participationRate,
+                rankingScore: stats.rankingScore,
+                letterGrade: this.calculateLetterGrade(stats.averageScore),
+                achievementLevel: this.getAchievementLevel(stats.averageScore),
                 previousPoints,
                 pointsDelta,
                 previousRank,
                 rankChange,
                 percentileRank,
                 consistencyRating: this.estimateConsistency(
-                    entry.averageScore,
-                    entry.testsCompleted,
+                    stats.averageScore,
+                    stats.testsCompleted,
                 ),
-                badges: this.calculateBadges(rank, entry.averageScore),
-                courseId: entry.courseId,
-                courseTitle: entry.courseTitle,
+                badges: this.calculateBadges(rank, stats.averageScore),
+                courseId: null,
+                courseTitle: null,
             };
         });
     }
@@ -460,27 +450,42 @@ export class LeaderboardOverviewService {
                 averagePoints: 0,
                 highestScore: 0,
                 averageScore: 0,
+                averageParticipationRate: 0,
+                totalEligibleTests: 0,
                 yourRank: null,
                 yourPoints: null,
                 yourPointsDelta: null,
             };
         }
 
-        const totalPoints = ranked.reduce(
+        // Summary averages describe learners who actually sat something, so a
+        // large roster of non-participants cannot drag the org score to zero.
+        const participants = ranked.filter(entry => entry.testsCompleted > 0);
+        const basis = participants.length > 0 ? participants : ranked;
+
+        const totalPoints = basis.reduce(
             (sum, entry) => sum + entry.totalPoints,
             0,
         );
-        const totalAvg = ranked.reduce(
+        const totalAvg = basis.reduce(
             (sum, entry) => sum + entry.averageScore,
+            0,
+        );
+        const totalParticipation = basis.reduce(
+            (sum, entry) => sum + (entry.participationRate ?? 0),
             0,
         );
         const you = ranked.find(entry => entry.userId === currentUserId);
 
         return {
-            totalParticipants: ranked.length,
-            averagePoints: this.round(totalPoints / ranked.length),
+            totalParticipants: participants.length,
+            averagePoints: this.round(totalPoints / basis.length),
             highestScore: ranked[0]?.totalPoints ?? 0,
-            averageScore: this.round(totalAvg / ranked.length),
+            averageScore: this.round(totalAvg / basis.length),
+            averageParticipationRate: this.round(
+                totalParticipation / basis.length,
+            ),
+            totalEligibleTests: ranked[0]?.totalEligibleTests ?? 0,
             yourRank: you?.rank ?? null,
             yourPoints: you?.totalPoints ?? null,
             yourPointsDelta: you?.pointsDelta ?? null,

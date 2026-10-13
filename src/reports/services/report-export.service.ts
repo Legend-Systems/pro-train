@@ -421,8 +421,9 @@ export class ReportExportService {
         }
 
         // Rank-focused columns only — no average score or pass rate.
+        // Participation is included because it now drives the rank.
         lines.push(
-            'Section,Rank,Name,Surname,Branch,BranchRank,Points,TestsCompleted,TestsPassed',
+            'Section,Rank,Name,Surname,Branch,BranchRank,Points,TestsCompleted,EligibleTests,ParticipationRate,TestsPassed',
         );
         rankings.forEach(entry => {
             lines.push(
@@ -435,6 +436,8 @@ export class ReportExportService {
                     entry.branchRank,
                     entry.totalPoints,
                     entry.testsCompleted,
+                    entry.totalEligibleTests,
+                    this.formatParticipation(entry.participationRate),
                     entry.testsPassed,
                 ),
             );
@@ -456,7 +459,7 @@ export class ReportExportService {
         }
 
         lines.push(
-            'Section,Branch,BranchRank,Name,Surname,Points,TestsCompleted,TestsPassed',
+            'Section,Branch,BranchRank,Name,Surname,Points,TestsCompleted,EligibleTests,ParticipationRate,TestsPassed',
         );
         branches.forEach(branch => {
             branch.topPerformers.forEach(person => {
@@ -469,6 +472,8 @@ export class ReportExportService {
                         person.lastName,
                         person.totalPoints,
                         person.testsCompleted,
+                        person.totalEligibleTests,
+                        this.formatParticipation(person.participationRate),
                         person.testsPassed,
                     ),
                 );
@@ -524,7 +529,9 @@ export class ReportExportService {
             return;
         }
 
-        lines.push('Section,Name,Branch,AverageScore,PassRate,Results');
+        lines.push(
+            'Section,Name,Branch,AverageScore,PassRate,Results,EligibleTests,ParticipationRate',
+        );
         if (showTop) {
             overview.topPerformers.forEach(p => {
                 lines.push(
@@ -535,6 +542,8 @@ export class ReportExportService {
                         p.averageScore,
                         p.passRate,
                         p.resultsCount,
+                        p.totalEligibleTests,
+                        this.formatParticipation(p.participationRate),
                     ),
                 );
             });
@@ -595,7 +604,7 @@ export class ReportExportService {
         style: PersonRowStyle,
     ): void {
         lines.push(
-            'Section,Rank,Name,Surname,Branch,TestsCompleted,TestsPassed',
+            'Section,Rank,Name,Surname,Branch,TestsCompleted,EligibleTests,ParticipationRate,TestsPassed',
         );
 
         const append = (
@@ -617,6 +626,8 @@ export class ReportExportService {
                         person.lastName,
                         this.branchLabel(ranking ?? person),
                         ranking?.testsCompleted ?? 0,
+                        ranking?.totalEligibleTests ?? 0,
+                        this.formatParticipation(ranking?.participationRate),
                         ranking?.testsPassed ?? 0,
                     ),
                 );
@@ -1505,7 +1516,8 @@ export class ReportExportService {
                     : this.joinPdfMetrics([
                           `Avg ${person.averageScore}%`,
                           `Pass rate ${person.passRate}%`,
-                          `Results ${person.resultsCount}`,
+                          `Completed ${person.resultsCount}/${person.totalEligibleTests}`,
+                          `Participation ${this.formatParticipation(person.participationRate)}`,
                       ]),
             })),
         );
@@ -2742,6 +2754,11 @@ export class ReportExportService {
 
     private row(...cells: Array<string | number>): string {
         return cells.map(cell => this.escapeCsv(String(cell))).join(',');
+    }
+
+    /** Renders the 0–1 participation rate as a whole-number percentage. */
+    private formatParticipation(rate: number | undefined): string {
+        return `${Math.round((rate ?? 0) * 100)}%`;
     }
 
     private formatOptionalDate(value: Date | string | null | undefined): string {

@@ -57,6 +57,10 @@ import {
     AdminTopScorerDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
+import { EligibleTestService } from '../../ranking/services/eligible-test.service';
+import { LearnerRankingService } from '../../ranking/services/learner-ranking.service';
+import { LearnerRankingStats } from '../../ranking/types/learner-ranking-stats.type';
+import { compareLearnerRankingStats } from '../../ranking/utils/ranking-comparator.util';
 
 /** Minutes in one hour for display conversion. */
 const MINUTES_PER_HOUR = 60;
@@ -174,6 +178,22 @@ interface BreakdownTestBucket {
     attemptIds: Set<number>;
 }
 
+/** A roster learner on the leaderboard, with their display details. */
+interface RosterLearner {
+    readonly userId: string;
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly branchId: string | null;
+    readonly branchName: string | null;
+    readonly branchAlias: string | null;
+}
+
+/** A roster learner joined to their participation-aware ranking metrics. */
+interface RankedLearner {
+    readonly learner: RosterLearner;
+    readonly stats: LearnerRankingStats;
+}
+
 /** Per-learner accumulator used while grouping breakdown rows. */
 interface BreakdownLearnerBucket {
     profile: {
@@ -209,6 +229,8 @@ export class AdminInsightsReportsService {
         private readonly testRepository: Repository<Test>,
         @InjectRepository(TestAttempt)
         private readonly testAttemptRepository: Repository<TestAttempt>,
+        private readonly eligibleTestService: EligibleTestService,
+        private readonly learnerRankingService: LearnerRankingService,
     ) {}
 
     /** Executive hub payload combining KPIs and actionable slices. */
@@ -306,57 +328,85 @@ export class AdminInsightsReportsService {
         };
     }
 
-    /** Top or worst performers by average knowledge score. */
+    /**
+     * Top or worst performers, ranked on the shared participation-aware score.
+     *
+     * Only eligible tests count — active tests whose exam window closed inside
+     * the selected timeframe (bucketed by `examEndDate`). Each test contributes
+     * one result (the learner's latest attempt), so retries no longer inflate
+     * `resultsCount` or drag `averageScore` down.
+     *
+     * `order=desc` (top performers) drops learners who completed no eligible
+     * test — a blank row is not an achievement. `order=asc` (needs support)
+     * keeps them, because non-participation is the strongest coaching signal.
+     */
     async getPerformers(
         scope: OrgBranchScope,
         filters: AdminReportFiltersDto = {},
     ): Promise<AdminPerformerDto[]> {
-        const orgId = this.requireOrg(scope);
-        const window = this.resolveWindow(filters);
         const order: AdminReportSortOrder =
             filters.order === 'asc' ? 'asc' : 'desc';
         const limit = this.resolveLimit(filters.limit);
+        const ranked = await this.rankLearnersForWindow(scope, filters);
 
-        const query = this.buildScopedResultsQuery(orgId, filters.branchId)
-            .innerJoin('result.user', 'user')
-            .leftJoin('user.branchId', 'userBranch')
-            .andWhere('result.calculatedAt >= :start', { start: window.start })
-            .andWhere('result.calculatedAt < :end', { end: window.end })
-            .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
-            })
-            .select('user.id', 'userId')
-            .addSelect('user.firstName', 'firstName')
-            .addSelect('user.lastName', 'lastName')
-            .addSelect('MAX(userBranch.name)', 'branchName')
-            .addSelect('MAX(userBranch.alias)', 'branchAlias')
-            .addSelect('AVG(result.percentage)', 'averageScore')
-            .addSelect('COUNT(result.resultId)', 'resultsCount')
-            .addSelect(
-                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
-                'passedCount',
+        const eligible =
+            order === 'desc'
+                ? ranked.filter(
+                      entry =>
+                          entry.stats.testsCompleted >=
+                          MIN_RESULTS_FOR_RANKING,
+                  )
+                : ranked;
+
+        const ordered = order === 'desc' ? eligible : [...eligible].reverse();
+
+        return ordered.slice(0, limit).map(entry => this.mapPerformer(entry));
+    }
+
+    /**
+     * Ranks every active learner in scope over the eligible tests whose exam
+     * window closed inside the selected timeframe. Returned best-first.
+     */
+    private async rankLearnersForWindow(
+        scope: OrgBranchScope,
+        filters: AdminReportFiltersDto,
+    ): Promise<RankedLearner[]> {
+        const orgId = this.requireOrg(scope);
+        const window = this.resolveWindow(filters);
+
+        const [roster, eligibleTests] = await Promise.all([
+            this.getLearnerRoster(orgId, filters.branchId),
+            this.eligibleTestService.resolveEligibleTests({
+                orgId,
+                branchId: filters.branchId,
+                periodStart: window.start,
+                periodEnd: window.end,
+            }),
+        ]);
+
+        const statsByUser =
+            await this.learnerRankingService.buildLearnerRankingStats({
+                orgId,
+                branchId: filters.branchId,
+                eligibleTests,
+                learners: roster,
+            });
+
+        return roster
+            .map(learner => ({
+                learner,
+                stats: statsByUser.get(learner.userId),
+            }))
+            .filter(
+                (entry): entry is RankedLearner => entry.stats !== undefined,
             )
-            .groupBy('user.id')
-            .addGroupBy('user.firstName')
-            .addGroupBy('user.lastName')
-            .having('COUNT(result.resultId) >= :minResults', {
-                minResults: MIN_RESULTS_FOR_RANKING,
-            })
-            .orderBy('averageScore', order === 'asc' ? 'ASC' : 'DESC')
-            .limit(limit);
-
-        const rows = await query.getRawMany<{
-            userId: string;
-            firstName: string;
-            lastName: string;
-            branchName: string | null;
-            branchAlias: string | null;
-            averageScore: string;
-            resultsCount: string;
-            passedCount: string;
-        }>();
-
-        return rows.map(row => this.mapPerformer(row));
+            .sort(
+                (left, right) =>
+                    compareLearnerRankingStats(left.stats, right.stats) ||
+                    `${left.learner.lastName} ${left.learner.firstName}`.localeCompare(
+                        `${right.learner.lastName} ${right.learner.firstName}`,
+                    ),
+            );
     }
 
     /** Current training hours per user for a month (default: current UTC month). */
@@ -661,10 +711,12 @@ export class AdminInsightsReportsService {
     /**
      * Motivation-focused leaderboard datasets.
      *
-     * Rankings reflect current cumulative standing (every active learner in
-     * the organization, not just the top few). Top scorers and completion
-     * totals are scoped to the reporting window so digests stay topical.
-     * Nothing here exposes a learner's average score or pass rate.
+     * Rankings cover every active learner in the organization and use the
+     * shared participation-aware score over all eligible tests — active tests
+     * whose exam window has fully closed. Rankings are lifetime (no period
+     * bound) so the board reflects standing rather than a single month, while
+     * top scorers and completion totals stay scoped to the reporting window so
+     * digests stay topical.
      */
     async getLeaderboardInsights(
         scope: OrgBranchScope,
@@ -674,17 +726,19 @@ export class AdminInsightsReportsService {
         const branchId = filters.branchId;
         const window = this.resolveWindow(filters);
 
-        const [roster, pointsByUser, lifetimeTotals, windowTotals, topScorers] =
+        const [roster, lifetimeTests, windowTests, topScorers] =
             await Promise.all([
                 this.getLearnerRoster(orgId, branchId),
-                this.getLeaderboardPointsByUser(orgId, branchId),
-                this.getResultTotalsByUser(orgId, branchId),
-                this.getResultTotalsByUser(
+                this.eligibleTestService.resolveEligibleTests({
                     orgId,
                     branchId,
-                    window.start,
-                    window.end,
-                ),
+                }),
+                this.eligibleTestService.resolveEligibleTests({
+                    orgId,
+                    branchId,
+                    periodStart: window.start,
+                    periodEnd: window.end,
+                }),
                 this.getTopScorers(
                     orgId,
                     branchId,
@@ -694,17 +748,28 @@ export class AdminInsightsReportsService {
                 ),
             ]);
 
-        const fullRankings = this.buildRankings(
-            roster,
-            pointsByUser,
-            lifetimeTotals,
-        );
+        const [lifetimeStats, windowStats] = await Promise.all([
+            this.learnerRankingService.buildLearnerRankingStats({
+                orgId,
+                branchId,
+                eligibleTests: lifetimeTests,
+                learners: roster,
+            }),
+            this.learnerRankingService.buildLearnerRankingStats({
+                orgId,
+                branchId,
+                eligibleTests: windowTests,
+                learners: roster,
+            }),
+        ]);
+
+        const fullRankings = this.buildRankings(roster, lifetimeStats);
 
         return {
             fullRankings,
             branchTopPerformers: this.buildBranchTopPerformers(fullRankings),
             topScorers,
-            testCompletion: this.summariseTestCompletion(windowTotals),
+            testCompletion: this.summariseTestCompletion(windowStats),
         };
     }
 
@@ -1318,16 +1383,7 @@ export class AdminInsightsReportsService {
     private async getLearnerRoster(
         orgId: string,
         branchId?: string,
-    ): Promise<
-        Array<{
-            userId: string;
-            firstName: string;
-            lastName: string;
-            branchId: string | null;
-            branchName: string | null;
-            branchAlias: string | null;
-        }>
-    > {
+    ): Promise<RosterLearner[]> {
         const query = this.userRepository
             .createQueryBuilder('user')
             .leftJoin('user.orgId', 'org')
@@ -1560,80 +1616,6 @@ export class AdminInsightsReportsService {
         });
     }
 
-    /** Cumulative leaderboard points per learner (drives current rank). */
-    private async getLeaderboardPointsByUser(
-        orgId: string,
-        branchId?: string,
-    ): Promise<Map<string, number>> {
-        const query = this.leaderboardRepository
-            .createQueryBuilder('l')
-            .innerJoin('l.user', 'user')
-            .leftJoin('l.orgId', 'org')
-            .where('org.id = :orgId', { orgId })
-            .select('user.id', 'userId')
-            .addSelect('SUM(l.totalPoints)', 'totalPoints')
-            .groupBy('user.id');
-
-        if (branchId) {
-            query
-                .leftJoin('user.branchId', 'userBranch')
-                .andWhere('userBranch.id = :branchId', { branchId });
-        }
-
-        const rows = await query.getRawMany<{
-            userId: string;
-            totalPoints: string;
-        }>();
-
-        return new Map(
-            rows.map(row => [row.userId, Math.round(Number(row.totalPoints) || 0)]),
-        );
-    }
-
-    /** Completed / passed test counts per learner, optionally window-scoped. */
-    private async getResultTotalsByUser(
-        orgId: string,
-        branchId?: string,
-        start?: Date,
-        end?: Date,
-    ): Promise<Map<string, { testsCompleted: number; testsPassed: number }>> {
-        const query = this.buildScopedResultsQuery(orgId, branchId)
-            .innerJoin('result.user', 'user')
-            .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
-            })
-            .select('user.id', 'userId')
-            .addSelect('COUNT(result.resultId)', 'testsCompleted')
-            .addSelect(
-                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
-                'testsPassed',
-            )
-            .groupBy('user.id');
-
-        if (start) {
-            query.andWhere('result.calculatedAt >= :start', { start });
-        }
-        if (end) {
-            query.andWhere('result.calculatedAt < :end', { end });
-        }
-
-        const rows = await query.getRawMany<{
-            userId: string;
-            testsCompleted: string;
-            testsPassed: string;
-        }>();
-
-        return new Map(
-            rows.map(row => [
-                row.userId,
-                {
-                    testsCompleted: Number(row.testsCompleted) || 0,
-                    testsPassed: Number(row.testsPassed) || 0,
-                },
-            ]),
-        );
-    }
-
     /** Highest single test scores in the window, one entry per learner. */
     private async getTopScorers(
         orgId: string,
@@ -1703,22 +1685,15 @@ export class AdminInsightsReportsService {
 
     /**
      * Assigns competition ranks (ties share a rank) across the org and again
-     * within each branch. Learners with no activity still appear, ranked last.
+     * within each branch. Learners with no activity still appear, ranked last
+     * with a zero ranking score.
      */
     private buildRankings(
-        roster: Array<{
-            userId: string;
-            firstName: string;
-            lastName: string;
-            branchId: string | null;
-            branchName: string | null;
-            branchAlias: string | null;
-        }>,
-        pointsByUser: Map<string, number>,
-        totalsByUser: Map<string, { testsCompleted: number; testsPassed: number }>,
+        roster: readonly RosterLearner[],
+        statsByUser: Map<string, LearnerRankingStats>,
     ): AdminRankingEntryDto[] {
         const entries: AdminRankingEntryDto[] = roster.map(learner => {
-            const totals = totalsByUser.get(learner.userId);
+            const stats = statsByUser.get(learner.userId);
             return {
                 userId: learner.userId,
                 firstName: learner.firstName,
@@ -1728,9 +1703,12 @@ export class AdminInsightsReportsService {
                 branchAlias: learner.branchAlias,
                 rank: 0,
                 branchRank: 0,
-                totalPoints: pointsByUser.get(learner.userId) ?? 0,
-                testsCompleted: totals?.testsCompleted ?? 0,
-                testsPassed: totals?.testsPassed ?? 0,
+                totalPoints: stats?.totalPoints ?? 0,
+                testsCompleted: stats?.testsCompleted ?? 0,
+                testsPassed: stats?.testsPassed ?? 0,
+                totalEligibleTests: stats?.totalEligibleTests ?? 0,
+                participationRate: stats?.participationRate ?? 0,
+                rankingScore: stats?.rankingScore ?? 0,
             };
         });
 
@@ -1778,16 +1756,21 @@ export class AdminInsightsReportsService {
             .sort((a, b) => a.branchName.localeCompare(b.branchName));
     }
 
+    /** Totals across learners who completed at least one eligible test. */
     private summariseTestCompletion(
-        totalsByUser: Map<string, { testsCompleted: number; testsPassed: number }>,
+        statsByUser: Map<string, LearnerRankingStats>,
     ): AdminTestCompletionSummaryDto {
         let totalTestsCompleted = 0;
         let totalTestsPassed = 0;
-        totalsByUser.forEach(totals => {
-            totalTestsCompleted += totals.testsCompleted;
-            totalTestsPassed += totals.testsPassed;
+        let participatingLearners = 0;
+        statsByUser.forEach(stats => {
+            if (stats.testsCompleted === 0) {
+                return;
+            }
+            participatingLearners += 1;
+            totalTestsCompleted += stats.testsCompleted;
+            totalTestsPassed += stats.testsPassed;
         });
-        const participatingLearners = totalsByUser.size;
 
         return {
             totalTestsCompleted,
@@ -1800,14 +1783,20 @@ export class AdminInsightsReportsService {
         };
     }
 
+    /**
+     * Ranking score first so participation counts, then engagement, then
+     * points. Points alone used to decide the order, which let a learner who
+     * sat one easy test outrank someone who completed the whole programme.
+     */
     private compareRankable(
         a: AdminRankingEntryDto,
         b: AdminRankingEntryDto,
     ): number {
         return (
-            b.totalPoints - a.totalPoints ||
-            b.testsPassed - a.testsPassed ||
+            b.rankingScore - a.rankingScore ||
             b.testsCompleted - a.testsCompleted ||
+            b.testsPassed - a.testsPassed ||
+            b.totalPoints - a.totalPoints ||
             `${a.lastName} ${a.firstName}`.localeCompare(
                 `${b.lastName} ${b.firstName}`,
             )
@@ -1833,7 +1822,7 @@ export class AdminInsightsReportsService {
     }
 
     private rankKey(entry: AdminRankingEntryDto): string {
-        return `${entry.totalPoints}|${entry.testsPassed}|${entry.testsCompleted}`;
+        return `${entry.rankingScore}|${entry.testsCompleted}|${entry.testsPassed}|${entry.totalPoints}`;
     }
 
     // ─── Private helpers ───────────────────────────────────────────────
@@ -2472,30 +2461,29 @@ export class AdminInsightsReportsService {
         return query;
     }
 
-    private mapPerformer(row: {
-        userId: string;
-        firstName: string;
-        lastName: string;
-        branchName: string | null;
-        branchAlias: string | null;
-        averageScore: string;
-        resultsCount: string;
-        passedCount: string;
-    }): AdminPerformerDto {
-        const resultsCount = Number(row.resultsCount) || 0;
-        const passedCount = Number(row.passedCount) || 0;
+    /**
+     * `resultsCount` is the number of eligible tests completed (one per test),
+     * and `passRate` is measured against those same tests rather than against
+     * every retry row.
+     */
+    private mapPerformer({ learner, stats }: RankedLearner): AdminPerformerDto {
         return {
-            userId: row.userId,
-            firstName: row.firstName,
-            lastName: row.lastName,
-            branchName: row.branchName ?? null,
-            branchAlias: row.branchAlias ?? null,
-            averageScore: this.round(Number(row.averageScore) || 0),
+            userId: learner.userId,
+            firstName: learner.firstName,
+            lastName: learner.lastName,
+            branchName: learner.branchName,
+            branchAlias: learner.branchAlias,
+            averageScore: stats.averageScore,
             passRate:
-                resultsCount > 0
-                    ? this.round((passedCount / resultsCount) * 100)
+                stats.testsCompleted > 0
+                    ? this.round(
+                          (stats.testsPassed / stats.testsCompleted) * 100,
+                      )
                     : 0,
-            resultsCount,
+            resultsCount: stats.testsCompleted,
+            totalEligibleTests: stats.totalEligibleTests,
+            participationRate: stats.participationRate,
+            rankingScore: stats.rankingScore,
         };
     }
 

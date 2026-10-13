@@ -105,11 +105,39 @@ export class LeaderboardOverviewEntryDto {
     @ApiProperty()
     totalPoints: number;
 
-    @ApiProperty()
+    @ApiProperty({
+        description:
+            'Mean percentage across the latest attempt on each completed eligible test',
+    })
     averageScore: number;
 
-    @ApiProperty()
+    @ApiProperty({
+        description:
+            'Eligible tests with a graded result — retries count once, not per attempt',
+    })
     testsCompleted: number;
+
+    @ApiProperty({ description: 'Completed eligible tests the learner passed' })
+    testsPassed: number;
+
+    @ApiProperty({
+        description:
+            'Active tests with a fully closed exam window expected of this learner',
+    })
+    totalEligibleTests: number;
+
+    @ApiProperty({
+        description: 'testsCompleted / totalEligibleTests (0–1)',
+        example: 0.875,
+    })
+    participationRate: number;
+
+    @ApiProperty({
+        description:
+            'Weighted ordering score: averageScore × 0.6 + participationRate × 100 × 0.4',
+        example: 92.64,
+    })
+    rankingScore: number;
 
     @ApiProperty()
     letterGrade: string;
@@ -160,6 +188,16 @@ export class LeaderboardSummaryDto {
 
     @ApiPropertyOptional()
     averageScore?: number;
+
+    @ApiPropertyOptional({
+        description: 'Mean participation rate across participating learners (0–1)',
+    })
+    averageParticipationRate?: number;
+
+    @ApiPropertyOptional({
+        description: 'Eligible tests in the selected period',
+    })
+    totalEligibleTests?: number;
 
     @ApiPropertyOptional()
     yourRank?: number | null;

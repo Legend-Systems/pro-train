@@ -29,6 +29,23 @@ export class HomeInsightPersonDto {
 
     @ApiPropertyOptional()
     pointsDelta?: number | null;
+
+    @ApiPropertyOptional({
+        description:
+            'Eligible tests completed — retries of one test count once, not per attempt',
+    })
+    testsCompleted?: number;
+
+    @ApiPropertyOptional({
+        description:
+            'Eligible tests expected of this learner (active, exam window fully closed)',
+    })
+    totalEligibleTests?: number;
+
+    @ApiPropertyOptional({
+        description: 'testsCompleted / totalEligibleTests, 0-1',
+    })
+    participationRate?: number;
 }
 
 /** Branch ranking row for top/bottom branch insights. */

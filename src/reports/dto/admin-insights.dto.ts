@@ -102,14 +102,41 @@ export class AdminPerformerDto {
     })
     branchAlias: string | null;
 
-    @ApiProperty()
+    @ApiProperty({
+        description:
+            'Mean percentage across the latest attempt on each completed eligible test',
+    })
     averageScore: number;
 
-    @ApiProperty()
+    @ApiProperty({
+        description: 'Share of completed eligible tests the learner passed',
+    })
     passRate: number;
 
-    @ApiProperty()
+    @ApiProperty({
+        description:
+            'Eligible tests completed — one per test, so retries count once',
+    })
     resultsCount: number;
+
+    @ApiProperty({
+        description:
+            'Eligible tests expected of this learner in the timeframe (active, exam window closed)',
+    })
+    totalEligibleTests: number;
+
+    @ApiProperty({
+        description: 'resultsCount / totalEligibleTests (0–1)',
+        example: 0.875,
+    })
+    participationRate: number;
+
+    @ApiProperty({
+        description:
+            'Weighted ordering score: averageScore × 0.6 + participationRate × 100 × 0.4',
+        example: 92.64,
+    })
+    rankingScore: number;
 }
 
 export class AdminTrainingHoursUserDto {
@@ -289,14 +316,38 @@ export class AdminRankingEntryDto {
     @ApiProperty({ description: 'Rank within the learner\u2019s own branch' })
     branchRank: number;
 
-    @ApiProperty()
+    @ApiProperty({
+        description: 'Points earned on the counted eligible-test results',
+    })
     totalPoints: number;
 
-    @ApiProperty({ description: 'Tests with a recorded result' })
+    @ApiProperty({
+        description:
+            'Eligible tests with a recorded result — retries count once, not per attempt',
+    })
     testsCompleted: number;
 
     @ApiProperty()
     testsPassed: number;
+
+    @ApiProperty({
+        description:
+            'Eligible tests expected of this learner (active, exam window closed)',
+    })
+    totalEligibleTests: number;
+
+    @ApiProperty({
+        description: 'testsCompleted / totalEligibleTests (0–1)',
+        example: 0.875,
+    })
+    participationRate: number;
+
+    @ApiProperty({
+        description:
+            'Weighted ordering score: averageScore × 0.6 + participationRate × 100 × 0.4',
+        example: 92.64,
+    })
+    rankingScore: number;
 }
 
 /** Celebratory top 3 for a single branch. */

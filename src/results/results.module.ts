@@ -16,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
 import { RewardsModule } from '../rewards/rewards.module';
 import { TrainingHoursModule } from '../training-hours/training-hours.module';
 import { AnswersModule } from '../answers/answers.module';
+import { RankingModule } from '../ranking/ranking.module';
 import { PendingResultsService } from './pending-results.service';
 
 @Module({
@@ -37,6 +38,7 @@ import { PendingResultsService } from './pending-results.service';
         RewardsModule,
         TrainingHoursModule,
         AnswersModule,
+        RankingModule,
     ],
     controllers: [ResultsController],
     providers: [ResultsService, PendingResultsService],

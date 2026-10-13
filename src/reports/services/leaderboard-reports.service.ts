@@ -6,8 +6,17 @@ import { Cache } from 'cache-manager';
 import { Leaderboard } from '../../leaderboard/entities/leaderboard.entity';
 import { Result } from '../../results/entities/result.entity';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
-import { User } from '../../user/entities/user.entity';
+import {
+    LEARNER_USER_ROLES,
+    User,
+    UserStatus,
+} from '../../user/entities/user.entity';
 import { Course } from '../../course/entities/course.entity';
+import type { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
+import { EligibleTestService } from '../../ranking/services/eligible-test.service';
+import { LearnerRankingService } from '../../ranking/services/learner-ranking.service';
+import { LearnerRankingStats } from '../../ranking/types/learner-ranking-stats.type';
+import { compareLearnerRankingStats } from '../../ranking/utils/ranking-comparator.util';
 import {
     LeaderboardAnalyticsReportDto,
     LeaderboardStatsReportDto,
@@ -33,6 +42,8 @@ export class LeaderboardReportsService {
         private courseRepository: Repository<Course>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly eligibleTestService: EligibleTestService,
+        private readonly learnerRankingService: LearnerRankingService,
     ) {}
 
     async getLeaderboardAnalytics(
@@ -168,13 +179,28 @@ export class LeaderboardReportsService {
         return statsData;
     }
 
+    /**
+     * Top performers for the course analytics tab.
+     *
+     * Ranked with the shared participation-aware score over eligible tests
+     * only (active, exam window fully closed), so a learner who sat one easy
+     * test can no longer outrank someone who completed the programme. Raw
+     * `leaderboards.totalPoints` ordering was also unscoped, which leaked
+     * other organizations into the list.
+     */
     async getTopPerformers(
+        scope: OrgBranchScope,
         courseId?: number,
         limit: number = 10,
     ): Promise<TopPerformerReportDto[]> {
-        const cacheKey = `top_performers_${courseId || 'global'}_${limit}`;
+        if (!scope.orgId) {
+            return [];
+        }
 
-        // Try to get from cache first
+        const cacheKey = `top_performers_${scope.orgId}_${
+            scope.branchId || 'all-branches'
+        }_${courseId || 'global'}_${limit}`;
+
         const cachedData =
             await this.cacheManager.get<TopPerformerReportDto[]>(cacheKey);
 
@@ -182,39 +208,106 @@ export class LeaderboardReportsService {
             return cachedData;
         }
 
-        let query = this.leaderboardRepository
-            .createQueryBuilder('l')
-            .innerJoin('l.user', 'u')
-            .select('u.id', 'userId')
-            .addSelect('u.firstName', 'firstName')
-            .addSelect('u.lastName', 'lastName')
-            .addSelect('l.totalPoints', 'points')
-            .addSelect('l.rank', 'rank')
-            .addSelect('l.courseId', 'courseId');
-
-        if (courseId) {
-            query = query.where('l.courseId = :courseId', { courseId });
-        }
-
-        const performers = await query
-            .orderBy('l.totalPoints', 'DESC')
-            .limit(limit)
-            .getRawMany();
-
-        const topPerformers: TopPerformerReportDto[] = performers.map(
-            performer => ({
-                userId: performer.userId,
-                name: `${performer.firstName} ${performer.lastName}`,
-                points: Number(performer.points),
-                rank: Number(performer.rank),
-                courseId: performer.courseId,
+        const [roster, allEligibleTests] = await Promise.all([
+            this.getLearnerRoster(scope.orgId, scope.branchId),
+            this.eligibleTestService.resolveEligibleTests({
+                orgId: scope.orgId,
+                branchId: scope.branchId,
             }),
-        );
+        ]);
+
+        const eligibleTests = courseId
+            ? allEligibleTests.filter(test => test.courseId === courseId)
+            : allEligibleTests;
+
+        const statsByUser =
+            await this.learnerRankingService.buildLearnerRankingStats({
+                orgId: scope.orgId,
+                branchId: scope.branchId,
+                eligibleTests,
+                learners: roster,
+            });
+
+        const topPerformers: TopPerformerReportDto[] = roster
+            .map(learner => ({
+                learner,
+                stats: statsByUser.get(learner.userId),
+            }))
+            .filter(
+                (
+                    entry,
+                ): entry is {
+                    learner: (typeof roster)[number];
+                    stats: LearnerRankingStats;
+                } => entry.stats !== undefined && entry.stats.testsCompleted > 0,
+            )
+            .sort(
+                (left, right) =>
+                    compareLearnerRankingStats(left.stats, right.stats) ||
+                    `${left.learner.lastName} ${left.learner.firstName}`.localeCompare(
+                        `${right.learner.lastName} ${right.learner.firstName}`,
+                    ),
+            )
+            .slice(0, limit)
+            .map(({ learner, stats }, index) => ({
+                userId: learner.userId,
+                name: `${learner.firstName} ${learner.lastName}`.trim(),
+                points: stats.totalPoints,
+                rank: index + 1,
+                courseId,
+            }));
 
         // Cache the result for 15 minutes (900 seconds)
         await this.cacheManager.set(cacheKey, topPerformers, 900);
 
         return topPerformers;
+    }
+
+    /** Active learners in scope — the ranking population. */
+    private async getLearnerRoster(
+        orgId: string,
+        branchId?: string,
+    ): Promise<
+        Array<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchId: string | null;
+        }>
+    > {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
+            })
+            .andWhere('user.status = :activeStatus', {
+                activeStatus: UserStatus.ACTIVE,
+            })
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('branch.id', 'branchId');
+
+        if (branchId) {
+            query.andWhere('branch.id = :branchId', { branchId });
+        }
+
+        const rows = await query.getRawMany<{
+            userId: string;
+            firstName: string | null;
+            lastName: string | null;
+            branchId: string | null;
+        }>();
+
+        return rows.map(row => ({
+            userId: row.userId,
+            firstName: row.firstName ?? '',
+            lastName: row.lastName ?? '',
+            branchId: row.branchId ?? null,
+        }));
     }
 
     async getRankMovements(

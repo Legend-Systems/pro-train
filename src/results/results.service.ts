@@ -56,12 +56,19 @@ import {
     AdminEmployeePerformanceTestRefDto,
 } from './dto/admin-employee-performance.dto';
 import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
+import { EligibleTestService } from '../ranking/services/eligible-test.service';
+import { LearnerRankingService } from '../ranking/services/learner-ranking.service';
+import { LearnerRankingStats } from '../ranking/types/learner-ranking-stats.type';
+import { compareLearnerRankingStats } from '../ranking/utils/ranking-comparator.util';
 import {
     isExamWindowClosed,
     isExamWindowOpen,
     isExamWindowPending,
     toNullableDate,
 } from '../test/utils/exam-window.util';
+
+/** Performers celebrated on the admin results dashboard. */
+const TOP_PERFORMER_LIMIT = 5;
 
 @Injectable()
 export class ResultsService {
@@ -138,6 +145,8 @@ export class ResultsService {
         private readonly trainingProgressService: TrainingProgressService,
         private readonly rewardsService: RewardsService,
         private readonly trainingHoursService: TrainingHoursService,
+        private readonly eligibleTestService: EligibleTestService,
+        private readonly learnerRankingService: LearnerRankingService,
         private readonly eventEmitter: EventEmitter2,
         @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     ) {}
@@ -933,44 +942,7 @@ export class ResultsService {
                 passedCount: string;
             }>();
 
-        const topPerformerRows = await this.applyAdminScopeFilters(
-            this.resultRepository
-                .createQueryBuilder('result')
-                .leftJoin('result.user', 'user')
-                .leftJoin('user.branchId', 'userBranch')
-                .leftJoin('result.orgId', 'orgId')
-                .leftJoin('result.branchId', 'branchId'),
-            dashboardScope,
-            includeVoided,
-        )
-            .select('user.id', 'userId')
-            .addSelect('user.firstName', 'firstName')
-            .addSelect('user.lastName', 'lastName')
-            .addSelect('MAX(userBranch.name)', 'branchName')
-            .addSelect('AVG(result.percentage)', 'averageScore')
-            .addSelect('COUNT(result.resultId)', 'totalTests')
-            .addSelect(
-                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
-                'testsPassed',
-            )
-            .groupBy('user.id')
-            .addGroupBy('user.firstName')
-            .addGroupBy('user.lastName')
-            .having('COUNT(result.resultId) >= 1')
-            .orderBy('averageScore', 'DESC')
-            .limit(5)
-            .getRawMany<{
-                userId: string;
-                firstName: string;
-                lastName: string;
-                branchName: string | null;
-                averageScore: string;
-                totalTests: string;
-                testsPassed: string;
-            }>();
-
-        const topPerformers = await this.enrichTopPerformers(
-            topPerformerRows,
+        const topPerformers = await this.buildDashboardTopPerformers(
             dashboardScope,
         );
 
@@ -1058,25 +1030,147 @@ export class ResultsService {
         };
     }
 
-    /** Enriches top performer rows with branch, training hours, XP, and milestones. */
+    /**
+     * Top performers for the admin results dashboard.
+     *
+     * Uses the shared participation-aware ranking rather than the average of
+     * whatever a learner happened to sit: only eligible tests count (active,
+     * exam window fully closed), each eligible test contributes a single result
+     * (the learner's latest attempt), and the ordering rewards completing the
+     * programme as well as scoring well on it.
+     */
+    private async buildDashboardTopPerformers(
+        scope: OrgBranchScope,
+    ): Promise<AdminResultsDashboardDto['topPerformers']> {
+        if (!scope.orgId) {
+            return [];
+        }
+
+        const [roster, eligibleTests] = await Promise.all([
+            this.getRankingRoster(scope.orgId, scope.branchId),
+            this.eligibleTestService.resolveEligibleTests({
+                orgId: scope.orgId,
+                branchId: scope.branchId,
+            }),
+        ]);
+
+        const statsByUser =
+            await this.learnerRankingService.buildLearnerRankingStats({
+                orgId: scope.orgId,
+                branchId: scope.branchId,
+                eligibleTests,
+                learners: roster,
+            });
+
+        const ranked = roster
+            .map(learner => ({
+                learner,
+                stats: statsByUser.get(learner.userId),
+            }))
+            .filter(
+                (
+                    entry,
+                ): entry is {
+                    learner: (typeof roster)[number];
+                    stats: LearnerRankingStats;
+                } => entry.stats !== undefined && entry.stats.testsCompleted > 0,
+            )
+            .sort(
+                (left, right) =>
+                    compareLearnerRankingStats(left.stats, right.stats) ||
+                    `${left.learner.lastName} ${left.learner.firstName}`.localeCompare(
+                        `${right.learner.lastName} ${right.learner.firstName}`,
+                    ),
+            )
+            .slice(0, TOP_PERFORMER_LIMIT);
+
+        return this.enrichTopPerformers(
+            ranked.map(({ learner, stats }) => ({
+                userId: learner.userId,
+                firstName: learner.firstName,
+                lastName: learner.lastName,
+                branchName: learner.branchName,
+                averageScore: stats.averageScore,
+                totalTests: stats.totalEligibleTests,
+                testsPassed: stats.testsPassed,
+                testsCompleted: stats.testsCompleted,
+                participationRate: stats.participationRate,
+                rankingScore: stats.rankingScore,
+            })),
+            scope,
+        );
+    }
+
+    /** Active learners in scope — the participation denominator's population. */
+    private async getRankingRoster(
+        orgId: string,
+        branchId?: string,
+    ): Promise<
+        Array<{
+            userId: string;
+            firstName: string;
+            lastName: string;
+            branchId: string | null;
+            branchName: string | null;
+        }>
+    > {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
+            .where('org.id = :orgId', { orgId })
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
+            })
+            .andWhere('user.status = :activeStatus', {
+                activeStatus: UserStatus.ACTIVE,
+            })
+            .select('user.id', 'userId')
+            .addSelect('user.firstName', 'firstName')
+            .addSelect('user.lastName', 'lastName')
+            .addSelect('branch.id', 'branchId')
+            .addSelect('branch.name', 'branchName');
+
+        if (branchId) {
+            query.andWhere('branch.id = :branchId', { branchId });
+        }
+
+        const rows = await query.getRawMany<{
+            userId: string;
+            firstName: string | null;
+            lastName: string | null;
+            branchId: string | null;
+            branchName: string | null;
+        }>();
+
+        return rows.map(row => ({
+            userId: row.userId,
+            firstName: row.firstName ?? '',
+            lastName: row.lastName ?? '',
+            branchId: row.branchId ?? null,
+            branchName: row.branchName ?? null,
+        }));
+    }
+
+    /** Enriches ranked performers with training hours, XP, and milestones. */
     private async enrichTopPerformers(
         rows: Array<{
             userId: string;
             firstName: string;
             lastName: string;
             branchName: string | null;
-            averageScore: string;
-            totalTests: string;
-            testsPassed: string;
+            averageScore: number;
+            totalTests: number;
+            testsPassed: number;
+            testsCompleted: number;
+            participationRate: number;
+            rankingScore: number;
         }>,
         scope: OrgBranchScope,
     ): Promise<AdminResultsDashboardDto['topPerformers']> {
         return Promise.all(
             rows.map(async row => {
-                const averageScore =
-                    Math.round(Number(row.averageScore || 0) * 100) / 100;
-                const testsPassed = Number(row.testsPassed) || 0;
-                const totalTests = Number(row.totalTests) || 0;
+                const { averageScore, testsPassed, totalTests } = row;
 
                 let totalTrainingHours = 0;
                 let xpPoints = 0;
@@ -1129,6 +1223,9 @@ export class ResultsService {
                     averageScore,
                     testsPassed,
                     totalTests,
+                    testsCompleted: row.testsCompleted,
+                    participationRate: row.participationRate,
+                    rankingScore: row.rankingScore,
                     branchName: row.branchName || 'Unassigned',
                     totalTrainingHours,
                     xpPoints,

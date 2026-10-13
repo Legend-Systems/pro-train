@@ -495,6 +495,9 @@ export class HomeInsightsService {
         rank: number;
         totalPoints: number;
         pointsDelta?: number | null;
+        testsCompleted?: number;
+        totalEligibleTests?: number;
+        participationRate?: number;
     }): HomeInsightPersonDto {
         return {
             userId: entry.userId,
@@ -505,6 +508,9 @@ export class HomeInsightsService {
             rank: entry.rank,
             totalPoints: entry.totalPoints,
             pointsDelta: entry.pointsDelta ?? null,
+            testsCompleted: entry.testsCompleted,
+            totalEligibleTests: entry.totalEligibleTests,
+            participationRate: entry.participationRate,
         };
     }
 
