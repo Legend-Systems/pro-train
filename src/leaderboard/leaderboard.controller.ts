@@ -60,11 +60,16 @@ export class LeaderboardController {
 
     @Get()
     @ApiOperation({
-        summary: 'Org course-points leaderboard with filters and insights',
+        summary: 'Org leaderboard with filters and insights',
         description:
-            'Returns paginated org-wide rankings (all branches) by knowledge score. ' +
-            'Supports all-time (leaderboards table) or monthly (results by createdAt), ' +
-            'optional course/branch/search filters (admin-only branch filter), summary cards, and improvers.',
+            'Returns paginated org-wide rankings (all branches) ordered by ' +
+            'rankingScore = averageScore * 0.6 + participationRate * 100 * 0.4. ' +
+            'Only active tests whose exam window has fully closed are counted, and ' +
+            'retries collapse to the learner\'s latest attempt per test. ' +
+            'Monthly periods select tests whose examEndDate falls in that month; ' +
+            'all-time selects every closed window. ' +
+            'Supports optional course/branch/search filters (admin-only branch filter), ' +
+            'summary cards, and improvers.',
         operationId: 'getOrgLeaderboard',
     })
     @ApiOkResponse({ type: LeaderboardOverviewResponseDto })
