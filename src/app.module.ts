@@ -23,6 +23,7 @@ import { TestAttemptsModule } from './test_attempts/test_attempts.module';
 import { AnswersModule } from './answers/answers.module';
 import { ResultsModule } from './results/results.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { RankingModule } from './ranking/ranking.module';
 import { TrainingProgressModule } from './training_progress/training_progress.module';
 import { ReportsModule } from './reports/reports.module';
 import { Answer } from './answers/entities/answer.entity';
@@ -176,6 +177,7 @@ import { ContentTranslationJob } from './locale/entities/content-translation-job
         TestAttemptsModule,
         AnswersModule,
         ResultsModule,
+        RankingModule,
         LeaderboardModule,
         TrainingProgressModule,
         ReportsModule,

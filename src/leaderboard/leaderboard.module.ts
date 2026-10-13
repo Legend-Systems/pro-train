@@ -5,9 +5,14 @@ import { LeaderboardOverviewService } from './leaderboard-overview.service';
 import { LeaderboardController } from './leaderboard.controller';
 import { Leaderboard } from './entities/leaderboard.entity';
 import { Result } from '../results/entities/result.entity';
+import { User } from '../user/entities/user.entity';
+import { RankingModule } from '../ranking/ranking.module';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([Leaderboard, Result])],
+    imports: [
+        TypeOrmModule.forFeature([Leaderboard, Result, User]),
+        RankingModule,
+    ],
     controllers: [LeaderboardController],
     providers: [LeaderboardService, LeaderboardOverviewService],
     exports: [LeaderboardService, LeaderboardOverviewService],

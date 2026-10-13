@@ -2187,6 +2187,7 @@ export class ReportsController {
         },
     })
     async getTopPerformers(
+        @OrgBranchScope() scope: OrgBranchScope,
         @Query('courseId') courseId?: number,
         @Query('limit') limit?: number,
     ): Promise<StandardApiResponse<TopPerformerReportDto[]>> {
@@ -2197,6 +2198,7 @@ export class ReportsController {
 
             const performers =
                 await this.leaderboardReportsService.getTopPerformers(
+                    scope,
                     courseId,
                     limit,
                 );

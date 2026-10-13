@@ -60,14 +60,41 @@ class AdminEmployeePerformanceDto {
     @ApiProperty({ example: 'Smith' })
     lastName: string;
 
-    @ApiProperty({ example: 88.5 })
+    @ApiProperty({
+        example: 96.07,
+        description:
+            'Mean percentage across the latest attempt on each completed eligible test',
+    })
     averageScore: number;
 
     @ApiProperty({ example: 5 })
     testsPassed: number;
 
-    @ApiProperty({ example: 6 })
+    @ApiProperty({
+        example: 8,
+        description:
+            'Eligible tests expected of this learner (active, exam window closed)',
+    })
     totalTests: number;
+
+    @ApiProperty({
+        example: 7,
+        description: 'Eligible tests completed — retries count once, not per attempt',
+    })
+    testsCompleted: number;
+
+    @ApiProperty({
+        example: 0.875,
+        description: 'testsCompleted / totalTests (0–1)',
+    })
+    participationRate: number;
+
+    @ApiProperty({
+        example: 92.64,
+        description:
+            'Weighted ordering score: averageScore × 0.6 + participationRate × 100 × 0.4',
+    })
+    rankingScore: number;
 
     @ApiProperty({ example: 'North Branch', required: false })
     branchName?: string;

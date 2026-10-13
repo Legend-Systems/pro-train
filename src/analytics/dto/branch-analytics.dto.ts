@@ -60,12 +60,43 @@ export class BranchPerformerDto {
     @ApiProperty({ example: 'Downtown Branch', nullable: true })
     branchName: string | null;
 
-    @ApiProperty({ example: 88.2 })
+    @ApiProperty({
+        example: 88.2,
+        description:
+            'Mean percentage across the latest attempt on each completed eligible test',
+    })
     averageScore: number;
 
-    @ApiProperty({ example: 65.0 })
+    @ApiProperty({
+        example: 65.0,
+        description: 'Share of completed eligible tests the learner passed',
+    })
     passRate: number;
 
-    @ApiProperty({ example: 14 })
+    @ApiProperty({
+        example: 14,
+        description:
+            'Eligible tests completed — retries of one test count once, not per attempt',
+    })
     resultsCount: number;
+
+    @ApiProperty({
+        example: 16,
+        description:
+            'Eligible tests expected of this learner (active, exam window fully closed)',
+    })
+    totalEligibleTests: number;
+
+    @ApiProperty({
+        example: 0.875,
+        description: 'resultsCount / totalEligibleTests, 0-1',
+    })
+    participationRate: number;
+
+    @ApiProperty({
+        example: 87.92,
+        description:
+            'Weighted ordering score: averageScore * 0.6 + participationRate * 100 * 0.4',
+    })
+    rankingScore: number;
 }

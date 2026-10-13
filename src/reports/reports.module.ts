@@ -29,6 +29,7 @@ import { TrainingHoursModule } from '../training-hours/training-hours.module';
 import { CommunicationsModule } from '../communications/communications.module';
 import { CommonModule } from '../common/common.module';
 import { EngagementModule } from '../engagement/engagement.module';
+import { RankingModule } from '../ranking/ranking.module';
 
 @Module({
     imports: [
@@ -54,6 +55,7 @@ import { EngagementModule } from '../engagement/engagement.module';
         CommunicationsModule,
         CommonModule,
         EngagementModule,
+        RankingModule,
     ],
     controllers: [ReportsController, AdminReportsController],
     providers: [

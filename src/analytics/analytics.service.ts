@@ -5,7 +5,16 @@ import { Repository } from 'typeorm';
 import { Result } from '../results/entities/result.entity';
 import { TrainingSession } from '../training-hours/entities/training-session.entity';
 import { Branch } from '../branch/entities/branch.entity';
+import {
+    LEARNER_USER_ROLES,
+    User,
+    UserStatus,
+} from '../user/entities/user.entity';
 import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
+import { EligibleTestService } from '../ranking/services/eligible-test.service';
+import { LearnerRankingService } from '../ranking/services/learner-ranking.service';
+import type { LearnerRankingStats } from '../ranking/types/learner-ranking-stats.type';
+import { compareLearnerRankingStats } from '../ranking/utils/ranking-comparator.util';
 import {
     BranchAnalyticsSummaryDto,
     BranchPerformerDto,
@@ -25,6 +34,26 @@ interface MonthWindow {
     monthEndDate: string;
 }
 
+/** Bounds on how many performers one ranked analytics call may return. */
+const MIN_PERFORMER_LIMIT = 1;
+const MAX_PERFORMER_LIMIT = 50;
+const DEFAULT_PERFORMER_LIMIT = 5;
+
+/** A ranking-population member with the fields needed for display. */
+interface PerformerRosterEntry {
+    readonly userId: string;
+    readonly firstName: string;
+    readonly lastName: string;
+    readonly branchId: string | null;
+    readonly branchName: string | null;
+}
+
+/** A roster entry paired with its computed ranking statistics. */
+interface RankedPerformer {
+    readonly learner: PerformerRosterEntry;
+    readonly stats: LearnerRankingStats;
+}
+
 /**
  * Org-scoped, branch-grouped analytics for Owner / Master Admin dashboards.
  * All queries are constrained to the caller's organization for tenant safety
@@ -41,6 +70,10 @@ export class AnalyticsService {
         private readonly sessionRepository: Repository<TrainingSession>,
         @InjectRepository(Branch)
         private readonly branchRepository: Repository<Branch>,
+        @InjectRepository(User)
+        private readonly userRepository: Repository<User>,
+        private readonly eligibleTestService: EligibleTestService,
+        private readonly learnerRankingService: LearnerRankingService,
     ) {}
 
     /** Per-branch knowledge score, pass rate and training hours for a month. */
@@ -174,7 +207,14 @@ export class AnalyticsService {
             .sort((a, b) => b.averageScore - a.averageScore);
     }
 
-    /** Top or bottom learners by average score for a month (optionally per branch). */
+    /**
+     * Top or bottom learners for a month (optionally per branch), ranked on the
+     * shared participation-aware score.
+     *
+     * The month selects the exam cycles that closed within it (test
+     * `examEndDate`), not the dates learners happened to submit, so an early
+     * submitter still counts toward the month their test window closed in.
+     */
     async getBranchPerformers(
         scope: OrgBranchScope,
         params: {
@@ -186,71 +226,116 @@ export class AnalyticsService {
     ): Promise<BranchPerformerDto[]> {
         const orgId = this.requireOrg(scope);
         const window = this.getMonthWindow(params.yearMonth);
-        const order = params.order === 'asc' ? 'ASC' : 'DESC';
-        const limit = Math.min(Math.max(params.limit ?? 5, 1), 50);
+        const order: AnalyticsSortOrder =
+            params.order === 'asc' ? 'asc' : 'desc';
+        const limit = Math.min(
+            Math.max(
+                params.limit ?? DEFAULT_PERFORMER_LIMIT,
+                MIN_PERFORMER_LIMIT,
+            ),
+            MAX_PERFORMER_LIMIT,
+        );
 
-        const query = this.resultRepository
-            .createQueryBuilder('result')
-            .leftJoin('result.user', 'user')
-            .leftJoin('user.branchId', 'userBranch')
-            .leftJoin('result.orgId', 'org')
-            .leftJoin('result.branchId', 'branch')
+        const [roster, eligibleTests] = await Promise.all([
+            this.getPerformerRoster(orgId, params.branchId),
+            this.eligibleTestService.resolveEligibleTests({
+                orgId,
+                branchId: params.branchId,
+                periodStart: window.monthStart,
+                periodEnd: window.monthEnd,
+            }),
+        ]);
+
+        const statsByUser =
+            await this.learnerRankingService.buildLearnerRankingStats({
+                orgId,
+                branchId: params.branchId,
+                eligibleTests,
+                learners: roster,
+            });
+
+        const ranked = roster
+            .map(learner => ({ learner, stats: statsByUser.get(learner.userId) }))
+            .filter((entry): entry is RankedPerformer => entry.stats !== undefined)
+            .sort(
+                (left, right) =>
+                    compareLearnerRankingStats(left.stats, right.stats) ||
+                    `${left.learner.lastName} ${left.learner.firstName}`.localeCompare(
+                        `${right.learner.lastName} ${right.learner.firstName}`,
+                    ),
+            );
+
+        // Top performers must have actually sat something; the "worst" list
+        // deliberately keeps non-participants, since zero participation is the
+        // signal a manager needs to act on.
+        const candidates =
+            order === 'desc'
+                ? ranked.filter(entry => entry.stats.testsCompleted > 0)
+                : [...ranked].reverse();
+
+        return candidates.slice(0, limit).map(entry => this.toPerformerDto(entry));
+    }
+
+    /** Maps ranking statistics onto the analytics performer contract. */
+    private toPerformerDto({ learner, stats }: RankedPerformer): BranchPerformerDto {
+        return {
+            userId: learner.userId,
+            firstName: learner.firstName,
+            lastName: learner.lastName,
+            branchName: learner.branchName,
+            averageScore: this.round(stats.averageScore),
+            passRate:
+                stats.testsCompleted > 0
+                    ? this.round((stats.testsPassed / stats.testsCompleted) * 100)
+                    : 0,
+            resultsCount: stats.testsCompleted,
+            totalEligibleTests: stats.totalEligibleTests,
+            participationRate: stats.participationRate,
+            rankingScore: stats.rankingScore,
+        };
+    }
+
+    /** Active learners in scope — the ranking population. */
+    private async getPerformerRoster(
+        orgId: string,
+        branchId?: string,
+    ): Promise<PerformerRosterEntry[]> {
+        const query = this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
-            .andWhere('result.calculatedAt >= :monthStart', {
-                monthStart: window.monthStart,
+            .andWhere('user.role IN (:...learnerRoles)', {
+                learnerRoles: LEARNER_USER_ROLES,
             })
-            .andWhere('result.calculatedAt < :monthEnd', {
-                monthEnd: window.monthEnd,
+            .andWhere('user.status = :activeStatus', {
+                activeStatus: UserStatus.ACTIVE,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
-            .addSelect('MAX(userBranch.name)', 'branchName')
-            .addSelect('AVG(result.percentage)', 'averageScore')
-            .addSelect('COUNT(result.resultId)', 'resultsCount')
-            .addSelect(
-                'SUM(CASE WHEN result.passed = true THEN 1 ELSE 0 END)',
-                'passedCount',
-            )
-            .groupBy('user.id')
-            .addGroupBy('user.firstName')
-            .addGroupBy('user.lastName')
-            .having('COUNT(result.resultId) >= 1')
-            .orderBy('averageScore', order)
-            .limit(limit);
+            .addSelect('branch.id', 'branchId')
+            .addSelect('branch.name', 'branchName');
 
-        if (params.branchId) {
-            query.andWhere('branch.id = :branchId', {
-                branchId: params.branchId,
-            });
+        if (branchId) {
+            query.andWhere('branch.id = :branchId', { branchId });
         }
 
         const rows = await query.getRawMany<{
             userId: string;
-            firstName: string;
-            lastName: string;
+            firstName: string | null;
+            lastName: string | null;
+            branchId: string | null;
             branchName: string | null;
-            averageScore: string;
-            resultsCount: string;
-            passedCount: string;
         }>();
 
-        return rows.map(row => {
-            const resultsCount = Number(row.resultsCount) || 0;
-            const passedCount = Number(row.passedCount) || 0;
-            return {
-                userId: row.userId,
-                firstName: row.firstName,
-                lastName: row.lastName,
-                branchName: row.branchName ?? null,
-                averageScore: this.round(Number(row.averageScore) || 0),
-                passRate:
-                    resultsCount > 0
-                        ? this.round((passedCount / resultsCount) * 100)
-                        : 0,
-                resultsCount,
-            };
-        });
+        return rows.map(row => ({
+            userId: row.userId,
+            firstName: row.firstName ?? '',
+            lastName: row.lastName ?? '',
+            branchId: row.branchId ?? null,
+            branchName: row.branchName ?? null,
+        }));
     }
 
     /** Ensures a branch entry exists in the accumulator map. */
