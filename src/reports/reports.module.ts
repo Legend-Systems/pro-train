@@ -8,6 +8,7 @@ import { ResultsReportsService } from './services/results-reports.service';
 import { LeaderboardReportsService } from './services/leaderboard-reports.service';
 import { TrainingProgressReportsService } from './services/training-progress-reports.service';
 import { AdminInsightsReportsService } from './services/admin-insights-reports.service';
+import { NonParticipationReportsService } from './services/non-participation-reports.service';
 import { ReportExportService } from './services/report-export.service';
 import { ReportScheduleService } from './services/report-schedule.service';
 import { ReportCronService } from './services/report-cron.service';
@@ -66,6 +67,7 @@ import { RankingModule } from '../ranking/ranking.module';
         LeaderboardReportsService,
         TrainingProgressReportsService,
         AdminInsightsReportsService,
+        NonParticipationReportsService,
         ReportExportService,
         ReportScheduleService,
         ReportCronService,
@@ -78,6 +80,7 @@ import { RankingModule } from '../ranking/ranking.module';
         LeaderboardReportsService,
         TrainingProgressReportsService,
         AdminInsightsReportsService,
+        NonParticipationReportsService,
         ReportExportService,
         ReportScheduleService,
     ],
