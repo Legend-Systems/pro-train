@@ -55,6 +55,7 @@ import {
     AdminTestsNotCompletedReportDto,
     AdminTrainingHoursUserDto,
 } from '../dto/admin-insights.dto';
+import { AdminNonParticipationReportDto } from '../dto/admin-non-participation.dto';
 import {
     CreateReportScheduleDto,
     GenerateAdminReportDto,
@@ -65,6 +66,7 @@ import {
     UpdateReportScheduleDto,
 } from '../dto/report-schedule.dto';
 import { AdminInsightsReportsService } from '../services/admin-insights-reports.service';
+import { NonParticipationReportsService } from '../services/non-participation-reports.service';
 import { ReportScheduleService } from '../services/report-schedule.service';
 
 /**
@@ -87,6 +89,7 @@ export class AdminReportsController {
 
     constructor(
         private readonly adminInsightsReportsService: AdminInsightsReportsService,
+        private readonly nonParticipationReportsService: NonParticipationReportsService,
         private readonly reportScheduleService: ReportScheduleService,
     ) {}
 
@@ -279,6 +282,38 @@ export class AdminReportsController {
             filters,
         );
         return this.ok('Tests not completed retrieved successfully', data);
+    }
+
+    @Get('non-participation')
+    @ApiOperation({
+        summary: 'Learners not participating in closed exams',
+        description:
+            'Organisation-wide (all branches) list of learners who have not ' +
+            'participated in eligible tests. Eligible means isActive = 1 with ' +
+            'both examStartDate and examEndDate in the past and the window ' +
+            'fully closed — tests still open or not yet open are never ' +
+            'included. A learner counts as non-participating in a test when ' +
+            'there are no attempts, when every attempt expired, when an ' +
+            'attempt was never submitted, or when a submitted attempt has no ' +
+            'row in the results table. Learners with a submitted attempt and a ' +
+            'graded result are excluded. Not period-scoped: a test missed ' +
+            'months ago stays listed until it is completed.',
+    })
+    @ApiOkResponse({ type: AdminNonParticipationReportDto })
+    @ApiQuery({
+        name: 'branchId',
+        required: false,
+        description: 'Narrows to one branch. Omit for the organisation-wide view.',
+    })
+    async getNonParticipation(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Query() filters: AdminReportFiltersDto,
+    ): Promise<StandardApiResponse<AdminNonParticipationReportDto>> {
+        const data = await this.nonParticipationReportsService.getNonParticipation(
+            scope,
+            { branchId: filters.branchId },
+        );
+        return this.ok('Non-participating users retrieved successfully', data);
     }
 
     @Get('attempts-results-breakdown')
