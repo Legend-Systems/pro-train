@@ -102,6 +102,11 @@ export class LeaderboardOverviewEntryDto {
     @ApiPropertyOptional()
     branchName?: string | null;
 
+    @ApiPropertyOptional({
+        description: 'Short branch code, preferred on compact ranking cards',
+    })
+    branchAlias?: string | null;
+
     @ApiProperty()
     totalPoints: number;
 
