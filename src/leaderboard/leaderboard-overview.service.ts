@@ -59,6 +59,7 @@ interface LearnerRosterEntry {
     readonly profilePicture: string | null;
     readonly branchId: string | null;
     readonly branchName: string | null;
+    readonly branchAlias: string | null;
 }
 
 /** A roster row joined to its ranking metrics, ready to sort. */
@@ -247,6 +248,7 @@ export class LeaderboardOverviewService {
             .addSelect('avatar.url', 'profilePicture')
             .addSelect('branch.id', 'branchId')
             .addSelect('branch.name', 'branchName')
+            .addSelect('branch.alias', 'branchAlias')
             .orderBy('user.lastName', 'ASC')
             .addOrderBy('user.firstName', 'ASC')
             .limit(MAX_RANKED_LEARNERS);
@@ -273,6 +275,7 @@ export class LeaderboardOverviewService {
             profilePicture: string | null;
             branchId: string | null;
             branchName: string | null;
+            branchAlias: string | null;
         }>();
 
         const roster: LearnerRosterEntry[] = rows.map(row => ({
@@ -283,6 +286,7 @@ export class LeaderboardOverviewService {
             profilePicture: row.profilePicture ?? null,
             branchId: row.branchId ?? null,
             branchName: row.branchName ?? null,
+            branchAlias: row.branchAlias ?? null,
         }));
 
         if (!options.activeOnly) {
@@ -415,6 +419,7 @@ export class LeaderboardOverviewService {
                 email: profile.email,
                 profilePicture: profile.profilePicture,
                 branchName: profile.branchName,
+                branchAlias: profile.branchAlias,
                 totalPoints: stats.totalPoints,
                 averageScore: stats.averageScore,
                 testsCompleted: stats.testsCompleted,
