@@ -55,6 +55,8 @@ import { EngagementModule } from './engagement/engagement.module';
 import { CourseModuleView } from './engagement/entities/course-module-view.entity';
 import { TrainingManualDownload } from './engagement/entities/training-manual-download.entity';
 import { LocaleModule } from './locale/locale.module';
+import { DigitalSkillsModule } from './digital-skills/digital-skills.module';
+import { DigitalSkillsAssignment } from './digital-skills/entities/digital-skills-assignment.entity';
 import { CourseTranslation } from './locale/entities/course-translation.entity';
 import { TestTranslation } from './locale/entities/test-translation.entity';
 import { QuestionTranslation } from './locale/entities/question-translation.entity';
@@ -130,6 +132,7 @@ import { ContentTranslationJob } from './locale/entities/content-translation-job
                     QuestionTranslation,
                     QuestionOptionTranslation,
                     ContentTranslationJob,
+                    DigitalSkillsAssignment,
                 ],
                 synchronize: false,
                 logging: false,
@@ -192,6 +195,7 @@ import { ContentTranslationJob } from './locale/entities/content-translation-job
         HomeInsightsModule,
         AssistanceModule,
         EngagementModule,
+        DigitalSkillsModule,
     ],
     controllers: [AppController],
     providers: [

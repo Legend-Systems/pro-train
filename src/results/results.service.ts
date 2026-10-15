@@ -40,6 +40,7 @@ import {
 import { TrainingHoursService } from '../training-hours/training-hours.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
+import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
 import {
     AdminResultsDashboardDto,
 } from './dto/admin-results-dashboard.dto';
@@ -272,8 +273,11 @@ export class ResultsService {
 
             // Calculate the score
             this.logger.debug(`Calculating score for attempt ${attemptId}`);
-            const { score, maxScore, percentage, totalQuestions, questionsAnswered } =
-                await this.calculateScore(attemptId, attempt.testId);
+            const scoring = await this.calculateScore(attemptId, attempt.testId);
+            const { score, maxScore, totalQuestions, questionsAnswered } = scoring;
+            const percentage = isDigitalSkillsCourse(attempt.test.courseId)
+                ? Math.round(scoring.percentage * 10) / 10
+                : scoring.percentage;
 
             this.logger.debug(`Score calculated for attempt ${attemptId}:`, {
                 score,
@@ -281,8 +285,10 @@ export class ResultsService {
                 percentage,
             });
 
-            // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
-            const passed = isPassingPercentage(percentage);
+            // Self-assessment has no fail. Other tests still use the 80% pass mark.
+            const passed = isDigitalSkillsCourse(attempt.test.courseId)
+                ? true
+                : isPassingPercentage(percentage);
 
             // Ensure we have org/branch data - inherit from attempt or use defaults
             let orgId = attempt.orgId;
@@ -2711,16 +2717,20 @@ export class ResultsService {
             }
 
             // Recalculate the score
-            const { score, maxScore, percentage, totalQuestions, questionsAnswered } =
-                await this.calculateScore(result.attemptId);
+            const scoring = await this.calculateScore(result.attemptId);
+            const { score, maxScore, totalQuestions, questionsAnswered } = scoring;
+            const percentage = isDigitalSkillsCourse(attempt.test?.courseId)
+                ? Math.round(scoring.percentage * 10) / 10
+                : scoring.percentage;
 
             // Update the result
             await this.resultRepository.update(resultId, {
                 score,
                 maxScore,
                 percentage,
-                // Pass mark raised from 60% to 80% (PASSING_SCORE_PERCENTAGE)
-                passed: isPassingPercentage(percentage),
+                passed: isDigitalSkillsCourse(attempt.test?.courseId)
+                    ? true
+                    : isPassingPercentage(percentage),
                 calculatedAt: new Date(),
             });
 

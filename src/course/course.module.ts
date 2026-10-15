@@ -11,6 +11,7 @@ import { UserModule } from '../user/user.module';
 import { AuthModule } from '../auth/auth.module';
 import { CommonModule } from '../common/common.module';
 import { CourseMaterialsModule } from '../course-materials/course-materials.module';
+import { DigitalSkillsModule } from '../digital-skills/digital-skills.module';
 
 @Module({
     imports: [
@@ -23,6 +24,7 @@ import { CourseMaterialsModule } from '../course-materials/course-materials.modu
         AuthModule,
         CommonModule,
         CourseMaterialsModule,
+        DigitalSkillsModule,
     ],
     controllers: [CourseController],
     providers: [CourseService],

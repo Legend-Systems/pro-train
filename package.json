@@ -20,6 +20,8 @@
         "test:e2e": "jest --config ./test/jest-e2e.json",
         "script:backfill-training-progress": "ts-node -r tsconfig-paths/register src/scripts/backfill-training-progress-from-results.ts",
         "script:backfill-training-sessions": "ts-node -r tsconfig-paths/register src/scripts/backfill-training-sessions-from-attempts.ts",
+        "script:setup-digital-skills": "ts-node -r tsconfig-paths/register src/scripts/setup-digital-skills-assessment.ts",
+        "script:setup-digital-skills-modules": "ts-node -r tsconfig-paths/register src/scripts/setup-digital-skills-modules.ts",
         "typeorm": "typeorm-ts-node-commonjs -d src/data-source.ts",
         "typeorm:migration:run": "yarn typeorm migration:run",
         "typeorm:migration:revert": "yarn typeorm migration:revert"

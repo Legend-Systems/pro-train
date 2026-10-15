@@ -50,6 +50,8 @@ import { RetryService } from '../common/services/retry.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
 import { MAX_SELECTED_OPTION_IDS } from './dto/submit-test-attempt.dto';
+import { DIGITAL_SKILL_CATALOGUE } from '../digital-skills/constants/digital-skills.constant';
+import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
 
 /**
  * Normalizes single- and multi-select option payloads into a unique id list (max 3).
@@ -816,6 +818,25 @@ export class TestAttemptsService {
                     !this.isElevatedRole(scope.userRole)
                 ) {
                     throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+                }
+            }
+
+            if (isDigitalSkillsCourse(attempt.test?.courseId)) {
+                const ratedQuestionIds = new Set(
+                    (submitData.answers ?? [])
+                        .filter(
+                            answer =>
+                                normalizeSelectedOptionIds(
+                                    answer.selectedOptionIds,
+                                    answer.selectedOptionId,
+                                ).length > 0,
+                        )
+                        .map(answer => answer.questionId),
+                );
+                if (ratedQuestionIds.size < DIGITAL_SKILL_CATALOGUE.length) {
+                    throw new BadRequestException(
+                        'Please rate every digital skill before submitting. This survey needs a rating on all 31 skills.',
+                    );
                 }
             }
 

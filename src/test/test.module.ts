@@ -20,6 +20,7 @@ import { TestNotificationService } from './services/test-notification.service';
 import { TestNotificationCronService } from './services/test-notification-cron.service';
 import { TestNotificationController } from './controllers/test-notification.controller';
 import { QuizDocumentParserService } from './services/quiz-document-parser.service';
+import { DigitalSkillsModule } from '../digital-skills/digital-skills.module';
 
 @Module({
     imports: [
@@ -42,6 +43,7 @@ import { QuizDocumentParserService } from './services/quiz-document-parser.servi
         CourseModule,
         QuestionsOptionsModule,
         CommunicationsModule,
+        DigitalSkillsModule,
     ],
     controllers: [TestController, TestNotificationController],
     providers: [

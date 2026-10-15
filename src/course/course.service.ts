@@ -50,6 +50,9 @@ import { CourseMaterialResponseDto } from '../course-materials/dto/course-materi
 import {
     ImageVariant,
 } from '../media-manager/entities/media-manager.entity';
+import { isLearnerRole } from '../user/entities/user.entity';
+import { DIGITAL_SKILLS_COURSE_ID } from '../digital-skills/constants/digital-skills.constant';
+import { DigitalSkillsPlanService } from '../digital-skills/services/digital-skills-plan.service';
 import {
     CourseLearnerProgressPayloadDto,
     KnowledgeTestContributionDto,
@@ -160,6 +163,7 @@ export class CourseService {
         private readonly retryService: RetryService,
         private readonly courseMaterialsService: CourseMaterialsService,
         private readonly contentLocalizationService: ContentLocalizationService,
+        private readonly digitalSkillsPlanService: DigitalSkillsPlanService,
     ) {}
 
     /** Bust course caches after pt-PT rows are written (separate CacheModule instance). */
@@ -509,6 +513,47 @@ export class CourseService {
             role === 'owner' ||
             role === 'admin'
         );
+    }
+
+    /**
+     * Learners only see Digital Skills modules assigned from their weak areas.
+     * Applied after cache so one learner’s plan does not leak into another.
+     */
+    private async filterDigitalSkillsCourseDetail<T extends CourseDetailDto>(
+        detail: T,
+        scope?: OrgBranchScope,
+    ): Promise<T> {
+        if (
+            detail.courseId !== DIGITAL_SKILLS_COURSE_ID ||
+            !scope?.userId ||
+            this.isAdminScope(scope) ||
+            !isLearnerRole(scope.userRole)
+        ) {
+            return detail;
+        }
+
+        const [assignedTestIds, assignedMaterialIds] = await Promise.all([
+            this.digitalSkillsPlanService.getAssignedTestIds(scope.userId),
+            this.digitalSkillsPlanService.getAssignedMaterialIds(scope.userId),
+        ]);
+
+        return {
+            ...detail,
+            tests: (detail.tests ?? []).filter(test =>
+                this.digitalSkillsPlanService.shouldLearnerSeeTest(
+                    test.title,
+                    test.testId,
+                    assignedTestIds,
+                ),
+            ),
+            courseMaterials: (detail.courseMaterials ?? []).filter(material =>
+                this.digitalSkillsPlanService.shouldLearnerSeeMaterial(
+                    material.title,
+                    material.materialId,
+                    assignedMaterialIds,
+                ),
+            ),
+        };
     }
 
     /** Tracks paginated list cache keys so mutations can invalidate every variant. */
@@ -868,7 +913,14 @@ export class CourseService {
                     cachedCourse.courseMaterials = this.mapActiveCourseMaterials(
                         cachedCourse.courseMaterials,
                     );
-                    return this.localizeCourseDetail(cachedCourse, id, locale);
+                    return this.localizeCourseDetail(
+                        await this.filterDigitalSkillsCourseDetail(
+                            cachedCourse,
+                            scope,
+                        ),
+                        id,
+                        locale,
+                    );
                 }
             } catch (error) {
                 this.logger.warn(
@@ -1058,7 +1110,11 @@ export class CourseService {
                 studentCount: result.studentCount,
             });
 
-            return this.localizeCourseDetail(result, id, locale);
+            return this.localizeCourseDetail(
+                await this.filterDigitalSkillsCourseDetail(result, scope),
+                id,
+                locale,
+            );
         });
     }
 
