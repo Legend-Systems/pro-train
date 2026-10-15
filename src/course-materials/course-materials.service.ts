@@ -30,6 +30,8 @@ import { MaterialInteraction } from './dto/record-material-interaction.dto';
 import { CourseMaterialView } from './entities/course-material-view.entity';
 import { Course } from '../course/entities/course.entity';
 import { isLearnerRole, User } from '../user/entities/user.entity';
+import { DIGITAL_SKILLS_COURSE_ID } from '../digital-skills/constants/digital-skills.constant';
+import { DigitalSkillsPlanService } from '../digital-skills/services/digital-skills-plan.service';
 import {
     MediaFile,
     ImageVariant,
@@ -80,7 +82,43 @@ export class CourseMaterialsService {
         @Inject(CACHE_MANAGER)
         private readonly cacheManager: Cache,
         private readonly eventEmitter: EventEmitter2,
+        private readonly digitalSkillsPlanService: DigitalSkillsPlanService,
     ) {}
+
+    private async filterDigitalSkillsMaterials(
+        result: CourseMaterialListApiResponse,
+        courseId: number,
+        scope: OrgBranchScope,
+    ): Promise<CourseMaterialListApiResponse> {
+        if (
+            courseId !== DIGITAL_SKILLS_COURSE_ID ||
+            !scope.userId ||
+            !isLearnerRole(scope.userRole)
+        ) {
+            return result;
+        }
+
+        const assignedMaterialIds =
+            await this.digitalSkillsPlanService.getAssignedMaterialIds(
+                scope.userId,
+            );
+        const materials = (result.data?.materials ?? []).filter(material =>
+            this.digitalSkillsPlanService.shouldLearnerSeeMaterial(
+                material.title,
+                material.materialId,
+                assignedMaterialIds,
+            ),
+        );
+
+        return {
+            ...result,
+            data: {
+                ...result.data,
+                materials,
+                total: materials.length,
+            },
+        };
+    }
 
     private async retryOperation<T>(
         operation: () => Promise<T>,
@@ -458,7 +496,11 @@ export class CourseMaterialsService {
                     this.logger.debug(
                         `Cache hit for course materials: ${cacheKey}`,
                     );
-                    return cachedResult;
+                    return this.filterDigitalSkillsMaterials(
+                        cachedResult,
+                        courseId,
+                        scope,
+                    );
                 }
             } catch (error) {
                 this.logger.warn(
@@ -556,7 +598,7 @@ export class CourseMaterialsService {
                 }
             }
 
-            return result;
+            return this.filterDigitalSkillsMaterials(result, courseId, scope);
         });
     }
 

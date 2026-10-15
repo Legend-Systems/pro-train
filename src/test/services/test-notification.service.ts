@@ -17,6 +17,8 @@ import {
     TestExamNotificationStatus,
     TestExamNotificationType,
 } from '../entities/test-exam-notification.entity';
+import { isUpcomingDigitalSkillsExamAllowed } from '../../digital-skills/constants/digital-skills.constant';
+import { DigitalSkillsPlanService } from '../../digital-skills/services/digital-skills-plan.service';
 
 interface ReminderRecipient {
     userId: string;
@@ -65,6 +67,7 @@ export class TestNotificationService {
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
         private readonly communicationsService: CommunicationsService,
+        private readonly digitalSkillsPlanService: DigitalSkillsPlanService,
     ) {}
 
     /** Daily entry: 3-day and exam-day reminders (UTC calendar dates). */
@@ -179,7 +182,17 @@ export class TestNotificationService {
             });
         }
 
-        return eligible;
+        const assignedTestIds =
+            await this.digitalSkillsPlanService.getAssignedTestIds(params.userId);
+        return eligible.filter(
+            item =>
+                isUpcomingDigitalSkillsExamAllowed(item.courseId, item.title) &&
+                this.digitalSkillsPlanService.shouldLearnerSeeTest(
+                    item.title,
+                    item.testId,
+                    assignedTestIds,
+                ),
+        );
     }
 
     private async processForOffset(

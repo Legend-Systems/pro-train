@@ -9,6 +9,7 @@ import { CourseMaterialView } from './entities/course-material-view.entity';
 import { Course } from '../course/entities/course.entity';
 import { User } from '../user/entities/user.entity';
 import { MediaFile } from '../media-manager/entities/media-manager.entity';
+import { DigitalSkillsModule } from '../digital-skills/digital-skills.module';
 
 @Module({
     imports: [
@@ -24,6 +25,7 @@ import { MediaFile } from '../media-manager/entities/media-manager.entity';
             max: 1000, // Maximum number of items in cache
         }),
         EventEmitterModule.forRoot(),
+        DigitalSkillsModule,
     ],
     controllers: [CourseMaterialsController],
     providers: [CourseMaterialsService],

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Test } from '../../test/entities/test.entity';
 import { getUtcDayBounds } from '../../test/utils/exam-window.util';
 import { EligibleTest } from '../types/eligible-test.type';
+import { DIGITAL_SKILLS_COURSE_ID } from '../../digital-skills/constants/digital-skills.constant';
 
 /** Selection criteria for the eligible-test set behind a ranking. */
 interface ResolveEligibleTestsOptions {
@@ -61,6 +62,9 @@ export class EligibleTestService {
             .leftJoin('course.branchId', 'courseBranch')
             .where('org.id = :orgId', { orgId })
             .andWhere('test.isActive = :isActive', { isActive: true })
+            .andWhere('test.courseId != :digitalSkillsCourseId', {
+                digitalSkillsCourseId: DIGITAL_SKILLS_COURSE_ID,
+            })
             .andWhere('test.examStartDate IS NOT NULL')
             .andWhere('test.examEndDate IS NOT NULL')
             // The window must have opened and then fully closed. The start

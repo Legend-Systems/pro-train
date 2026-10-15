@@ -29,6 +29,9 @@ import { OrgBranchScope } from '../auth/decorators/org-branch-scope.decorator';
 import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.util';
 import { StandardResponse } from '../common/types';
 import { UserRole } from '../user/entities/user.entity';
+import { Test } from '../test/entities/test.entity';
+import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
+import { awardDigitalSkillsPoints } from '../digital-skills/utils/digital-skills-score.util';
 
 @Injectable()
 export class AnswersService {
@@ -950,6 +953,9 @@ export class AnswersService {
             }
 
             const answersToSave: Answer[] = [];
+            const digitalSkillsCourseId = await this.resolveDigitalSkillsCourseId(
+                unmarkedAnswers[0]?.question?.testId,
+            );
 
             for (const answer of unmarkedAnswers) {
                 const questionId = answer.questionId;
@@ -991,23 +997,38 @@ export class AnswersService {
                         answer.selectedOptionId = selectedOptionIds[0];
                     }
 
-                    const correctOptionIds = questionOptions
-                        .filter(opt => opt.isCorrect)
-                        .map(opt => opt.optionId);
+                    if (isDigitalSkillsCourse(digitalSkillsCourseId)) {
+                        const selected = questionOptions.find(option =>
+                            selectedOptionIds.includes(option.optionId),
+                        );
+                        const level = selected?.orderIndex ?? 0;
+                        if (!answer.selectedOptionId && selected) {
+                            answer.selectedOptionId = selected.optionId;
+                        }
+                        answer.isCorrect = true;
+                        answer.pointsAwarded = awardDigitalSkillsPoints(
+                            level,
+                            maxPoints,
+                        );
+                    } else {
+                        const correctOptionIds = questionOptions
+                            .filter(opt => opt.isCorrect)
+                            .map(opt => opt.optionId);
 
-                    const isCorrect = this.areOptionIdSetsEqual(
-                        selectedOptionIds,
-                        correctOptionIds,
-                    );
+                        const isCorrect = this.areOptionIdSetsEqual(
+                            selectedOptionIds,
+                            correctOptionIds,
+                        );
 
-                    answer.isCorrect = isCorrect;
-                    answer.pointsAwarded = isCorrect ? maxPoints : 0;
+                        answer.isCorrect = isCorrect;
+                        answer.pointsAwarded = isCorrect ? maxPoints : 0;
+                    }
                     answer.isMarked = true;
                     answer.markedAt = new Date();
                     answersToSave.push(answer);
 
                     markedCount++;
-                    if (isCorrect) {
+                    if (answer.isCorrect) {
                         correctCount++;
                     } else {
                         incorrectCount++;
@@ -1100,6 +1121,21 @@ export class AnswersService {
         }
 
         return [];
+    }
+
+    /** Course id for the attempt’s test, or null when unknown. */
+    private async resolveDigitalSkillsCourseId(
+        testId: number | undefined,
+    ): Promise<number | null> {
+        if (!testId) {
+            return null;
+        }
+
+        const test = await this.dataSource.getRepository(Test).findOne({
+            where: { testId },
+            select: ['testId', 'courseId'],
+        });
+        return test?.courseId ?? null;
     }
 
     /** True when both option-id lists contain the same unique values. */

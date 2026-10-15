@@ -7,7 +7,7 @@ import {
     Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository, DataSource } from 'typeorm';
+import { IsNull, Repository, DataSource, SelectQueryBuilder } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -54,6 +54,12 @@ import { CONTENT_SAVED_EVENTS, CONTENT_TRANSLATED_EVENTS } from '../locale/trans
 import { hasTextChanged } from '../locale/translation/translation-text.util';
 import { ContentLocalizationService } from '../locale/content-localization.service';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
+import { isLearnerRole } from '../user/entities/user.entity';
+import {
+    DIGITAL_SKILLS_COURSE_ID,
+    DIGITAL_SKILLS_TEST_TITLE,
+} from '../digital-skills/constants/digital-skills.constant';
+import { DigitalSkillsPlanService } from '../digital-skills/services/digital-skills-plan.service';
 
 @Injectable()
 export class TestService {
@@ -108,6 +114,7 @@ export class TestService {
         private readonly dataSource: DataSource,
         private readonly eventEmitter: EventEmitter2,
         private readonly contentLocalizationService: ContentLocalizationService,
+        private readonly digitalSkillsPlanService: DigitalSkillsPlanService,
     ) {}
 
     /** Bust test caches after pt-PT rows are written. */
@@ -173,6 +180,37 @@ export class TestService {
     /** True when the caller is a plain learner rather than an admin/owner. */
     private isLearnerScope(scope: OrgBranchScope): boolean {
         return scope.userRole?.toLowerCase() === 'user';
+    }
+
+    /**
+     * Knowledge checks on course 50 are assigned per weak skill. Unassigned
+     * checks stay off the learner list so 31 exams do not appear for everyone.
+     */
+    private async restrictDigitalSkillsKnowledgeTests(
+        query: SelectQueryBuilder<Test>,
+        userId: string,
+    ): Promise<void> {
+        const assignedTestIds =
+            await this.digitalSkillsPlanService.getAssignedTestIds(userId);
+        if (assignedTestIds.length > 0) {
+            query.andWhere(
+                '(test.courseId != :digitalSkillsCourseId OR test.title = :digitalSkillsSurveyTitle OR test.testId IN (:...assignedDigitalSkillsTestIds))',
+                {
+                    digitalSkillsCourseId: DIGITAL_SKILLS_COURSE_ID,
+                    digitalSkillsSurveyTitle: DIGITAL_SKILLS_TEST_TITLE,
+                    assignedDigitalSkillsTestIds: assignedTestIds,
+                },
+            );
+            return;
+        }
+
+        query.andWhere(
+            '(test.courseId != :digitalSkillsCourseId OR test.title = :digitalSkillsSurveyTitle)',
+            {
+                digitalSkillsCourseId: DIGITAL_SKILLS_COURSE_ID,
+                digitalSkillsSurveyTitle: DIGITAL_SKILLS_TEST_TITLE,
+            },
+        );
     }
 
     /**
@@ -497,6 +535,9 @@ export class TestService {
                         learnerActive: true,
                     });
                 }
+            }
+            if (isLearnerRole(scope.userRole)) {
+                await this.restrictDigitalSkillsKnowledgeTests(query, scope.userId);
             }
 
             // Add sorting

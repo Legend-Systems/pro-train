@@ -1658,6 +1658,92 @@ export class CommunicationsService {
         return saved.id;
     }
 
+    /**
+     * One email listing the weak skills, the booked checks, and the due date.
+     * Uses the existing branded custom template.
+     */
+    async sendDigitalSkillsBookingEmail(input: {
+        userEmail: string;
+        firstName: string;
+        lastName: string;
+        organizationId?: string;
+        expectedDueDate: Date;
+        items: readonly { skillTitle: string; testTitle: string }[];
+    }): Promise<void> {
+        const dueLabel = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Africa/Johannesburg',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+        }).format(input.expectedDueDate);
+        const fullName = `${input.firstName} ${input.lastName}`.trim();
+        const listItems = input.items
+            .map(
+                item =>
+                    `<li><strong>${escapeHtml(item.skillTitle)}</strong> — ${escapeHtml(item.testTitle)}</li>`,
+            )
+            .join('');
+        const plainList = input.items
+            .map(item => `- ${item.skillTitle}: ${item.testTitle}`)
+            .join('\n');
+        const htmlMessage = [
+            '<p>Your Digital Skills self-assessment is complete. These are the skills to practise, and the tests booked for you.</p>',
+            `<p><strong>Please complete them by ${escapeHtml(dueLabel)}.</strong></p>`,
+            `<ul>${listItems}</ul>`,
+            '<p>Your original Digital Skills Score does not change when you take these tests.</p>',
+        ].join('');
+        const textMessage = [
+            'Your Digital Skills self-assessment is complete. These are the skills to practise, and the tests booked for you.',
+            '',
+            `Please complete them by ${dueLabel}.`,
+            '',
+            plainList,
+            '',
+            'Your original Digital Skills Score does not change when you take these tests.',
+        ].join('\n');
+
+        const baseData = this.getBaseTemplateData(input.userEmail, input.firstName);
+        const orgData = await this.getOrganizationDataForEmail(input.organizationId);
+        const rendered = await this.emailTemplateService.renderTemplate({
+            template: 'custom',
+            format: 'html',
+            data: {
+                ...baseData,
+                title: 'Your Digital Skills tests',
+                message: htmlMessage,
+                organizationName: orgData.organization?.name,
+            },
+        });
+
+        const communication = this.communicationRepository.create({
+            recipientEmail: input.userEmail,
+            recipientName: fullName,
+            senderEmail: orgData.sender.email,
+            senderName: orgData.sender.name,
+            subject: rendered.subject || 'Your Digital Skills tests',
+            body: rendered.html || htmlMessage,
+            plainTextBody: textMessage,
+            emailType: EmailType.CUSTOM,
+            templateUsed: 'custom',
+            status: EmailStatus.PENDING,
+            metadata: {
+                kind: 'digital-skills-booking',
+                expectedDueDate: input.expectedDueDate.toISOString(),
+                skills: input.items.map(item => item.skillTitle),
+            },
+        });
+        await this.communicationRepository.save(communication);
+        await this.emailQueueService.queueEmail({
+            to: input.userEmail,
+            subject: rendered.subject || 'Your Digital Skills tests',
+            html: rendered.html,
+            text: textMessage,
+        });
+        this.logger.log(
+            `Digital Skills booking email queued for ${input.userEmail}`,
+        );
+    }
+
     private buildAssistanceContextSummary(
         data: AssistanceRequestEmailData,
     ): string {
@@ -1682,4 +1768,12 @@ export class CommunicationsService {
         );
         return `This action removes a #${id} communication`;
     }
+}
+
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
