@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 
 import type { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
 import { EligibleTestService } from '../../ranking/services/eligible-test.service';
+import { ReportAudienceService } from './report-audience.service';
 import type { EligibleTest } from '../../ranking/types/eligible-test.type';
 import { isTestExpectedForLearner } from '../../ranking/utils/test-scope.util';
 import { Result } from '../../results/entities/result.entity';
@@ -11,11 +12,8 @@ import {
     AttemptStatus,
     TestAttempt,
 } from '../../test_attempts/entities/test_attempt.entity';
-import {
-    LEARNER_USER_ROLES,
-    User,
-    UserStatus,
-} from '../../user/entities/user.entity';
+import { User, UserStatus } from '../../user/entities/user.entity';
+import { REPORT_LEARNER_ROLES } from '../constants/report-user-exclusions.constant';
 import {
     AdminNonParticipatingUserDto,
     AdminNonParticipationReason,
@@ -85,6 +83,7 @@ export class NonParticipationReportsService {
         @InjectRepository(Result)
         private readonly resultRepository: Repository<Result>,
         private readonly eligibleTestService: EligibleTestService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     /** Builds the non-participation report for the caller's organisation. */
@@ -331,7 +330,7 @@ export class NonParticipationReportsService {
             .leftJoin('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .andWhere('user.status = :activeStatus', {
                 activeStatus: UserStatus.ACTIVE,
@@ -350,6 +349,8 @@ export class NonParticipationReportsService {
         if (branchId) {
             query.andWhere('branch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
 
         const rows = await query.getRawMany<{
             userId: string;

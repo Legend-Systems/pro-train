@@ -10,6 +10,7 @@ import { LessThanOrEqual, Repository } from 'typeorm';
 import { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
 import { CommunicationsService } from '../../communications/communications.service';
 import { EngagementService } from '../../engagement/engagement.service';
+import { ReportAudienceService } from './report-audience.service';
 import { LearnerEngagementRow } from '../../engagement/dto/engagement-overview.types';
 import { User } from '../../user/entities/user.entity';
 import {
@@ -72,6 +73,7 @@ export class ReportScheduleService {
         private readonly reportExportService: ReportExportService,
         private readonly communicationsService: CommunicationsService,
         private readonly engagementService: EngagementService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async create(
@@ -396,7 +398,14 @@ export class ReportScheduleService {
     private async loadMaterialEngagementReport(
         scope: OrgBranchScope,
     ): Promise<AdminMaterialEngagementReportDto> {
-        const learners = await this.loadAllEngagementLearners(scope);
+        const excludedUserIds = new Set(
+            await this.reportAudienceService.getExcludedUserIds(
+                scope.orgId ?? null,
+            ),
+        );
+        const learners = (
+            await this.loadAllEngagementLearners(scope)
+        ).filter(learner => !excludedUserIds.has(learner.userId));
         return {
             usersWhoDownloaded: learners
                 .filter(learner => learner.materialsDownloaded > 0)

@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ObjectLiteral, Repository, SelectQueryBuilder } from 'typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { Course } from '../../course/entities/course.entity';
@@ -13,6 +13,7 @@ import {
     CourseStatsDto,
     CoursePerformanceDto,
 } from '../dto/course-analytics.dto';
+import { ReportAudienceService } from './report-audience.service';
 
 @Injectable()
 export class CourseReportsService {
@@ -27,6 +28,7 @@ export class CourseReportsService {
         private userRepository: Repository<User>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getCourseAnalytics(
@@ -35,11 +37,9 @@ export class CourseReportsService {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         userId?: string,
     ): Promise<CourseAnalyticsResponseDto> {
-        // TODO: Implement org/branch scoping validation here in the future
-        // For now, we'll use the courseId as provided
-        const cacheKey = `course_analytics_${courseId}_${scope?.orgId || 'global'}_${scope?.branchId || 'global'}`;
+        const reportOrgId = scope?.orgId ?? (await this.resolveCourseOrgId(courseId));
+        const cacheKey = `course_analytics_excl_v1_${courseId}_${reportOrgId || 'global'}_${scope?.branchId || 'global'}`;
 
-        // Try to get from cache first
         const cachedData =
             await this.cacheManager.get<CourseAnalyticsResponseDto>(cacheKey);
 
@@ -50,10 +50,9 @@ export class CourseReportsService {
             };
         }
 
-        // Generate fresh analytics data
         const [stats, performance] = await Promise.all([
-            this.getCourseStats(courseId),
-            this.getCoursePerformance(courseId),
+            this.getCourseStats(courseId, reportOrgId),
+            this.getCoursePerformance(courseId, reportOrgId),
         ]);
 
         const analyticsData: CourseAnalyticsResponseDto = {
@@ -63,14 +62,37 @@ export class CourseReportsService {
             cached: false,
         };
 
-        // Cache the result for 1 hour (3600 seconds)
         await this.cacheManager.set(cacheKey, analyticsData, 3600);
 
         return analyticsData;
     }
 
-    private async getCourseStats(courseId: number): Promise<CourseStatsDto> {
-        // Get basic course info
+    private async resolveCourseOrgId(courseId: number): Promise<string | null> {
+        const row = await this.courseRepository
+            .createQueryBuilder('course')
+            .leftJoin('course.orgId', 'org')
+            .where('course.courseId = :courseId', { courseId })
+            .select('org.id', 'orgId')
+            .getRawOne<{ orgId: string | null }>();
+        return row?.orgId ?? null;
+    }
+
+    private async omitAudience<Entity extends ObjectLiteral>(
+        query: SelectQueryBuilder<Entity>,
+        userIdExpression: string,
+        reportOrgId: string | null,
+    ): Promise<void> {
+        await this.reportAudienceService.omitFromQuery(
+            query,
+            userIdExpression,
+            reportOrgId,
+        );
+    }
+
+    private async getCourseStats(
+        courseId: number,
+        reportOrgId: string | null,
+    ): Promise<CourseStatsDto> {
         const course = await this.courseRepository.findOne({
             where: { courseId },
             relations: ['tests'],
@@ -80,24 +102,24 @@ export class CourseReportsService {
             throw new Error(`Course with ID ${courseId} not found`);
         }
 
-        // Get total students enrolled (count unique users who attempted tests in this course)
-        const totalStudentsEnrolled = await this.testAttemptRepository
+        const enrolledQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .select('COUNT(DISTINCT ta.userId)', 'count')
+            .select('COUNT(DISTINCT ta.userId)', 'count');
+        await this.omitAudience(enrolledQuery, 'ta.userId', reportOrgId);
+        const totalStudentsEnrolled = await enrolledQuery
             .getRawOne()
             .then(
                 (result: { count: string } | undefined) =>
                     parseInt(result?.count || '0') || 0,
             );
 
-        // Get completion rate (students who completed all tests vs total enrolled)
         const totalTests = course.tests?.length || 0;
         let completionRate = 0;
 
         if (totalTests > 0 && totalStudentsEnrolled > 0) {
-            const completedStudents = await this.testAttemptRepository
+            const completedQuery = this.testAttemptRepository
                 .createQueryBuilder('ta')
                 .innerJoin('ta.test', 't')
                 .where('t.courseId = :courseId', { courseId })
@@ -106,14 +128,14 @@ export class CourseReportsService {
                 .having('COUNT(DISTINCT t.testId) = :totalTests', {
                     totalTests,
                 })
-                .select('ta.userId')
-                .getCount();
+                .select('ta.userId');
+            await this.omitAudience(completedQuery, 'ta.userId', reportOrgId);
+            const completedStudents = await completedQuery.getCount();
 
             completionRate = (completedStudents / totalStudentsEnrolled) * 100;
         }
 
-        // Calculate average study duration (time between first and last attempt per user)
-        const avgStudyDuration = await this.testAttemptRepository
+        const avgStudyQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
@@ -121,8 +143,9 @@ export class CourseReportsService {
             .addSelect('MIN(ta.startTime)', 'firstAttempt')
             .addSelect('MAX(ta.submitTime)', 'lastAttempt')
             .groupBy('ta.userId')
-            .having('MAX(ta.submitTime) IS NOT NULL')
-            .getRawMany();
+            .having('MAX(ta.submitTime) IS NOT NULL');
+        await this.omitAudience(avgStudyQuery, 'ta.userId', reportOrgId);
+        const avgStudyDuration = await avgStudyQuery.getRawMany();
 
         let averageStudyDurationHours = 0;
         if (avgStudyDuration.length > 0) {
@@ -142,21 +165,20 @@ export class CourseReportsService {
             averageStudyDurationHours = totalHours / avgStudyDuration.length;
         }
 
-        // Calculate popularity score (weighted by enrollments and completion rate)
         const popularityScore = Math.min(
             100,
             totalStudentsEnrolled * 0.7 + completionRate * 0.3,
         );
 
-        // Get average test score
-        const avgScore = await this.testAttemptRepository
+        const avgScoreQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .innerJoin('ta.results', 'r')
             .where('t.courseId = :courseId', { courseId })
             .andWhere('ta.status = :status', { status: 'submitted' })
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.omitAudience(avgScoreQuery, 'ta.userId', reportOrgId);
+        const avgScore = await avgScoreQuery.getRawOne();
 
         return {
             totalStudentsEnrolled,
@@ -171,6 +193,7 @@ export class CourseReportsService {
 
     private async getCoursePerformance(
         courseId: number,
+        reportOrgId: string | null,
     ): Promise<CoursePerformanceDto> {
         const course = await this.courseRepository.findOne({
             where: { courseId },
@@ -180,46 +203,58 @@ export class CourseReportsService {
             throw new Error(`Course with ID ${courseId} not found`);
         }
 
-        // Get total attempts
-        const totalAttempts = await this.testAttemptRepository
+        const totalAttemptsQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
-            .where('t.courseId = :courseId', { courseId })
-            .getCount();
+            .where('t.courseId = :courseId', { courseId });
+        await this.omitAudience(totalAttemptsQuery, 'ta.userId', reportOrgId);
+        const totalAttempts = await totalAttemptsQuery.getCount();
 
-        // Get first attempt success rate
-        const firstAttemptSuccess = await this.testAttemptRepository
+        const firstAttemptSuccessQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .innerJoin('ta.results', 'r')
             .where('t.courseId = :courseId', { courseId })
             .andWhere('ta.attemptNumber = 1')
             .andWhere('ta.status = :status', { status: 'submitted' })
-            // Pass mark raised from 70% score assumption to Result.passed (80% threshold)
-            .andWhere('r.passed = true')
-            .getCount();
+            .andWhere('r.passed = true');
+        await this.omitAudience(
+            firstAttemptSuccessQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const firstAttemptSuccess = await firstAttemptSuccessQuery.getCount();
 
-        const totalFirstAttempts = await this.testAttemptRepository
+        const totalFirstAttemptsQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .andWhere('ta.attemptNumber = 1')
-            .getCount();
+            .andWhere('ta.attemptNumber = 1');
+        await this.omitAudience(
+            totalFirstAttemptsQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const totalFirstAttempts = await totalFirstAttemptsQuery.getCount();
 
         const firstAttemptSuccessRate =
             totalFirstAttempts > 0
                 ? (firstAttemptSuccess / totalFirstAttempts) * 100
                 : 0;
 
-        // Get average attempts per student
-        const attemptsPerStudent = await this.testAttemptRepository
+        const attemptsPerStudentQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
             .select('ta.userId')
             .addSelect('COUNT(*)', 'attemptCount')
-            .groupBy('ta.userId')
-            .getRawMany();
+            .groupBy('ta.userId');
+        await this.omitAudience(
+            attemptsPerStudentQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const attemptsPerStudent = await attemptsPerStudentQuery.getRawMany();
 
         const averageAttemptsPerStudent =
             attemptsPerStudent.length > 0
@@ -229,8 +264,7 @@ export class CourseReportsService {
                   ) / attemptsPerStudent.length
                 : 0;
 
-        // Find most challenging test (lowest success rate)
-        const testSuccessRates = await this.testRepository
+        const testSuccessRatesQuery = this.testRepository
             .createQueryBuilder('t')
             .leftJoin('t.testAttempts', 'ta')
             .leftJoin('ta.results', 'r')
@@ -238,13 +272,13 @@ export class CourseReportsService {
             .select('t.title')
             .addSelect('COUNT(ta.attemptId)', 'totalAttempts')
             .addSelect(
-                // Pass mark raised from 70% score assumption to Result.passed (80% threshold)
                 'COUNT(CASE WHEN r.passed = true THEN 1 END)',
                 'successfulAttempts',
             )
             .groupBy('t.testId, t.title')
-            .having('COUNT(ta.attemptId) > 0')
-            .getRawMany();
+            .having('COUNT(ta.attemptId) > 0');
+        await this.omitAudience(testSuccessRatesQuery, 'ta.userId', reportOrgId);
+        const testSuccessRates = await testSuccessRatesQuery.getRawMany();
 
         let mostChallengingTest = undefined;
         let lowestSuccessRate = 100;
@@ -271,39 +305,39 @@ export class CourseReportsService {
     }
 
     async getCourseEnrollmentStats(courseId: number): Promise<any> {
-        const cacheKey = `course_enrollment_${courseId}`;
+        const reportOrgId = await this.resolveCourseOrgId(courseId);
+        const cacheKey = `course_enrollment_excl_v1_${courseId}_${reportOrgId || 'global'}`;
 
         const cachedData = await this.cacheManager.get(cacheKey);
         if (cachedData) {
             return cachedData;
         }
 
-        // Get enrollment trends over time
-        const enrollmentData = await this.testAttemptRepository
+        const enrollmentQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
             .select('DATE(ta.createdAt)', 'date')
             .addSelect('COUNT(DISTINCT ta.userId)', 'newEnrollments')
             .groupBy('DATE(ta.createdAt)')
-            .orderBy('date', 'ASC')
-            .getRawMany();
+            .orderBy('date', 'ASC');
+        await this.omitAudience(enrollmentQuery, 'ta.userId', reportOrgId);
+        const enrollmentData = await enrollmentQuery.getRawMany();
 
-        // Cache for 30 minutes
         await this.cacheManager.set(cacheKey, enrollmentData, 1800);
 
         return enrollmentData;
     }
 
     async getAllCoursesPopularityRanking(): Promise<any> {
-        const cacheKey = 'courses_popularity_global';
+        const cacheKey = 'courses_popularity_global_excl_v1';
 
         const cachedData = await this.cacheManager.get(cacheKey);
         if (cachedData) {
             return cachedData;
         }
 
-        const popularityCourses = await this.courseRepository
+        const popularityQuery = this.courseRepository
             .createQueryBuilder('c')
             .leftJoin('c.tests', 't')
             .leftJoin('t.testAttempts', 'ta')
@@ -314,10 +348,10 @@ export class CourseReportsService {
             .groupBy('c.courseId, c.title')
             .orderBy('enrollments', 'DESC')
             .addOrderBy('totalAttempts', 'DESC')
-            .limit(10)
-            .getRawMany();
+            .limit(10);
+        await this.omitAudience(popularityQuery, 'ta.userId', null);
+        const popularityCourses = await popularityQuery.getRawMany();
 
-        // Cache for 6 hours
         await this.cacheManager.set(cacheKey, popularityCourses, 21600);
 
         return popularityCourses;

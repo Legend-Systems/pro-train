@@ -31,6 +31,7 @@ import { CommunicationsModule } from '../communications/communications.module';
 import { CommonModule } from '../common/common.module';
 import { EngagementModule } from '../engagement/engagement.module';
 import { RankingModule } from '../ranking/ranking.module';
+import { ReportAudienceModule } from './report-audience.module';
 
 @Module({
     imports: [
@@ -57,6 +58,7 @@ import { RankingModule } from '../ranking/ranking.module';
         CommonModule,
         EngagementModule,
         RankingModule,
+        ReportAudienceModule,
     ],
     controllers: [ReportsController, AdminReportsController],
     providers: [

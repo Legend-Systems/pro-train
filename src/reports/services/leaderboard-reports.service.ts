@@ -6,17 +6,15 @@ import { Cache } from 'cache-manager';
 import { Leaderboard } from '../../leaderboard/entities/leaderboard.entity';
 import { Result } from '../../results/entities/result.entity';
 import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
-import {
-    LEARNER_USER_ROLES,
-    User,
-    UserStatus,
-} from '../../user/entities/user.entity';
+import { User, UserStatus } from '../../user/entities/user.entity';
 import { Course } from '../../course/entities/course.entity';
 import type { OrgBranchScope } from '../../auth/decorators/org-branch-scope.decorator';
 import { EligibleTestService } from '../../ranking/services/eligible-test.service';
 import { LearnerRankingService } from '../../ranking/services/learner-ranking.service';
 import { LearnerRankingStats } from '../../ranking/types/learner-ranking-stats.type';
 import { compareLearnerRankingStats } from '../../ranking/utils/ranking-comparator.util';
+import { REPORT_LEARNER_ROLES } from '../constants/report-user-exclusions.constant';
+import { ReportAudienceService } from './report-audience.service';
 import {
     LeaderboardAnalyticsReportDto,
     LeaderboardStatsReportDto,
@@ -44,6 +42,7 @@ export class LeaderboardReportsService {
         private cacheManager: Cache,
         private readonly eligibleTestService: EligibleTestService,
         private readonly learnerRankingService: LearnerRankingService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getLeaderboardAnalytics(
@@ -101,37 +100,61 @@ export class LeaderboardReportsService {
         }
 
         // Total participants across all leaderboards
-        const totalParticipants = await this.leaderboardRepository
+        const participantQuery = this.leaderboardRepository
             .createQueryBuilder('l')
-            .select('COUNT(DISTINCT l.userId)')
-            .getRawOne();
+            .select('COUNT(DISTINCT l.userId)');
+        await this.reportAudienceService.omitFromQuery(
+            participantQuery,
+            'l.userId',
+            null,
+        );
+        const totalParticipants = await participantQuery.getRawOne();
 
         // Average points across all participants
-        const avgPointsResult = await this.leaderboardRepository
+        const averageQuery = this.leaderboardRepository
             .createQueryBuilder('l')
-            .select('AVG(l.totalPoints)', 'avgPoints')
-            .getRawOne();
+            .select('AVG(l.totalPoints)', 'avgPoints');
+        await this.reportAudienceService.omitFromQuery(
+            averageQuery,
+            'l.userId',
+            null,
+        );
+        const avgPointsResult = await averageQuery.getRawOne();
 
         const averagePoints = Number(avgPointsResult?.avgPoints || 0);
 
         // Top performers across all courses
-        const topGlobalPerformers = await this.leaderboardRepository
+        const topPerformerQuery = this.leaderboardRepository
             .createQueryBuilder('l')
-            .innerJoin('l.user', 'u')
-            .select('u.userId', 'userId')
+            .innerJoin('l.user', 'u');
+        await this.reportAudienceService.omitFromQuery(
+            topPerformerQuery,
+            'u.id',
+            null,
+        );
+        const topGlobalPerformers = await topPerformerQuery
+            .select('u.id', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
             .addSelect('SUM(l.totalPoints)', 'totalPoints')
             .addSelect('COUNT(DISTINCT l.courseId)', 'coursesParticipated')
-            .groupBy('u.userId, u.firstName, u.lastName')
+            .groupBy('u.id')
+            .addGroupBy('u.firstName')
+            .addGroupBy('u.lastName')
             .orderBy('SUM(l.totalPoints)', 'DESC')
             .limit(10)
             .getRawMany();
 
         // Course leaderboard activity
-        const courseActivity = await this.leaderboardRepository
+        const courseActivityQuery = this.leaderboardRepository
             .createQueryBuilder('l')
-            .innerJoin('l.course', 'c')
+            .innerJoin('l.course', 'c');
+        await this.reportAudienceService.omitFromQuery(
+            courseActivityQuery,
+            'l.userId',
+            null,
+        );
+        const courseActivity = await courseActivityQuery
             .select('c.courseId', 'courseId')
             .addSelect('c.title', 'title')
             .addSelect('COUNT(DISTINCT l.userId)', 'participants')
@@ -146,10 +169,15 @@ export class LeaderboardReportsService {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const recentActivity = await this.leaderboardRepository
+        const recentActivityQuery = this.leaderboardRepository
             .createQueryBuilder('l')
-            .where('l.lastUpdated >= :sevenDaysAgo', { sevenDaysAgo })
-            .getCount();
+            .where('l.lastUpdated >= :sevenDaysAgo', { sevenDaysAgo });
+        await this.reportAudienceService.omitFromQuery(
+            recentActivityQuery,
+            'l.userId',
+            null,
+        );
+        const recentActivity = await recentActivityQuery.getCount();
 
         const statsData: GlobalLeaderboardStatsReportDto = {
             totalParticipants: Number(totalParticipants?.count || 0),
@@ -281,7 +309,7 @@ export class LeaderboardReportsService {
             .leftJoin('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .andWhere('user.status = :activeStatus', {
                 activeStatus: UserStatus.ACTIVE,
@@ -294,6 +322,8 @@ export class LeaderboardReportsService {
         if (branchId) {
             query.andWhere('branch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
 
         const rows = await query.getRawMany<{
             userId: string;
@@ -332,21 +362,21 @@ export class LeaderboardReportsService {
         let query = this.leaderboardRepository
             .createQueryBuilder('l')
             .innerJoin('l.user', 'u')
-            .select('u.userId', 'userId')
+            .select('u.id', 'userId')
             .addSelect('u.firstName', 'firstName')
             .addSelect('u.lastName', 'lastName')
             .addSelect('l.totalPoints', 'currentPoints')
             .addSelect('l.rank', 'currentRank')
-            .addSelect('l.lastUpdated', 'lastUpdated');
+            .addSelect('l.lastUpdated', 'lastUpdated')
+            .where('l.lastUpdated >= :daysAgo', { daysAgo });
 
         if (courseId) {
-            query = query.where('l.courseId = :courseId', { courseId });
+            query = query.andWhere('l.courseId = :courseId', { courseId });
         }
 
-        const movements = await query
-            .where('l.lastUpdated >= :daysAgo', { daysAgo })
-            .orderBy('l.lastUpdated', 'DESC')
-            .getRawMany();
+        await this.reportAudienceService.omitFromQuery(query, 'u.id', null);
+
+        const movements = await query.orderBy('l.lastUpdated', 'DESC').getRawMany();
 
         const rankMovements: RankMovementReportDto[] = movements.map(
             movement => ({
@@ -386,6 +416,8 @@ export class LeaderboardReportsService {
         if (courseId) {
             query = query.where('l.courseId = :courseId', { courseId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'l.userId', null);
 
         // Calculate competitive intensity metrics
         const leaderboardData = await query
@@ -449,13 +481,16 @@ export class LeaderboardReportsService {
 
         if (userId) {
             query = query.where('l.userId = :userId', { userId });
+        } else {
+            await this.reportAudienceService.omitFromQuery(
+                query,
+                'l.userId',
+                null,
+            );
         }
 
         if (courseId) {
-            const courseCondition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${courseCondition} l.courseId = :courseId`, {
-                courseId,
-            });
+            query = query.andWhere('l.courseId = :courseId', { courseId });
         }
 
         // User's current rankings
@@ -496,6 +531,12 @@ export class LeaderboardReportsService {
             recentQuery = recentQuery.andWhere('l.userId = :userId', {
                 userId,
             });
+        } else {
+            await this.reportAudienceService.omitFromQuery(
+                recentQuery,
+                'l.userId',
+                null,
+            );
         }
 
         if (courseId) {
@@ -530,14 +571,17 @@ export class LeaderboardReportsService {
             .limit(30);
 
         if (userId) {
-            query = query.where('l.userId = :userId', { userId });
+            query = query.andWhere('l.userId = :userId', { userId });
+        } else {
+            await this.reportAudienceService.omitFromQuery(
+                query,
+                'l.userId',
+                null,
+            );
         }
 
         if (courseId) {
-            const condition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${condition} l.courseId = :courseId`, {
-                courseId,
-            });
+            query = query.andWhere('l.courseId = :courseId', { courseId });
         }
 
         const trends = await query.getRawMany();
@@ -553,15 +597,21 @@ export class LeaderboardReportsService {
             .orderBy('l.totalPoints', 'DESC');
 
         if (userId) {
-            courseQuery = courseQuery.where('l.userId = :userId', { userId });
+            courseQuery = courseQuery.andWhere('l.userId = :userId', {
+                userId,
+            });
+        } else {
+            await this.reportAudienceService.omitFromQuery(
+                courseQuery,
+                'l.userId',
+                null,
+            );
         }
 
         if (courseId) {
-            const condition = userId ? 'AND' : 'WHERE';
-            courseQuery = courseQuery.where(
-                `${condition} l.courseId = :courseId`,
-                { courseId },
-            );
+            courseQuery = courseQuery.andWhere('l.courseId = :courseId', {
+                courseId,
+            });
         }
 
         const coursePerformance = await courseQuery.getRawMany();
