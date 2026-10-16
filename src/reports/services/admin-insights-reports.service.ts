@@ -20,11 +20,8 @@ import {
     AttemptStatus,
     TestAttempt,
 } from '../../test_attempts/entities/test_attempt.entity';
-import {
-    LEARNER_USER_ROLES,
-    User,
-    UserStatus,
-} from '../../user/entities/user.entity';
+import { User, UserStatus } from '../../user/entities/user.entity';
+import { REPORT_LEARNER_ROLES } from '../constants/report-user-exclusions.constant';
 import {
     AdminAtRiskUserDto,
     AdminBranchComparisonDto,
@@ -59,6 +56,7 @@ import {
 } from '../dto/admin-insights.dto';
 import { EligibleTestService } from '../../ranking/services/eligible-test.service';
 import { LearnerRankingService } from '../../ranking/services/learner-ranking.service';
+import { ReportAudienceService } from './report-audience.service';
 import { LearnerRankingStats } from '../../ranking/types/learner-ranking-stats.type';
 import { compareLearnerRankingStats } from '../../ranking/utils/ranking-comparator.util';
 
@@ -231,6 +229,7 @@ export class AdminInsightsReportsService {
         private readonly testAttemptRepository: Repository<TestAttempt>,
         private readonly eligibleTestService: EligibleTestService,
         private readonly learnerRankingService: LearnerRankingService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     /** Executive hub payload combining KPIs and actionable slices. */
@@ -274,7 +273,9 @@ export class AdminInsightsReportsService {
         ]);
 
         const window = this.resolveWindow(filters);
-        const kpiRows = await this.buildScopedResultsQuery(orgId, branchId)
+        const kpiRows = await (
+            await this.buildScopedResultsQuery(orgId, branchId)
+        )
             .andWhere('result.calculatedAt >= :start', { start: window.start })
             .andWhere('result.calculatedAt < :end', { end: window.end })
             .select('AVG(result.percentage)', 'averageScore')
@@ -430,8 +431,22 @@ export class AdminInsightsReportsService {
             })
             .andWhere('session.activityDate < :monthEndDate', { monthEndDate })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
-            })
+                learnerRoles: REPORT_LEARNER_ROLES,
+            });
+
+        await this.reportAudienceService.omitFromQuery(
+            query,
+            'session.userId',
+            orgId,
+        );
+
+        if (filters.branchId) {
+            query.andWhere('session.branchId = :branchId', {
+                branchId: filters.branchId,
+            });
+        }
+
+        const rows = await query
             .select('session.userId', 'userId')
             .addSelect('user.firstName', 'firstName')
             .addSelect('user.lastName', 'lastName')
@@ -443,15 +458,8 @@ export class AdminInsightsReportsService {
             .addGroupBy('user.firstName')
             .addGroupBy('user.lastName')
             .orderBy('totalMinutes', 'DESC')
-            .limit(limit);
-
-        if (filters.branchId) {
-            query.andWhere('session.branchId = :branchId', {
-                branchId: filters.branchId,
-            });
-        }
-
-        const rows = await query.getRawMany<{
+            .limit(limit)
+            .getRawMany<{
             userId: string;
             firstName: string;
             lastName: string;
@@ -605,7 +613,7 @@ export class AdminInsightsReportsService {
             .leftJoin('l.orgId', 'org')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -628,6 +636,12 @@ export class AdminInsightsReportsService {
                 });
         }
 
+        await this.reportAudienceService.omitFromQuery(
+            overallQuery,
+            'user.id',
+            orgId,
+        );
+
         const overallRows = await overallQuery.getRawMany<{
             userId: string;
             firstName: string;
@@ -647,7 +661,7 @@ export class AdminInsightsReportsService {
             .leftJoin('l.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -669,6 +683,12 @@ export class AdminInsightsReportsService {
                 branchId: filters.branchId,
             });
         }
+
+        await this.reportAudienceService.omitFromQuery(
+            byBranchQuery,
+            'user.id',
+            orgId,
+        );
 
         const byBranchRows = await byBranchQuery.getRawMany<{
             userId: string;
@@ -920,9 +940,8 @@ export class AdminInsightsReportsService {
         const orgId = this.requireOrg(scope);
         const window = this.resolveWindow(filters);
 
-        const resultRows = await this.buildScopedResultsQuery(
-            orgId,
-            filters.branchId,
+        const resultRows = await (
+            await this.buildScopedResultsQuery(orgId, filters.branchId)
         )
             .leftJoin('result.branchId', 'branch')
             .andWhere('result.calculatedAt >= :start', { start: window.start })
@@ -973,6 +992,12 @@ export class AdminInsightsReportsService {
                 branchId: filters.branchId,
             });
         }
+
+        await this.reportAudienceService.omitFromQuery(
+            sessionQuery,
+            'session.userId',
+            orgId,
+        );
 
         const sessionRows = await sessionQuery.getRawMany<{
             branchId: string;
@@ -1124,6 +1149,12 @@ export class AdminInsightsReportsService {
                 });
         }
 
+        await this.reportAudienceService.omitFromQuery(
+            query,
+            'answer.userId',
+            orgId,
+        );
+
         const rows = await query.getRawMany<{
             questionId: string;
             questionText: string;
@@ -1166,6 +1197,12 @@ export class AdminInsightsReportsService {
                         branchId: filters.branchId,
                     });
             }
+
+            await this.reportAudienceService.omitFromQuery(
+                wrongOptionQuery,
+                'answer.userId',
+                orgId,
+            );
 
             const wrongOption = await wrongOptionQuery.getRawOne<{
                 optionId: string;
@@ -1340,7 +1377,9 @@ export class AdminInsightsReportsService {
                 ? 'DATE(result.calculatedAt)'
                 : 'YEARWEEK(result.calculatedAt, 1)';
 
-        const rows = await this.buildScopedResultsQuery(orgId, filters.branchId)
+        const rows = await (
+            await this.buildScopedResultsQuery(orgId, filters.branchId)
+        )
             .andWhere('result.calculatedAt >= :start', { start: window.start })
             .andWhere('result.calculatedAt < :end', { end: window.end })
             .select(groupExpr, 'period')
@@ -1390,7 +1429,7 @@ export class AdminInsightsReportsService {
             .leftJoin('user.branchId', 'branch')
             .where('org.id = :orgId', { orgId })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .andWhere('user.status = :activeStatus', {
                 activeStatus: UserStatus.ACTIVE,
@@ -1409,6 +1448,8 @@ export class AdminInsightsReportsService {
         if (branchId) {
             query.andWhere('branch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
 
         const rows = await query.getRawMany<{
             userId: string;
@@ -1625,7 +1666,9 @@ export class AdminInsightsReportsService {
         limit: number,
     ): Promise<AdminTopScorerDto[]> {
         // Over-fetch so de-duplicating repeat high scorers still fills the list.
-        const rows = await this.buildScopedResultsQuery(orgId, branchId)
+        const rows = await (
+            await this.buildScopedResultsQuery(orgId, branchId)
+        )
             .innerJoin('result.user', 'user')
             .innerJoin('result.test', 'test')
             .leftJoin('result.course', 'course')
@@ -1633,7 +1676,7 @@ export class AdminInsightsReportsService {
             .andWhere('result.calculatedAt >= :start', { start })
             .andWhere('result.calculatedAt < :end', { end })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -1834,7 +1877,9 @@ export class AdminInsightsReportsService {
         const orgId = this.requireOrg(scope);
         const window = this.resolveWindow(filters);
 
-        const rows = await this.buildScopedResultsQuery(orgId, filters.branchId)
+        const rows = await (
+            await this.buildScopedResultsQuery(orgId, filters.branchId)
+        )
             .innerJoin('result.test', 'test')
             .leftJoin('result.course', 'course')
             .andWhere('result.calculatedAt >= :start', { start: window.start })
@@ -1950,13 +1995,15 @@ export class AdminInsightsReportsService {
             resultsCount: number;
         }>
     > {
-        const rows = await this.buildScopedResultsQuery(orgId, branchId)
+        const rows = await (
+            await this.buildScopedResultsQuery(orgId, branchId)
+        )
             .innerJoin('result.user', 'user')
             .leftJoin('user.branchId', 'userBranch')
             .andWhere('result.calculatedAt >= :start', { start })
             .andWhere('result.calculatedAt < :end', { end })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('user.id', 'userId')
             .addSelect('user.firstName', 'firstName')
@@ -1998,8 +2045,9 @@ export class AdminInsightsReportsService {
         branchId: string | undefined,
         window: DateWindow,
     ): Promise<BreakdownResultRow[]> {
-        const query = this.buildScopedResultsQuery(orgId, branchId)
-            .innerJoin('result.user', 'user')
+        const query = (
+            await this.buildScopedResultsQuery(orgId, branchId)
+        ).innerJoin('result.user', 'user')
             .leftJoin('user.branchId', 'userBranch')
             .leftJoin('result.test', 'test')
             .leftJoin('result.course', 'course')
@@ -2008,7 +2056,7 @@ export class AdminInsightsReportsService {
             .andWhere('result.calculatedAt >= :start', { start: window.start })
             .andWhere('result.calculatedAt < :end', { end: window.end })
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('result.resultId', 'resultId')
             .addSelect('result.attemptId', 'attemptId')
@@ -2100,7 +2148,7 @@ export class AdminInsightsReportsService {
                 { start: window.start, end: window.end },
             )
             .andWhere('user.role IN (:...learnerRoles)', {
-                learnerRoles: LEARNER_USER_ROLES,
+                learnerRoles: REPORT_LEARNER_ROLES,
             })
             .select('attempt.attemptId', 'attemptId')
             .addSelect('attempt.attemptNumber', 'attemptNumber')
@@ -2122,6 +2170,8 @@ export class AdminInsightsReportsService {
                 .leftJoin('attempt.branchId', 'filterBranch')
                 .andWhere('filterBranch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
 
         const rows = await query.getRawMany<{
             attemptId: number | string;
@@ -2443,10 +2493,10 @@ export class AdminInsightsReportsService {
         return date.getTime();
     }
 
-    private buildScopedResultsQuery(
+    private async buildScopedResultsQuery(
         orgId: string,
         branchId?: string,
-    ): SelectQueryBuilder<Result> {
+    ): Promise<SelectQueryBuilder<Result>> {
         const query = this.resultRepository
             .createQueryBuilder('result')
             .leftJoin('result.orgId', 'org')
@@ -2457,6 +2507,12 @@ export class AdminInsightsReportsService {
                 .leftJoin('result.branchId', 'filterBranch')
                 .andWhere('filterBranch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(
+            query,
+            'result.userId',
+            orgId,
+        );
 
         return query;
     }

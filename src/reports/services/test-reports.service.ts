@@ -18,6 +18,7 @@ import {
     TestQualityDto,
     GlobalTestStatsDto,
 } from '../dto/test-analytics.dto';
+import { ReportAudienceService } from './report-audience.service';
 
 @Injectable()
 export class TestReportsService {
@@ -34,10 +35,11 @@ export class TestReportsService {
         private answerRepository: Repository<Answer>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getTestAnalytics(testId: number): Promise<TestAnalyticsResponseDto> {
-        const cacheKey = `test_analytics_${testId}`;
+        const cacheKey = `test_analytics_audience_v1_${testId}`;
 
         // Try to get from cache first
         const cachedData =
@@ -53,17 +55,19 @@ export class TestReportsService {
         // Verify test exists
         const test = await this.testRepository.findOne({
             where: { testId },
+            relations: { orgId: true },
         });
 
         if (!test) {
             throw new Error(`Test with ID ${testId} not found`);
         }
 
-        // Generate fresh analytics data
+        const reportOrgId = test.orgId?.id ?? null;
+
         const [stats, performance, quality] = await Promise.all([
-            this.getTestStats(testId),
-            this.getTestPerformance(testId, test),
-            this.getTestQuality(testId),
+            this.getTestStats(testId, reportOrgId),
+            this.getTestPerformance(testId, test, reportOrgId),
+            this.getTestQuality(testId, reportOrgId),
         ]);
 
         const analyticsData: TestAnalyticsResponseDto = {
@@ -80,23 +84,39 @@ export class TestReportsService {
         return analyticsData;
     }
 
-    private async getTestStats(testId: number): Promise<TestStatsDto> {
-        // Get total attempts
-        const totalAttempts = await this.testAttemptRepository.count({
-            where: { testId },
-        });
+    private async getTestStats(
+        testId: number,
+        reportOrgId: string | null,
+    ): Promise<TestStatsDto> {
+        const totalAttemptsQuery = this.testAttemptRepository
+            .createQueryBuilder('ta')
+            .where('ta.testId = :testId', { testId });
+        await this.reportAudienceService.omitFromQuery(
+            totalAttemptsQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const totalAttempts = await totalAttemptsQuery.getCount();
 
-        // Get completed attempts
-        const completedAttempts = await this.testAttemptRepository.count({
-            where: { testId, status: AttemptStatus.SUBMITTED },
-        });
+        const completedAttemptsQuery = this.testAttemptRepository
+            .createQueryBuilder('ta')
+            .where('ta.testId = :testId', { testId })
+            .andWhere('ta.status = :status', {
+                status: AttemptStatus.SUBMITTED,
+            });
+        await this.reportAudienceService.omitFromQuery(
+            completedAttemptsQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const completedAttempts = await completedAttemptsQuery.getCount();
 
         // Calculate completion rate
         const completionRate =
             totalAttempts > 0 ? (completedAttempts / totalAttempts) * 100 : 0;
 
         // Calculate average duration
-        const durationResult = await this.testAttemptRepository
+        const durationQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
@@ -106,35 +126,49 @@ export class TestReportsService {
             .select(
                 'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
-            )
-            .getRawOne();
+            );
+        await this.reportAudienceService.omitFromQuery(
+            durationQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const durationResult = await durationQuery.getRawOne();
 
         const averageDurationMinutes =
             Number(durationResult?.avgSeconds || 0) / 60;
 
-        // Get average score
-        const avgScoreResult = await this.resultRepository
+        const avgScoreQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
             })
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            avgScoreQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const avgScoreResult = await avgScoreQuery.getRawOne();
 
         const averageScore = Number(avgScoreResult?.avgScore || 0);
 
         // Calculate pass rate from stored Result.passed (set at 80% pass mark)
-        const passedResults = await this.resultRepository
+        const passedResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
             })
-            .andWhere('r.passed = true')
-            .getCount();
+            .andWhere('r.passed = true');
+        await this.reportAudienceService.omitFromQuery(
+            passedResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const passedResults = await passedResultsQuery.getCount();
 
         const passRate =
             completedAttempts > 0
@@ -142,13 +176,18 @@ export class TestReportsService {
                 : 0;
 
         // Calculate average attempts per user
-        const attemptsPerUser = await this.testAttemptRepository
+        const attemptsPerUserQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.testId = :testId', { testId })
             .select('ta.userId')
             .addSelect('COUNT(*)', 'attemptCount')
-            .groupBy('ta.userId')
-            .getRawMany();
+            .groupBy('ta.userId');
+        await this.reportAudienceService.omitFromQuery(
+            attemptsPerUserQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const attemptsPerUser = await attemptsPerUserQuery.getRawMany();
 
         const averageAttemptsPerUser =
             attemptsPerUser.length > 0
@@ -159,15 +198,23 @@ export class TestReportsService {
                 : 0;
 
         // Calculate first attempt success rate
-        const firstAttempts = await this.testAttemptRepository.count({
-            where: {
-                testId,
+        const firstAttemptsQuery = this.testAttemptRepository
+            .createQueryBuilder('ta')
+            .where('ta.testId = :testId', { testId })
+            .andWhere('ta.attemptNumber = :attemptNumber', {
                 attemptNumber: 1,
+            })
+            .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
-            },
-        });
+            });
+        await this.reportAudienceService.omitFromQuery(
+            firstAttemptsQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const firstAttempts = await firstAttemptsQuery.getCount();
 
-        const firstAttemptSuccesses = await this.testAttemptRepository
+        const firstAttemptSuccessesQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .innerJoin('ta.results', 'r')
             .where('ta.testId = :testId', { testId })
@@ -175,8 +222,14 @@ export class TestReportsService {
             .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
             })
-            .andWhere('r.passed = true')
-            .getCount();
+            .andWhere('r.passed = true');
+        await this.reportAudienceService.omitFromQuery(
+            firstAttemptSuccessesQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const firstAttemptSuccesses =
+            await firstAttemptSuccessesQuery.getCount();
 
         const firstAttemptSuccessRate =
             firstAttempts > 0
@@ -201,9 +254,9 @@ export class TestReportsService {
     private async getTestPerformance(
         testId: number,
         test: Test,
+        reportOrgId: string | null,
     ): Promise<TestPerformanceDto> {
-        // Get score statistics
-        const scoreStats = await this.resultRepository
+        const scoreStatsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .where('ta.testId = :testId', { testId })
@@ -212,15 +265,20 @@ export class TestReportsService {
             })
             .select('MAX(r.score)', 'highestScore')
             .addSelect('MIN(r.score)', 'lowestScore')
-            .addSelect('STDDEV(r.score)', 'scoreStdDev')
-            .getRawOne();
+            .addSelect('STDDEV(r.score)', 'scoreStdDev');
+        await this.reportAudienceService.omitFromQuery(
+            scoreStatsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const scoreStats = await scoreStatsQuery.getRawOne();
 
         const highestScore = Number(scoreStats?.highestScore || 0);
         const lowestScore = Number(scoreStats?.lowestScore || 0);
         const scoreStandardDeviation = Number(scoreStats?.scoreStdDev || 0);
 
         // Find most challenging and easiest questions
-        const questionStats = await this.answerRepository
+        const questionStatsQuery = this.answerRepository
             .createQueryBuilder('a')
             .innerJoin('a.question', 'q')
             .innerJoin('a.attempt', 'ta')
@@ -236,8 +294,13 @@ export class TestReportsService {
                 'correctAnswers',
             )
             .groupBy('q.questionId, q.text')
-            .having('COUNT(*) > 0')
-            .getRawMany();
+            .having('COUNT(*) > 0');
+        await this.reportAudienceService.omitFromQuery(
+            questionStatsQuery,
+            'a.userId',
+            reportOrgId,
+        );
+        const questionStats = await questionStatsQuery.getRawMany();
 
         let mostChallengingQuestion = undefined;
         let easiestQuestion = undefined;
@@ -260,7 +323,7 @@ export class TestReportsService {
         }
 
         // Calculate average time per question
-        const avgTimeResult = await this.testAttemptRepository
+        const avgTimeQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
@@ -270,8 +333,13 @@ export class TestReportsService {
             .select(
                 'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
-            )
-            .getRawOne();
+            );
+        await this.reportAudienceService.omitFromQuery(
+            avgTimeQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const avgTimeResult = await avgTimeQuery.getRawOne();
 
         // Get question count for this test
         const questionCount = await this.questionRepository.count({
@@ -298,31 +366,43 @@ export class TestReportsService {
         };
     }
 
-    private async getTestQuality(testId: number): Promise<TestQualityDto> {
-        // Calculate difficulty score (inverse of average score)
-        const avgScoreResult = await this.resultRepository
+    private async getTestQuality(
+        testId: number,
+        reportOrgId: string | null,
+    ): Promise<TestQualityDto> {
+        const avgScoreQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
             })
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            avgScoreQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const avgScoreResult = await avgScoreQuery.getRawOne();
 
         const avgScore = Number(avgScoreResult?.avgScore || 50);
         const difficultyScore = 100 - avgScore; // Inverse relationship
 
         // Calculate reliability coefficient (simplified Cronbach's alpha estimation)
-        const results = await this.resultRepository
+        const resultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
                 status: AttemptStatus.SUBMITTED,
             })
-            .select(['r.score'])
-            .getMany();
+            .select(['r.score']);
+        await this.reportAudienceService.omitFromQuery(
+            resultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const results = await resultsQuery.getMany();
 
         let reliabilityCoefficient = 0.5; // Default moderate reliability
         if (results.length > 1) {
@@ -342,7 +422,7 @@ export class TestReportsService {
         const discriminationIndex = reliabilityCoefficient; // Simplified
 
         // Calculate effective questions percentage
-        const questionStats = await this.answerRepository
+        const questionStatsQuery = this.answerRepository
             .createQueryBuilder('a')
             .innerJoin('a.question', 'q')
             .innerJoin('a.attempt', 'ta')
@@ -357,8 +437,13 @@ export class TestReportsService {
                 'correctAnswers',
             )
             .groupBy('q.questionId')
-            .having('COUNT(*) > 0')
-            .getRawMany();
+            .having('COUNT(*) > 0');
+        await this.reportAudienceService.omitFromQuery(
+            questionStatsQuery,
+            'a.userId',
+            reportOrgId,
+        );
+        const questionStats = await questionStatsQuery.getRawMany();
 
         const effectiveQuestions = questionStats.filter(q => {
             const successRate =
@@ -372,7 +457,7 @@ export class TestReportsService {
                 : 0;
 
         // Calculate optimal duration
-        const avgDurationResult = await this.testAttemptRepository
+        const avgDurationQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
@@ -382,15 +467,20 @@ export class TestReportsService {
             .select(
                 'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
-            )
-            .getRawOne();
+            );
+        await this.reportAudienceService.omitFromQuery(
+            avgDurationQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const avgDurationResult = await avgDurationQuery.getRawOne();
 
         const optimalDurationMinutes = Math.round(
             Number(avgDurationResult?.avgSeconds || 3600) / 60,
         ); // Default 1 hour
 
         // Determine time pressure factor
-        const completionTimes = await this.testAttemptRepository
+        const completionTimesQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.testId = :testId', { testId })
             .andWhere('ta.status = :status', {
@@ -400,8 +490,13 @@ export class TestReportsService {
             .select(
                 'TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime)',
                 'duration',
-            )
-            .getRawMany();
+            );
+        await this.reportAudienceService.omitFromQuery(
+            completionTimesQuery,
+            'ta.userId',
+            reportOrgId,
+        );
+        const completionTimes = await completionTimesQuery.getRawMany();
 
         let timePressureFactor = 'moderate';
         if (completionTimes.length > 0) {

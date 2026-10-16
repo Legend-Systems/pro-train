@@ -18,6 +18,7 @@ import {
     GlobalUserStatsDto,
 } from '../dto/user-analytics.dto';
 import { TrainingHoursService } from '../../training-hours/training-hours.service';
+import { ReportAudienceService } from './report-audience.service';
 
 @Injectable()
 export class UserReportsService {
@@ -33,6 +34,7 @@ export class UserReportsService {
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
         private readonly trainingHoursService: TrainingHoursService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getUserAnalytics(userId: string): Promise<UserAnalyticsResponseDto> {
@@ -476,7 +478,7 @@ export class UserReportsService {
     }
 
     async getGlobalUserStats(): Promise<GlobalUserStatsDto> {
-        const cacheKey = 'global_user_stats';
+        const cacheKey = 'global_user_stats_audience_v1';
 
         const cachedData =
             await this.cacheManager.get<GlobalUserStatsDto>(cacheKey);
@@ -489,49 +491,76 @@ export class UserReportsService {
         const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-        // Total users
-        const totalUsers = await this.userRepository.count();
+        const totalUsersQuery = this.userRepository.createQueryBuilder('user');
+        await this.reportAudienceService.omitFromQuery(
+            totalUsersQuery,
+            'user.id',
+            null,
+        );
+        const totalUsers = await totalUsersQuery.getCount();
 
-        // Daily active users (users with test attempts in last 24 hours)
-        const dailyActiveUsers = await this.testAttemptRepository
+        const dailyActiveQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.createdAt >= :oneDayAgo', { oneDayAgo })
-            .select('COUNT(DISTINCT ta.userId)', 'count')
+            .select('COUNT(DISTINCT ta.userId)', 'count');
+        await this.reportAudienceService.omitFromQuery(
+            dailyActiveQuery,
+            'ta.userId',
+            null,
+        );
+        const dailyActiveUsers = await dailyActiveQuery
             .getRawOne()
             .then(result => parseInt(result.count) || 0);
 
-        // Weekly active users
-        const weeklyActiveUsers = await this.testAttemptRepository
+        const weeklyActiveQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.createdAt >= :oneWeekAgo', { oneWeekAgo })
-            .select('COUNT(DISTINCT ta.userId)', 'count')
+            .select('COUNT(DISTINCT ta.userId)', 'count');
+        await this.reportAudienceService.omitFromQuery(
+            weeklyActiveQuery,
+            'ta.userId',
+            null,
+        );
+        const weeklyActiveUsers = await weeklyActiveQuery
             .getRawOne()
             .then(result => parseInt(result.count) || 0);
 
-        // Monthly active users
-        const monthlyActiveUsers = await this.testAttemptRepository
+        const monthlyActiveQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.createdAt >= :oneMonthAgo', { oneMonthAgo })
-            .select('COUNT(DISTINCT ta.userId)', 'count')
+            .select('COUNT(DISTINCT ta.userId)', 'count');
+        await this.reportAudienceService.omitFromQuery(
+            monthlyActiveQuery,
+            'ta.userId',
+            null,
+        );
+        const monthlyActiveUsers = await monthlyActiveQuery
             .getRawOne()
             .then(result => parseInt(result.count) || 0);
 
-        // New users this week
-        const newUsersThisWeek = await this.userRepository.count({
-            where: {
-                createdAt: oneWeekAgo,
-            },
-        });
+        const newUsersQuery = this.userRepository
+            .createQueryBuilder('user')
+            .where('user.createdAt = :oneWeekAgo', { oneWeekAgo });
+        await this.reportAudienceService.omitFromQuery(
+            newUsersQuery,
+            'user.id',
+            null,
+        );
+        const newUsersThisWeek = await newUsersQuery.getCount();
 
-        // Average session duration
-        const avgSessionResult = await this.testAttemptRepository
+        const avgSessionQuery = this.testAttemptRepository
             .createQueryBuilder('ta')
             .where('ta.submitTime IS NOT NULL')
             .select(
                 'AVG(TIMESTAMPDIFF(SECOND, ta.startTime, ta.submitTime))',
                 'avgSeconds',
-            )
-            .getRawOne();
+            );
+        await this.reportAudienceService.omitFromQuery(
+            avgSessionQuery,
+            'ta.userId',
+            null,
+        );
+        const avgSessionResult = await avgSessionQuery.getRawOne();
 
         const averageSessionDuration = (avgSessionResult?.avgSeconds || 0) / 60; // Convert to minutes
 
@@ -557,7 +586,7 @@ export class UserReportsService {
     }
 
     async getUserRegistrationTrends(): Promise<any> {
-        const cacheKey = 'user_registration_trends';
+        const cacheKey = 'user_registration_trends_audience_v1';
 
         const cachedData = await this.cacheManager.get(cacheKey);
         if (cachedData) {
@@ -568,14 +597,19 @@ export class UserReportsService {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const registrationData = await this.userRepository
+        const registrationQuery = this.userRepository
             .createQueryBuilder('u')
             .where('u.createdAt >= :thirtyDaysAgo', { thirtyDaysAgo })
             .select('DATE(u.createdAt)', 'date')
             .addSelect('COUNT(*)', 'newRegistrations')
             .groupBy('DATE(u.createdAt)')
-            .orderBy('date', 'ASC')
-            .getRawMany();
+            .orderBy('date', 'ASC');
+        await this.reportAudienceService.omitFromQuery(
+            registrationQuery,
+            'u.id',
+            null,
+        );
+        const registrationData = await registrationQuery.getRawMany();
 
         // Cache for 1 hour
         await this.cacheManager.set(cacheKey, registrationData, 3600);

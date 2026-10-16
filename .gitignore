@@ -46,6 +46,10 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Local copies of production data — never commit
+scripts/db/dumps/*
+!scripts/db/dumps/.gitignore
+
 # Runtime data
 pids
 *.pid

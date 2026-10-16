@@ -8,6 +8,7 @@ import { TestAttempt } from '../../test_attempts/entities/test_attempt.entity';
 import { Test } from '../../test/entities/test.entity';
 import { Course } from '../../course/entities/course.entity';
 import { Branch } from '../../branch/entities/branch.entity';
+import { ReportAudienceService } from './report-audience.service';
 import {
     ResultsAnalyticsReportDto,
     ResultsStatsReportDto,
@@ -34,6 +35,7 @@ export class ResultsReportsService {
         private courseRepository: Repository<Course>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getResultsAnalytics(
@@ -76,7 +78,7 @@ export class ResultsReportsService {
     async getCourseResultsAnalytics(
         courseId: number,
     ): Promise<ResultsAnalyticsReportDto> {
-        const cacheKey = `course_results_${courseId}`;
+        const cacheKey = `course_results_audience_v1_${courseId}`;
 
         // Try to get from cache first
         const cachedData =
@@ -92,17 +94,20 @@ export class ResultsReportsService {
         // Verify course exists
         const course = await this.courseRepository.findOne({
             where: { courseId },
+            relations: { orgId: true },
         });
 
         if (!course) {
             throw new Error(`Course with ID ${courseId} not found`);
         }
 
+        const reportOrgId = course.orgId?.id ?? null;
+
         // Generate fresh analytics data for course
         const [stats, performance, quality] = await Promise.all([
-            this.getCourseResultsStats(courseId),
-            this.getCourseResultsPerformance(courseId),
-            this.getCourseResultsQuality(courseId),
+            this.getCourseResultsStats(courseId, reportOrgId),
+            this.getCourseResultsPerformance(courseId, reportOrgId),
+            this.getCourseResultsQuality(courseId, reportOrgId),
         ]);
 
         const analyticsData: ResultsAnalyticsReportDto = {
@@ -120,7 +125,7 @@ export class ResultsReportsService {
     }
 
     async getGlobalResultsStats(): Promise<GlobalResultsStatsReportDto> {
-        const cacheKey = 'global_results_stats';
+        const cacheKey = 'global_results_stats_audience_v1';
 
         // Try to get from cache first
         const cachedData =
@@ -133,20 +138,34 @@ export class ResultsReportsService {
             };
         }
 
-        // Total results
-        const totalResults = await this.resultRepository.count();
+        const totalResultsQuery = this.resultRepository.createQueryBuilder('r');
+        await this.reportAudienceService.omitFromQuery(
+            totalResultsQuery,
+            'r.userId',
+            null,
+        );
+        const totalResults = await totalResultsQuery.getCount();
 
-        // Passed vs Failed
-        const passedResults = await this.resultRepository.count({
-            where: { passed: true },
-        });
+        const passedResultsQuery = this.resultRepository
+            .createQueryBuilder('r')
+            .where('r.passed = :passed', { passed: true });
+        await this.reportAudienceService.omitFromQuery(
+            passedResultsQuery,
+            'r.userId',
+            null,
+        );
+        const passedResults = await passedResultsQuery.getCount();
         const failedResults = totalResults - passedResults;
 
-        // Overall average score
-        const avgScoreResult = await this.resultRepository
+        const avgScoreQuery = this.resultRepository
             .createQueryBuilder('r')
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            avgScoreQuery,
+            'r.userId',
+            null,
+        );
+        const avgScoreResult = await avgScoreQuery.getRawOne();
 
         const overallAverageScore = Number(avgScoreResult?.avgScore || 0);
 
@@ -157,14 +176,18 @@ export class ResultsReportsService {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        const recentResults = await this.resultRepository
+        const recentResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
-            .where('ta.submitTime >= :thirtyDaysAgo', { thirtyDaysAgo })
-            .getCount();
+            .where('ta.submitTime >= :thirtyDaysAgo', { thirtyDaysAgo });
+        await this.reportAudienceService.omitFromQuery(
+            recentResultsQuery,
+            'r.userId',
+            null,
+        );
+        const recentResults = await recentResultsQuery.getCount();
 
-        // Top performing courses (by average score)
-        const topCourses = await this.resultRepository
+        const topCoursesQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
@@ -174,10 +197,15 @@ export class ResultsReportsService {
             .addSelect('AVG(r.score)', 'averageScore')
             .addSelect('COUNT(r.resultId)', 'totalResults')
             .groupBy('c.courseId, c.title')
-            .having('COUNT(r.resultId) >= 10') // Only courses with at least 10 results
+            .having('COUNT(r.resultId) >= 10')
             .orderBy('AVG(r.score)', 'DESC')
-            .limit(5)
-            .getRawMany();
+            .limit(5);
+        await this.reportAudienceService.omitFromQuery(
+            topCoursesQuery,
+            'r.userId',
+            null,
+        );
+        const topCourses = await topCoursesQuery.getRawMany();
 
         const statsData: GlobalResultsStatsReportDto = {
             totalResults,
@@ -209,7 +237,7 @@ export class ResultsReportsService {
         userId?: string,
         courseId?: number,
     ): Promise<PerformanceTrendReportDto[]> {
-        const cacheKey = `performance_trends_${userId || 'global'}_${courseId || 'all'}`;
+        const cacheKey = `performance_trends_audience_v1_${userId || 'global'}_${courseId || 'all'}`;
 
         // Try to get from cache first
         const cachedData =
@@ -235,6 +263,14 @@ export class ResultsReportsService {
             query = query
                 .innerJoin('ta.test', 't')
                 .andWhere('t.courseId = :courseId', { courseId });
+        }
+
+        if (!userId) {
+            await this.reportAudienceService.omitFromQuery(
+                query,
+                'r.userId',
+                null,
+            );
         }
 
         const trends = await query
@@ -291,7 +327,7 @@ export class ResultsReportsService {
         } = filters;
 
         // Build cache key based on all filters
-        const cacheKey = `enhanced_trends_v2_${JSON.stringify(filters)}`;
+        const cacheKey = `enhanced_trends_excl_v1_${JSON.stringify(filters)}`;
         
         // Try to get from cache first
         const cachedData = await this.cacheManager.get<EnhancedPerformanceTrendReportDto[]>(cacheKey);
@@ -395,6 +431,14 @@ export class ResultsReportsService {
 
         query = query.orderBy(orderByFormat, 'ASC');
 
+        if (!userId) {
+            await this.reportAudienceService.omitFromQuery(
+                query,
+                'r.userId',
+                null,
+            );
+        }
+
         const rawResults = await query.getRawMany();
 
         // Process and calculate metrics
@@ -475,7 +519,7 @@ export class ResultsReportsService {
     async getBranchPerformanceComparison(
         filters: Omit<TrendFilterDto, 'branchId'>
     ): Promise<BranchPerformanceComparisonDto> {
-        const cacheKey = `branch_comparison_trends_${JSON.stringify(filters)}`;
+        const cacheKey = `branch_comparison_trends_excl_v1_${JSON.stringify(filters)}`;
         
         // Try to get from cache first
         const cachedData = await this.cacheManager.get<BranchPerformanceComparisonDto>(cacheKey);
@@ -589,59 +633,80 @@ export class ResultsReportsService {
 
     private async getCourseResultsStats(
         courseId: number,
+        reportOrgId: string | null,
     ): Promise<ResultsStatsReportDto> {
-        // Total results for course
-        const totalResults = await this.resultRepository
+        const totalResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
-            .where('t.courseId = :courseId', { courseId })
-            .getCount();
+            .where('t.courseId = :courseId', { courseId });
+        await this.reportAudienceService.omitFromQuery(
+            totalResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const totalResults = await totalResultsQuery.getCount();
 
-        // Passed vs Failed
-        const passedResults = await this.resultRepository
+        const passedResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .andWhere('r.passed = true')
-            .getCount();
+            .andWhere('r.passed = true');
+        await this.reportAudienceService.omitFromQuery(
+            passedResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const passedResults = await passedResultsQuery.getCount();
 
         const failedResults = totalResults - passedResults;
 
-        // Average score
-        const avgScoreResult = await this.resultRepository
+        const avgScoreQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            avgScoreQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const avgScoreResult = await avgScoreQuery.getRawOne();
 
         const averageScore = Number(avgScoreResult?.avgScore || 0);
 
-        // Best score
-        const bestScoreResult = await this.resultRepository
+        const bestScoreQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .select('MAX(r.score)', 'bestScore')
-            .getRawOne();
+            .select('MAX(r.score)', 'bestScore');
+        await this.reportAudienceService.omitFromQuery(
+            bestScoreQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const bestScoreResult = await bestScoreQuery.getRawOne();
 
         const bestScore = Number(bestScoreResult?.bestScore || 0);
 
-        // Recent results (last 7 days)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const recentResults = await this.resultRepository
+        const recentResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
-            .andWhere('ta.submitTime >= :sevenDaysAgo', { sevenDaysAgo })
-            .getCount();
+            .andWhere('ta.submitTime >= :sevenDaysAgo', { sevenDaysAgo });
+        await this.reportAudienceService.omitFromQuery(
+            recentResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const recentResults = await recentResultsQuery.getCount();
 
         return {
             totalResults,
@@ -739,9 +804,9 @@ export class ResultsReportsService {
 
     private async getCourseResultsPerformance(
         courseId: number,
+        reportOrgId: string | null,
     ): Promise<ResultsPerformanceReportDto> {
-        // Score trends over time for course
-        const scoreHistory = await this.resultRepository
+        const scoreHistoryQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
@@ -750,11 +815,15 @@ export class ResultsReportsService {
             .addSelect('AVG(r.score)', 'averageScore')
             .groupBy('DATE(ta.submitTime)')
             .orderBy('DATE(ta.submitTime)', 'ASC')
-            .limit(30) // Last 30 data points
-            .getRawMany();
+            .limit(30);
+        await this.reportAudienceService.omitFromQuery(
+            scoreHistoryQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const scoreHistory = await scoreHistoryQuery.getRawMany();
 
-        // Test performance within course
-        const testPerformance = await this.resultRepository
+        const testPerformanceQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
@@ -767,29 +836,43 @@ export class ResultsReportsService {
                 'passedAttempts',
             )
             .groupBy('t.testId, t.title')
-            .orderBy('AVG(r.score)', 'DESC')
-            .getRawMany();
+            .orderBy('AVG(r.score)', 'DESC');
+        await this.reportAudienceService.omitFromQuery(
+            testPerformanceQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const testPerformance = await testPerformanceQuery.getRawMany();
 
-        // Overall course improvement over time
-        const firstResults = await this.resultRepository
+        const firstResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
             .orderBy('ta.submitTime', 'ASC')
             .limit(100)
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            firstResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const firstResults = await firstResultsQuery.getRawOne();
 
-        const lastResults = await this.resultRepository
+        const lastResultsQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
             .orderBy('ta.submitTime', 'DESC')
             .limit(100)
-            .select('AVG(r.score)', 'avgScore')
-            .getRawOne();
+            .select('AVG(r.score)', 'avgScore');
+        await this.reportAudienceService.omitFromQuery(
+            lastResultsQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const lastResults = await lastResultsQuery.getRawOne();
 
         const improvement =
             firstResults && lastResults
@@ -869,16 +952,21 @@ export class ResultsReportsService {
 
     private async getCourseResultsQuality(
         courseId: number,
+        reportOrgId: string | null,
     ): Promise<ResultsQualityReportDto> {
-        // Score consistency analysis for course
-        const scores = await this.resultRepository
+        const scoresQuery = this.resultRepository
             .createQueryBuilder('r')
             .innerJoin('r.attempt', 'ta')
             .innerJoin('ta.test', 't')
             .where('t.courseId = :courseId', { courseId })
             .select('r.score')
-            .orderBy('ta.submitTime', 'ASC')
-            .getMany();
+            .orderBy('ta.submitTime', 'ASC');
+        await this.reportAudienceService.omitFromQuery(
+            scoresQuery,
+            'r.userId',
+            reportOrgId,
+        );
+        const scores = await scoresQuery.getMany();
 
         const scoreValues = scores.map(s => s.score);
         if (scoreValues.length === 0) {
@@ -922,7 +1010,7 @@ export class ResultsReportsService {
     }
 
     private async getGlobalScoreDistribution(): Promise<ScoreDistributionReportDto> {
-        const distribution = await this.resultRepository
+        const distributionQuery = this.resultRepository
             .createQueryBuilder('r')
             .select([
                 'COUNT(CASE WHEN r.score >= 90 THEN 1 END) as a_grade',
@@ -930,8 +1018,13 @@ export class ResultsReportsService {
                 'COUNT(CASE WHEN r.score >= 70 AND r.score < 80 THEN 1 END) as c_grade',
                 'COUNT(CASE WHEN r.score >= 60 AND r.score < 70 THEN 1 END) as d_grade',
                 'COUNT(CASE WHEN r.score < 60 THEN 1 END) as f_grade',
-            ])
-            .getRawOne();
+            ]);
+        await this.reportAudienceService.omitFromQuery(
+            distributionQuery,
+            'r.userId',
+            null,
+        );
+        const distribution = await distributionQuery.getRawOne();
 
         return {
             aGrade: Number(distribution.a_grade),

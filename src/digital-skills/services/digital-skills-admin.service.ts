@@ -29,6 +29,7 @@ import {
     classifyDigitalSkillsScore,
     isWeakDigitalSkillLevel,
 } from '../utils/digital-skills-score.util';
+import { ReportAudienceService } from '../../reports/services/report-audience.service';
 import { DigitalSkillsPlanService } from './digital-skills-plan.service';
 
 const MAX_EVALUATED_LEARNERS = 1000;
@@ -61,6 +62,7 @@ export class DigitalSkillsAdminService {
         @InjectRepository(Answer)
         private readonly answerRepository: Repository<Answer>,
         private readonly planService: DigitalSkillsPlanService,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     /** Builds the Digital Skills admin report for the caller’s organisation. */
@@ -411,6 +413,8 @@ export class DigitalSkillsAdminService {
         if (branchId) {
             query.andWhere('branch.id = :branchId', { branchId });
         }
+
+        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
 
         const rows = await query.getRawMany<{
             userId: string;

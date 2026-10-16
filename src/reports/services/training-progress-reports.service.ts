@@ -18,6 +18,7 @@ import {
     SkillDevelopmentReportDto,
     ProgressMilestoneReportDto,
 } from '../dto/training-progress-analytics.dto';
+import { ReportAudienceService } from './report-audience.service';
 
 @Injectable()
 export class TrainingProgressReportsService {
@@ -36,6 +37,7 @@ export class TrainingProgressReportsService {
         private testRepository: Repository<Test>,
         @Inject(CACHE_MANAGER)
         private cacheManager: Cache,
+        private readonly reportAudienceService: ReportAudienceService,
     ) {}
 
     async getTrainingProgressAnalytics(
@@ -77,7 +79,7 @@ export class TrainingProgressReportsService {
     }
 
     async getGlobalTrainingProgressStats(): Promise<GlobalTrainingProgressStatsReportDto> {
-        const cacheKey = 'global_training_progress_stats';
+        const cacheKey = 'global_training_progress_stats_excl_v1';
 
         // Try to get from cache first
         const cachedData =
@@ -92,15 +94,24 @@ export class TrainingProgressReportsService {
             };
         }
 
-        // Total learning paths
-        const totalLearningPaths =
-            await this.trainingProgressRepository.count();
+        const totalPathsQuery =
+            this.trainingProgressRepository.createQueryBuilder('tp');
+        await this.reportAudienceService.omitFromQuery(
+            totalPathsQuery,
+            'tp.userId',
+            null,
+        );
+        const totalLearningPaths = await totalPathsQuery.getCount();
 
-        // Average completion percentage
-        const avgCompletionResult = await this.trainingProgressRepository
+        const avgCompletionQuery = this.trainingProgressRepository
             .createQueryBuilder('tp')
-            .select('AVG(tp.completionPercentage)', 'avgCompletion')
-            .getRawOne();
+            .select('AVG(tp.completionPercentage)', 'avgCompletion');
+        await this.reportAudienceService.omitFromQuery(
+            avgCompletionQuery,
+            'tp.userId',
+            null,
+        );
+        const avgCompletionResult = await avgCompletionQuery.getRawOne();
 
         const averageCompletion = Number(
             avgCompletionResult?.avgCompletion || 0,
@@ -110,14 +121,18 @@ export class TrainingProgressReportsService {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        const activeLearners = await this.trainingProgressRepository
+        const activeLearnersQuery = this.trainingProgressRepository
             .createQueryBuilder('tp')
             .where('tp.lastUpdated >= :sevenDaysAgo', { sevenDaysAgo })
-            .select('COUNT(DISTINCT tp.userId)')
-            .getRawOne();
+            .select('COUNT(DISTINCT tp.userId)', 'count');
+        await this.reportAudienceService.omitFromQuery(
+            activeLearnersQuery,
+            'tp.userId',
+            null,
+        );
+        const activeLearners = await activeLearnersQuery.getRawOne();
 
-        // Completion distribution
-        const completionDistribution = await this.trainingProgressRepository
+        const completionDistributionQuery = this.trainingProgressRepository
             .createQueryBuilder('tp')
             .select([
                 'COUNT(CASE WHEN tp.completionPercentage = 100 THEN 1 END) as completed',
@@ -125,11 +140,16 @@ export class TrainingProgressReportsService {
                 'COUNT(CASE WHEN tp.completionPercentage >= 50 AND tp.completionPercentage < 75 THEN 1 END) as halfway',
                 'COUNT(CASE WHEN tp.completionPercentage >= 25 AND tp.completionPercentage < 50 THEN 1 END) as started',
                 'COUNT(CASE WHEN tp.completionPercentage < 25 THEN 1 END) as just_started',
-            ])
-            .getRawOne();
+            ]);
+        await this.reportAudienceService.omitFromQuery(
+            completionDistributionQuery,
+            'tp.userId',
+            null,
+        );
+        const completionDistribution =
+            await completionDistributionQuery.getRawOne();
 
-        // Most popular learning paths
-        const popularPaths = await this.trainingProgressRepository
+        const popularPathsQuery = this.trainingProgressRepository
             .createQueryBuilder('tp')
             .innerJoin('tp.course', 'c')
             .select('c.courseId', 'courseId')
@@ -138,8 +158,13 @@ export class TrainingProgressReportsService {
             .addSelect('AVG(tp.completionPercentage)', 'averageCompletion')
             .groupBy('c.courseId, c.title')
             .orderBy('COUNT(tp.userId)', 'DESC')
-            .limit(5)
-            .getRawMany();
+            .limit(5);
+        await this.reportAudienceService.omitFromQuery(
+            popularPathsQuery,
+            'tp.userId',
+            null,
+        );
+        const popularPaths = await popularPathsQuery.getRawMany();
 
         // Learning velocity trends
         const velocityTrends = await this.getGlobalLearningVelocity();
@@ -179,7 +204,7 @@ export class TrainingProgressReportsService {
         userId?: string,
         courseId?: number,
     ): Promise<LearningPathCompletionReportDto[]> {
-        const cacheKey = `learning_path_completion_${userId || 'global'}_${courseId || 'all'}`;
+        const cacheKey = `learning_path_completion_excl_v1_${userId || 'global'}_${courseId || 'all'}`;
 
         // Try to get from cache first
         const cachedData =
@@ -202,14 +227,17 @@ export class TrainingProgressReportsService {
             .addSelect('tp.timeSpentMinutes', 'timeSpentMinutes');
 
         if (userId) {
-            query = query.where('tp.userId = :userId', { userId });
+            query = query.andWhere('tp.userId = :userId', { userId });
+        } else {
+            await this.reportAudienceService.omitFromQuery(
+                query,
+                'tp.userId',
+                null,
+            );
         }
 
         if (courseId) {
-            const condition = userId ? 'AND' : 'WHERE';
-            query = query.where(`${condition} tp.courseId = :courseId`, {
-                courseId,
-            });
+            query = query.andWhere('tp.courseId = :courseId', { courseId });
         }
 
         const completions = await query
@@ -464,23 +492,27 @@ export class TrainingProgressReportsService {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        return await this.trainingProgressRepository
+        const query = this.trainingProgressRepository
             .createQueryBuilder('tp')
             .where('tp.lastUpdated >= :thirtyDaysAgo', { thirtyDaysAgo })
             .select('DATE(tp.lastUpdated)', 'date')
             .addSelect('AVG(tp.completionPercentage)', 'averageCompletion')
             .addSelect('COUNT(tp.userId)', 'activeUsers')
             .groupBy('DATE(tp.lastUpdated)')
-            .orderBy('DATE(tp.lastUpdated)', 'ASC')
-            .getRawMany()
-            .then(trends =>
-                trends.map(trend => ({
-                    date: trend.date,
-                    averageCompletion:
-                        Math.round(Number(trend.averageCompletion) * 100) / 100,
-                    activeUsers: Number(trend.activeUsers),
-                })),
-            );
+            .orderBy('DATE(tp.lastUpdated)', 'ASC');
+        await this.reportAudienceService.omitFromQuery(
+            query,
+            'tp.userId',
+            null,
+        );
+        const trends = await query.getRawMany();
+
+        return trends.map(trend => ({
+            date: trend.date,
+            averageCompletion:
+                Math.round(Number(trend.averageCompletion) * 100) / 100,
+            activeUsers: Number(trend.activeUsers),
+        }));
     }
 
     private calculateEstimatedTimeToComplete(
