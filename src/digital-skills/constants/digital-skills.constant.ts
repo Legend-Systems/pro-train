@@ -232,6 +232,13 @@ export function digitalSkillsCheckTitle(skillTitle: string): string {
     return `${DIGITAL_SKILLS_CHECK_TITLE_PREFIX}${skillTitle}`;
 }
 
+/** True when the test is the course-50 baseline survey (31 skill ratings). */
+export function isDigitalSkillsSelfAssessment(
+    title: string | null | undefined,
+): boolean {
+    return title === DIGITAL_SKILLS_TEST_TITLE;
+}
+
 /** True when the test is a Digital Skills follow-up exam, not the survey. */
 export function isDigitalSkillsKnowledgeTest(title: string | null | undefined): boolean {
     return Boolean(title?.startsWith(DIGITAL_SKILLS_CHECK_TITLE_PREFIX));

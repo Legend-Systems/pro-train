@@ -50,8 +50,11 @@ import { RetryService } from '../common/services/retry.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DEFAULT_LOCALE } from '../locale/locale.constants';
 import { MAX_SELECTED_OPTION_IDS } from './dto/submit-test-attempt.dto';
-import { DIGITAL_SKILL_CATALOGUE } from '../digital-skills/constants/digital-skills.constant';
-import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
+import {
+    DIGITAL_SKILL_CATALOGUE,
+    isDigitalSkillsSelfAssessment,
+} from '../digital-skills/constants/digital-skills.constant';
+import { DigitalSkillsPlanService } from '../digital-skills/services/digital-skills-plan.service';
 
 /**
  * Normalizes single- and multi-select option payloads into a unique id list (max 3).
@@ -148,6 +151,8 @@ export class TestAttemptsService {
         private readonly answersService: AnswersService,
         private readonly testService: TestService,
         private readonly eventEmitter: EventEmitter2,
+        /** Personal reschedule windows for Digital Skills remedial checks. */
+        private readonly digitalSkillsPlanService: DigitalSkillsPlanService,
     ) {}
 
     /** Roles allowed to reset learners and to read pre-reset (voided) rows. */
@@ -395,11 +400,18 @@ export class TestAttemptsService {
 
             // Exam window gate (replaces the old single exam-day rule): a new
             // attempt may only begin between examStartDate and examEndDate.
+            // Digital Skills remedial checks may use an admin reschedule window
+            // instead of the shared test window after the learner missed due date.
             if (!mayBypassAvailability) {
-                if (isExamWindowPending(test)) {
+                const examWindow =
+                    (await this.digitalSkillsPlanService.getRescheduledExamWindow(
+                        userId,
+                        test.testId,
+                    )) ?? test;
+                if (isExamWindowPending(examWindow)) {
                     throw new BadRequestException(EXAM_WINDOW_NOT_OPEN_MESSAGE);
                 }
-                if (isExamWindowClosed(test)) {
+                if (isExamWindowClosed(examWindow)) {
                     throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
                 }
             }
@@ -807,21 +819,32 @@ export class TestAttemptsService {
             // Admin testing bypass: elevated roles may also submit attempts
             // they started outside the window (inactive / not-yet-open tests)
             // so verification of questions and scoring can complete.
-            if (attempt.test && isExamWindowClosed(attempt.test)) {
-                const startedWhileWindowOpen = !isExamWindowClosed(
-                    attempt.test,
-                    attempt.startTime,
-                );
+            if (attempt.test) {
+                // Prefer admin reschedule window for remedial checks when set.
+                const examWindow =
+                    (await this.digitalSkillsPlanService.getRescheduledExamWindow(
+                        attempt.userId,
+                        attempt.test.testId,
+                    )) ?? attempt.test;
+                if (isExamWindowClosed(examWindow)) {
+                    const startedWhileWindowOpen = !isExamWindowClosed(
+                        examWindow,
+                        attempt.startTime,
+                    );
 
-                if (
-                    !startedWhileWindowOpen &&
-                    !this.isElevatedRole(scope.userRole)
-                ) {
-                    throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+                    if (
+                        !startedWhileWindowOpen &&
+                        !this.isElevatedRole(scope.userRole)
+                    ) {
+                        throw new BadRequestException(EXAM_WINDOW_CLOSED_MESSAGE);
+                    }
                 }
             }
 
-            if (isDigitalSkillsCourse(attempt.test?.courseId)) {
+            // Only the Digital Skills Self-Assessment requires all 31 ratings.
+            // Remedial "Digital Skills Check: …" exams are short knowledge tests
+            // on the same course and must not use this survey rule.
+            if (isDigitalSkillsSelfAssessment(attempt.test?.title)) {
                 const ratedQuestionIds = new Set(
                     (submitData.answers ?? [])
                         .filter(

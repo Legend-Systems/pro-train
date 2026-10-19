@@ -20,6 +20,8 @@ interface BookRemedialTestsInput {
     readonly orgId: string;
     readonly branchId?: string;
     readonly resultId: number;
+    /** When set (admin reschedule), invitations expire on this date instead of expectedDueDate. */
+    readonly invitationDueDate?: Date;
 }
 
 /**
@@ -41,6 +43,69 @@ export class DigitalSkillsBookingService {
         private readonly userRepository: Repository<User>,
         private readonly communicationsService: CommunicationsService,
     ) {}
+
+    /**
+     * Applies an admin personal exam window after the original due date was missed.
+     * Updates every current assignment, refreshes invitations, and clears the
+     * dismissible booking flag so the learner modal shows the new dates.
+     */
+    async applyAdminReschedule(input: {
+        readonly userId: string;
+        readonly orgId: string;
+        readonly branchId?: string;
+        readonly rescheduledStartDate: Date;
+        readonly rescheduledExamEndDate: Date;
+    }): Promise<DigitalSkillsAssignment[]> {
+        const assignments = await this.assignmentRepository.find({
+            where: { userId: input.userId },
+            order: { skillGroup: 'ASC', skillTitle: 'ASC' },
+        });
+        if (assignments.length === 0) {
+            return [];
+        }
+
+        for (const assignment of assignments) {
+            assignment.rescheduledStartDate = input.rescheduledStartDate;
+            assignment.rescheduledExamEndDate = input.rescheduledExamEndDate;
+            // Force the booking modal / email path to treat this as a new booking.
+            assignment.bookingNotifiedAt = null;
+            // Keep expectedDueDate as the original miss marker; personal window is reschedule cols.
+            if (!assignment.expectedDueDate) {
+                assignment.expectedDueDate = input.rescheduledExamEndDate;
+            }
+        }
+        await this.assignmentRepository.save(assignments);
+
+        await this.syncInvitations(assignments, {
+            userId: input.userId,
+            orgId: input.orgId,
+            branchId: input.branchId,
+            resultId: assignments[0]?.assignedFromResultId ?? 0,
+            // Invitations expire at the end of the admin-opened window.
+            invitationDueDate: input.rescheduledExamEndDate,
+        });
+
+        try {
+            await this.sendBookingEmail(
+                input.userId,
+                input.orgId,
+                assignments,
+                input.rescheduledExamEndDate,
+            );
+            const notifiedAt = new Date();
+            for (const assignment of assignments) {
+                assignment.bookingNotifiedAt = notifiedAt;
+            }
+            await this.assignmentRepository.save(assignments);
+        } catch (error) {
+            this.logger.error(
+                `Digital Skills reschedule email failed for ${input.userId}`,
+                error instanceof Error ? error.stack : String(error),
+            );
+        }
+
+        return assignments;
+    }
 
     /** Schedules every current weak-skill row and notifies the learner once. */
     async bookRemedialTests(input: BookRemedialTestsInput): Promise<void> {
@@ -115,13 +180,18 @@ export class DigitalSkillsBookingService {
                 continue;
             }
             try {
-                if (!assignment.expectedDueDate) {
+                // Admin reschedule overrides the invitation expiry; otherwise use expectedDueDate.
+                const dueDate =
+                    input.invitationDueDate ??
+                    assignment.rescheduledExamEndDate ??
+                    assignment.expectedDueDate;
+                if (!dueDate) {
                     continue;
                 }
                 await this.upsertInvitation(
                     assignment.testId,
                     input,
-                    assignment.expectedDueDate,
+                    dueDate,
                     assignment.skillTitle,
                 );
             } catch (error) {

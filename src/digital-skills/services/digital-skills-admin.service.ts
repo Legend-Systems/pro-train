@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+    BadRequestException,
+    Injectable,
+    Logger,
+    NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
@@ -7,6 +12,7 @@ import { Result } from '../../results/entities/result.entity';
 import { Test } from '../../test/entities/test.entity';
 import { Answer } from '../../answers/entities/answer.entity';
 import { QuestionOption } from '../../questions_options/entities/questions_option.entity';
+import { getUtcDayBounds, toNullableDate } from '../../test/utils/exam-window.util';
 import {
     LEARNER_USER_ROLES,
     User,
@@ -23,14 +29,17 @@ import {
     AdminDigitalSkillsReportDto,
     AdminDigitalSkillsUserDto,
 } from '../dto/admin-digital-skills-report.dto';
+import { RescheduleDigitalSkillsDto } from '../dto/reschedule-digital-skills.dto';
+import { DigitalSkillsPlanItemDto } from '../dto/digital-skills-plan.dto';
 import {
     calculateDigitalSkillsScore,
     calculateDigitalSkillsScoreRaw,
     classifyDigitalSkillsScore,
     isWeakDigitalSkillLevel,
 } from '../utils/digital-skills-score.util';
-import { ReportAudienceService } from '../../reports/services/report-audience.service';
+import { DigitalSkillsBookingService } from './digital-skills-booking.service';
 import { DigitalSkillsPlanService } from './digital-skills-plan.service';
+import { DigitalSkillsAssignment } from '../entities/digital-skills-assignment.entity';
 
 const MAX_EVALUATED_LEARNERS = 1000;
 
@@ -61,8 +70,10 @@ export class DigitalSkillsAdminService {
         private readonly resultRepository: Repository<Result>,
         @InjectRepository(Answer)
         private readonly answerRepository: Repository<Answer>,
+        @InjectRepository(DigitalSkillsAssignment)
+        private readonly assignmentRepository: Repository<DigitalSkillsAssignment>,
         private readonly planService: DigitalSkillsPlanService,
-        private readonly reportAudienceService: ReportAudienceService,
+        private readonly bookingService: DigitalSkillsBookingService,
     ) {}
 
     /** Builds the Digital Skills admin report for the caller’s organisation. */
@@ -108,6 +119,9 @@ export class DigitalSkillsAdminService {
         const assessedUsers: AdminDigitalSkillsUserDto[] = [];
 
         for (const row of latestResults) {
+            // Match against the full active learner roster (not report-audience
+            // exclusions). Users like bobby who are on REPORT_ALWAYS_EXCLUDED_EMAILS
+            // still completed the Self-Assessment and must appear here for ops.
             const learner = learnerById.get(row.userId);
             if (!learner) {
                 continue;
@@ -180,6 +194,85 @@ export class DigitalSkillsAdminService {
             usersNeedingTraining,
             generatedAt,
         };
+    }
+
+    /**
+     * Opens a personal exam window for a learner who missed expectedDueDate.
+     * Only Master Admin / Owner / Admin reach this via the controller RolesGuard.
+     * rescheduledStartDate / rescheduledExamEndDate stay NULL until this runs.
+     */
+    async rescheduleWeakSkills(
+        scope: OrgBranchScope,
+        userId: string,
+        dto: RescheduleDigitalSkillsDto,
+    ): Promise<DigitalSkillsPlanItemDto[]> {
+        const orgId = scope.orgId;
+        if (!orgId) {
+            throw new NotFoundException('Organization context required');
+        }
+
+        const start = toNullableDate(dto.rescheduledStartDate);
+        const end = toNullableDate(dto.rescheduledExamEndDate);
+        if (!start || !end) {
+            throw new BadRequestException(
+                'rescheduledStartDate and rescheduledExamEndDate are required',
+            );
+        }
+        if (start.getTime() > end.getTime()) {
+            throw new BadRequestException(
+                'rescheduledStartDate must be on or before rescheduledExamEndDate',
+            );
+        }
+
+        const learner = await this.userRepository
+            .createQueryBuilder('user')
+            .leftJoin('user.orgId', 'org')
+            .leftJoin('user.branchId', 'branch')
+            .where('user.id = :userId', { userId })
+            .andWhere('org.id = :orgId', { orgId })
+            .select('user.id', 'userId')
+            .addSelect('branch.id', 'branchId')
+            .getRawOne<{ userId: string; branchId: string | null }>();
+
+        if (!learner) {
+            throw new NotFoundException('Learner not found in this organisation');
+        }
+
+        if (scope.branchId && learner.branchId && learner.branchId !== scope.branchId) {
+            throw new NotFoundException('Learner not found in this branch');
+        }
+
+        const assignments = await this.assignmentRepository.find({
+            where: { userId },
+        });
+        if (assignments.length === 0) {
+            throw new BadRequestException(
+                'This learner has no Digital Skills weak-skill tests to reschedule',
+            );
+        }
+
+        // Only after the original booking due date has been missed.
+        const { startOfDay } = getUtcDayBounds(new Date());
+        const hasMissedDueDate = assignments.some(row => {
+            const due = toNullableDate(row.expectedDueDate ?? null);
+            return due !== null && due < startOfDay;
+        });
+        if (!hasMissedDueDate) {
+            throw new BadRequestException(
+                'Reschedule is only available after the original expected due date has been missed',
+            );
+        }
+
+        await this.bookingService.applyAdminReschedule({
+            userId,
+            orgId,
+            branchId: learner.branchId ?? scope.branchId,
+            rescheduledStartDate: start,
+            rescheduledExamEndDate: end,
+        });
+
+        const plans = await this.planService.getAssignmentsByUserIds([userId]);
+        return plans.get(userId) ?? [];
     }
 
     private async getLatestResults(
@@ -414,7 +507,10 @@ export class DigitalSkillsAdminService {
             query.andWhere('branch.id = :branchId', { branchId });
         }
 
-        await this.reportAudienceService.omitFromQuery(query, 'user.id', orgId);
+        // Do NOT call reportAudienceService.omitFromQuery here.
+        // Digital Skills is an operational training view (who assessed, who needs
+        // remedial booking/reschedule). Report KPI exclusions (e.g. whires44@gmail.com)
+        // must not hide learners who completed the Self-Assessment.
 
         const rows = await query.getRawMany<{
             userId: string;

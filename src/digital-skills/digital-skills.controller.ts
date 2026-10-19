@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import {
     ApiBearerAuth,
     ApiHeader,
@@ -18,6 +18,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UserRole } from '../user/entities/user.entity';
 import { StandardApiResponse } from '../user/dto/common-response.dto';
 import { AdminDigitalSkillsReportDto } from './dto/admin-digital-skills-report.dto';
+import { DigitalSkillsPlanItemDto } from './dto/digital-skills-plan.dto';
+import { RescheduleDigitalSkillsDto } from './dto/reschedule-digital-skills.dto';
 import { DigitalSkillsAdminService } from './services/digital-skills-admin.service';
 
 /**
@@ -57,6 +59,36 @@ export class DigitalSkillsController {
         return {
             success: true,
             message: 'Digital Skills report retrieved successfully',
+            data,
+        };
+    }
+
+    /**
+     * Admin-only: open a personal exam window after the learner missed expectedDueDate.
+     * Populates rescheduledStartDate / rescheduledExamEndDate (NULL until this runs).
+     */
+    @Post('digital-skills/:userId/reschedule')
+    @ApiOperation({
+        summary: 'Reschedule missed Digital Skills weak-skill exam window',
+        description:
+            'Master Admin / Owner / Admin only. Allowed only after expectedDueDate ' +
+            'has passed. Sets rescheduledStartDate and rescheduledExamEndDate on ' +
+            'all current weak-skill assignments and refreshes the booking modal.',
+    })
+    @ApiOkResponse({ type: [DigitalSkillsPlanItemDto] })
+    async rescheduleDigitalSkills(
+        @OrgBranchScope() scope: OrgBranchScopeType,
+        @Param('userId', ParseUUIDPipe) userId: string,
+        @Body() dto: RescheduleDigitalSkillsDto,
+    ): Promise<StandardApiResponse<DigitalSkillsPlanItemDto[]>> {
+        const data = await this.digitalSkillsAdminService.rescheduleWeakSkills(
+            scope,
+            userId,
+            dto,
+        );
+        return {
+            success: true,
+            message: 'Digital Skills weak-skill tests rescheduled successfully',
             data,
         };
     }

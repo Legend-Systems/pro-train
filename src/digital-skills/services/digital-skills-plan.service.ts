@@ -19,6 +19,7 @@ import {
 } from '../constants/digital-skills.constant';
 import { DigitalSkillsPlanDto, DigitalSkillsPlanItemDto } from '../dto/digital-skills-plan.dto';
 import { DigitalSkillsAssignment } from '../entities/digital-skills-assignment.entity';
+import { getUtcDayBounds } from '../../test/utils/exam-window.util';
 import { DigitalSkillsBookingService } from './digital-skills-booking.service';
 import {
     calculateDigitalSkillsScore,
@@ -103,8 +104,11 @@ export class DigitalSkillsPlanService {
                 current.testId = module?.testId ?? null;
                 current.assignedFromResultId = event.resultId;
                 if (isNewResult) {
+                    // Fresh survey clears the previous booking and any admin reschedule.
                     current.expectedDueDate = null;
                     current.bookingNotifiedAt = null;
+                    current.rescheduledStartDate = null;
+                    current.rescheduledExamEndDate = null;
                 }
                 await this.assignmentRepository.save(current);
                 continue;
@@ -166,6 +170,65 @@ export class DigitalSkillsPlanService {
         return rows
             .map(row => row.materialId)
             .filter((materialId): materialId is number => typeof materialId === 'number');
+    }
+
+    /**
+     * Personal exam window from an admin reschedule, if both dates are set.
+     * Used by attempt start/submit so remedial checks ignore the shared test
+     * window once an elevated admin has opened a new window for this learner.
+     */
+    async getRescheduledExamWindow(
+        userId: string,
+        testId: number,
+    ): Promise<{ examStartDate: Date; examEndDate: Date } | null> {
+        const row = await this.assignmentRepository.findOne({
+            where: { userId, testId },
+            select: ['rescheduledStartDate', 'rescheduledExamEndDate'],
+        });
+        if (!row?.rescheduledStartDate || !row?.rescheduledExamEndDate) {
+            return null;
+        }
+        return {
+            examStartDate: row.rescheduledStartDate,
+            examEndDate: row.rescheduledExamEndDate,
+        };
+    }
+
+    /**
+     * Test ids that currently have an open admin reschedule window for this learner.
+     * Lets closed shared exam windows stay visible on the learner test list.
+     */
+    async getOpenRescheduledTestIds(
+        userId: string,
+        reference: Date = new Date(),
+    ): Promise<number[]> {
+        const rows = await this.assignmentRepository.find({
+            where: { userId },
+            select: [
+                'testId',
+                'rescheduledStartDate',
+                'rescheduledExamEndDate',
+            ],
+        });
+        const { startOfDay, startOfNextDay } = getUtcDayBounds(reference);
+        return rows
+            .filter(row => {
+                if (
+                    typeof row.testId !== 'number' ||
+                    !row.rescheduledStartDate ||
+                    !row.rescheduledExamEndDate
+                ) {
+                    return false;
+                }
+                if (row.rescheduledStartDate >= startOfNextDay) {
+                    return false;
+                }
+                if (row.rescheduledExamEndDate < startOfDay) {
+                    return false;
+                }
+                return true;
+            })
+            .map(row => row.testId as number);
     }
 
     async getAssignmentsByUserIds(
@@ -508,6 +571,8 @@ export class DigitalSkillsPlanService {
                 latestKnowledgePassed: knowledge?.passed ?? null,
                 assignedAt: row.assignedAt,
                 expectedDueDate: row.expectedDueDate ?? null,
+                rescheduledStartDate: row.rescheduledStartDate ?? null,
+                rescheduledExamEndDate: row.rescheduledExamEndDate ?? null,
             };
         });
     }

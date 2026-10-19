@@ -11,6 +11,7 @@ import { ResultsModule } from '../results/results.module';
 import { AnswersModule } from '../answers/answers.module';
 import { TestModule } from '../test/test.module';
 import { CommonModule } from '../common/common.module';
+import { DigitalSkillsModule } from '../digital-skills/digital-skills.module';
 
 @Module({
     imports: [
@@ -20,6 +21,8 @@ import { CommonModule } from '../common/common.module';
         ResultsModule,
         AnswersModule,
         TestModule,
+        // Reschedule windows for Digital Skills remedial check start/submit.
+        DigitalSkillsModule,
     ],
     controllers: [TestAttemptsController],
     providers: [TestAttemptsService],

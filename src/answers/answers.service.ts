@@ -30,7 +30,7 @@ import { applyBranchVisibilityToQuery } from '../auth/utils/branch-visibility.ut
 import { StandardResponse } from '../common/types';
 import { UserRole } from '../user/entities/user.entity';
 import { Test } from '../test/entities/test.entity';
-import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
+import { isDigitalSkillsSelfAssessment } from '../digital-skills/constants/digital-skills.constant';
 import { awardDigitalSkillsPoints } from '../digital-skills/utils/digital-skills-score.util';
 
 @Injectable()
@@ -953,9 +953,12 @@ export class AnswersService {
             }
 
             const answersToSave: Answer[] = [];
-            const digitalSkillsCourseId = await this.resolveDigitalSkillsCourseId(
-                unmarkedAnswers[0]?.question?.testId,
-            );
+            // Survey scoring (always-correct level points) applies only to the
+            // Self-Assessment — not to remedial Digital Skills Check exams.
+            const isSelfAssessmentSurvey =
+                await this.resolveIsDigitalSkillsSelfAssessment(
+                    unmarkedAnswers[0]?.question?.testId,
+                );
 
             for (const answer of unmarkedAnswers) {
                 const questionId = answer.questionId;
@@ -997,7 +1000,7 @@ export class AnswersService {
                         answer.selectedOptionId = selectedOptionIds[0];
                     }
 
-                    if (isDigitalSkillsCourse(digitalSkillsCourseId)) {
+                    if (isSelfAssessmentSurvey) {
                         const selected = questionOptions.find(option =>
                             selectedOptionIds.includes(option.optionId),
                         );
@@ -1123,19 +1126,22 @@ export class AnswersService {
         return [];
     }
 
-    /** Course id for the attempt’s test, or null when unknown. */
-    private async resolveDigitalSkillsCourseId(
+    /**
+     * True when the test is the Digital Skills Self-Assessment survey.
+     * Remedial knowledge checks share course 50 but use normal marking.
+     */
+    private async resolveIsDigitalSkillsSelfAssessment(
         testId: number | undefined,
-    ): Promise<number | null> {
+    ): Promise<boolean> {
         if (!testId) {
-            return null;
+            return false;
         }
 
         const test = await this.dataSource.getRepository(Test).findOne({
             where: { testId },
-            select: ['testId', 'courseId'],
+            select: ['testId', 'title'],
         });
-        return test?.courseId ?? null;
+        return isDigitalSkillsSelfAssessment(test?.title);
     }
 
     /** True when both option-id lists contain the same unique values. */

@@ -40,7 +40,7 @@ import {
 import { TrainingHoursService } from '../training-hours/training-hours.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TestResultCreatedEvent } from '../common/events/test-result-created.event';
-import { isDigitalSkillsCourse } from '../digital-skills/utils/is-digital-skills-course.util';
+import { isDigitalSkillsSelfAssessment } from '../digital-skills/constants/digital-skills.constant';
 import {
     AdminResultsDashboardDto,
 } from './dto/admin-results-dashboard.dto';
@@ -275,7 +275,11 @@ export class ResultsService {
             this.logger.debug(`Calculating score for attempt ${attemptId}`);
             const scoring = await this.calculateScore(attemptId, attempt.testId);
             const { score, maxScore, totalQuestions, questionsAnswered } = scoring;
-            const percentage = isDigitalSkillsCourse(attempt.test.courseId)
+            // Survey-only scoring: remedial Digital Skills Checks use normal pass marks.
+            const isSelfAssessment = isDigitalSkillsSelfAssessment(
+                attempt.test.title,
+            );
+            const percentage = isSelfAssessment
                 ? Math.round(scoring.percentage * 10) / 10
                 : scoring.percentage;
 
@@ -286,7 +290,7 @@ export class ResultsService {
             });
 
             // Self-assessment has no fail. Other tests still use the 80% pass mark.
-            const passed = isDigitalSkillsCourse(attempt.test.courseId)
+            const passed = isSelfAssessment
                 ? true
                 : isPassingPercentage(percentage);
 
@@ -2719,7 +2723,11 @@ export class ResultsService {
             // Recalculate the score
             const scoring = await this.calculateScore(result.attemptId);
             const { score, maxScore, totalQuestions, questionsAnswered } = scoring;
-            const percentage = isDigitalSkillsCourse(attempt.test?.courseId)
+            // Survey-only: knowledge checks on course 50 keep standard pass logic.
+            const isSelfAssessment = isDigitalSkillsSelfAssessment(
+                attempt.test?.title,
+            );
+            const percentage = isSelfAssessment
                 ? Math.round(scoring.percentage * 10) / 10
                 : scoring.percentage;
 
@@ -2728,7 +2736,7 @@ export class ResultsService {
                 score,
                 maxScore,
                 percentage,
-                passed: isDigitalSkillsCourse(attempt.test?.courseId)
+                passed: isSelfAssessment
                     ? true
                     : isPassingPercentage(percentage),
                 calculatedAt: new Date(),

@@ -55,6 +55,20 @@ export class DigitalSkillsPlanItemDto {
         description: 'Date the learner is expected to complete this booked check',
     })
     expectedDueDate: Date | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description:
+            'Admin reschedule window start; NULL until an elevated admin reschedules after a missed due date',
+    })
+    rescheduledStartDate: Date | null;
+
+    @ApiPropertyOptional({
+        nullable: true,
+        description:
+            'Admin reschedule window end; NULL until an elevated admin reschedules after a missed due date',
+    })
+    rescheduledExamEndDate: Date | null;
 }
 
 /** Learner’s own Digital Skills baseline plus assigned weak-area plan. */

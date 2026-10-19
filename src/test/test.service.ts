@@ -29,6 +29,7 @@ import {
 import { Test, TestType } from './entities/test.entity';
 import {
     applyOpenExamWindowFilter,
+    getUtcDayBounds,
     isExamWindowOpen,
     toNullableDate,
 } from './utils/exam-window.util';
@@ -180,6 +181,38 @@ export class TestService {
     /** True when the caller is a plain learner rather than an admin/owner. */
     private isLearnerScope(scope: OrgBranchScope): boolean {
         return scope.userRole?.toLowerCase() === 'user';
+    }
+
+    /**
+     * Open exam window filter that also keeps Digital Skills checks visible
+     * when the learner has an admin-opened reschedule window.
+     */
+    private async applyLearnerExamWindowFilter(
+        query: SelectQueryBuilder<Test>,
+        userId: string,
+    ): Promise<void> {
+        const rescheduledTestIds =
+            await this.digitalSkillsPlanService.getOpenRescheduledTestIds(userId);
+        if (rescheduledTestIds.length === 0) {
+            applyOpenExamWindowFilter(query, 'test');
+            return;
+        }
+
+        const { startOfDay, startOfNextDay } = getUtcDayBounds();
+        query.andWhere(
+            `(
+                (
+                    (test.examStartDate IS NULL OR test.examStartDate < :examWindowStartOfNextDay)
+                    AND (test.examEndDate IS NULL OR test.examEndDate >= :examWindowStartOfDay)
+                )
+                OR test.testId IN (:...digitalSkillsRescheduledTestIds)
+            )`,
+            {
+                examWindowStartOfNextDay: startOfNextDay,
+                examWindowStartOfDay: startOfDay,
+                digitalSkillsRescheduledTestIds: rescheduledTestIds,
+            },
+        );
     }
 
     /**
@@ -528,8 +561,10 @@ export class TestService {
             // filtered for them (which learner clients do not).
             // Admins keep full visibility in order to manage schedules and
             // start verification attempts on inactive / not-yet-open tests.
+            // Digital Skills remedial checks with an admin reschedule window
+            // remain visible even when the shared test window has closed.
             if (this.isLearnerScope(scope)) {
-                applyOpenExamWindowFilter(query, 'test');
+                await this.applyLearnerExamWindowFilter(query, scope.userId);
                 if (isActive === undefined) {
                     query.andWhere('test.isActive = :learnerActive', {
                         learnerActive: true,

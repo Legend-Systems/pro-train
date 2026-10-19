@@ -52,6 +52,20 @@ export class DigitalSkillsAssignment {
     @Column({ type: 'datetime', nullable: true })
     expectedDueDate?: Date | null;
 
+    /**
+     * Admin-only personal window start after the learner missed expectedDueDate.
+     * Remains NULL until Master Admin / Owner / Admin explicitly reschedules.
+     */
+    @Column({ type: 'datetime', nullable: true })
+    rescheduledStartDate?: Date | null;
+
+    /**
+     * Admin-only personal window end after the learner missed expectedDueDate.
+     * Remains NULL until Master Admin / Owner / Admin explicitly reschedules.
+     */
+    @Column({ type: 'datetime', nullable: true })
+    rescheduledExamEndDate?: Date | null;
+
     /** Set after the booking email for this row is queued. Prevents duplicates. */
     @Column({ type: 'datetime', nullable: true })
     bookingNotifiedAt?: Date | null;

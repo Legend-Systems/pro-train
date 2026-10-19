@@ -14,13 +14,13 @@ import { DigitalSkillsAssignment } from './entities/digital-skills-assignment.en
 import { DigitalSkillsPlanListener } from './listeners/digital-skills-plan.listener';
 import { DigitalSkillsAdminService } from './services/digital-skills-admin.service';
 import { DigitalSkillsBookingService } from './services/digital-skills-booking.service';
-import { ReportAudienceModule } from '../reports/report-audience.module';
 import { DigitalSkillsPlanService } from './services/digital-skills-plan.service';
 
 @Module({
     imports: [
         CommunicationsModule,
-        ReportAudienceModule,
+        // ReportAudienceModule intentionally omitted: Digital Skills admin lists
+        // every active learner who completed the Self-Assessment (ops view).
         TypeOrmModule.forFeature([
             User,
             Test,
